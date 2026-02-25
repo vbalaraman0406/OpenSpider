@@ -1,33 +1,33 @@
 {
-  "name": "openclaw",
+  "name": "openspider",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "directories": {
-    "doc": "docs"
-  },
+  "description": "Autonomous Multi-Agent System tailored for WhatsApp",
+  "main": "src/index.ts",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "ts-node src/index.ts",
+    "dev:backend": "nodemon src/index.ts",
+    "dev:frontend": "cd dashboard && npm run dev",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "build:frontend": "cd dashboard && npm run build"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
   "dependencies": {
-    "@clack/prompts": "^1.0.1",
-    "@google/genai": "^1.42.0",
-    "@whiskeysockets/baileys": "^7.0.0-rc.9",
-    "dotenv": "^17.3.1",
-    "express": "^5.2.1",
-    "ollama": "^0.6.3",
-    "ws": "^8.19.0"
+    "@clack/prompts": "^0.9.0",
+    "@google/genai": "latest",
+    "@whiskeysockets/baileys": "^6.7.12",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "ollama": "^0.5.12",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
-    "@types/express": "^5.0.6",
-    "@types/node": "^25.3.0",
-    "@types/ws": "^8.18.1",
-    "git-ignore": "^0.0.2",
-    "nodemon": "^3.1.14",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.13.4",
+    "@types/ws": "^8.5.14",
+    "concurrently": "^9.1.2",
+    "nodemon": "^3.1.9",
     "ts-node": "^10.9.2",
-    "typescript": "^5.9.3"
+    "typescript": "^5.7.3"
   }
 }
