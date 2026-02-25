@@ -22,7 +22,7 @@ export async function startWhatsApp() {
                 startWhatsApp();
             }
         } else if (connection === 'open') {
-            console.log('🕷️ Openspider connected to WhatsApp!');
+            console.log('🕷️ OpenSpider connected to WhatsApp!');
         }
     });
 
@@ -39,7 +39,7 @@ export async function startWhatsApp() {
         console.log(`\n\n[WhatsApp] Received message from ${msg.key.remoteJid}: ${textMessage}`);
 
         // Acknowledge receipt
-        await sock.sendMessage(msg.key.remoteJid!, { text: '🕷️ Openspider is processing your request...' });
+        await sock.sendMessage(msg.key.remoteJid!, { text: '🕷️ OpenSpider is processing your request...' });
 
         try {
             // Send to the Manager Agent

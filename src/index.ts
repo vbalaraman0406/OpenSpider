@@ -8,7 +8,7 @@ import { startWhatsApp } from './whatsapp';
 
 async function bootstrap() {
     console.clear();
-    console.log("🕷️ Starting Openspider Engine...");
+    console.log("🕷️ Starting OpenSpider Engine...");
 
     const envPath = path.join(process.cwd(), '.env');
 

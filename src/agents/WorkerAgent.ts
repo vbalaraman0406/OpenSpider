@@ -15,7 +15,7 @@ export class WorkerAgent {
     async executeTask(instruction: string, context: string[]): Promise<string> {
         await this.executor.initialize();
 
-        const systemPrompt = `You are a specialized Openspider Worker Agent. 
+        const systemPrompt = `You are a specialized OpenSpider Worker Agent. 
 Your Role: ${this.role}
 You have the ability to write scripts (Python, Node.js, Bash) and execute them to solve the user's task.
 If you need a package, write a script that installs it or ask to run npm install.

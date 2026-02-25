@@ -12,7 +12,7 @@ export class ManagerAgent {
     async processUserRequest(prompt: string): Promise<string> {
         console.log(`\n[Manager] Analyzing request: "${prompt}"`);
 
-        const systemPrompt = `You are the Manager Agent for Openspider. Your job is to break down the user's complex request into a sequential plan of sub-tasks.
+        const systemPrompt = `You are the Manager Agent for OpenSpider. Your job is to break down the user's complex request into a sequential plan of sub-tasks.
 Each sub-task should be assigned to a specialized Worker Agent role.
 
 Analyze the prompt and return a JSON array of sub-tasks.

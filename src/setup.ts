@@ -6,7 +6,7 @@ import path from 'node:path';
 export async function runSetup() {
   console.clear();
 
-  p.intro(`🕷️ Welcome to Openspider Setup`);
+  p.intro(`🕷️ Welcome to OpenSpider Setup`);
 
   const s = p.spinner();
   s.start('Checking environment configuration...');
@@ -70,11 +70,11 @@ export async function runSetup() {
       placeholder: 'http://127.0.0.1:11434',
       initialValue: 'http://127.0.0.1:11434',
     });
-    
+
     const model = await p.text({
-        message: 'Enter your preferred Ollama Model (e.g. qwen2.5-coder:32b, llama3.1):',
-        placeholder: 'llama3',
-      });
+      message: 'Enter your preferred Ollama Model (e.g. qwen2.5-coder:32b, llama3.1):',
+      placeholder: 'llama3',
+    });
 
     if (p.isCancel(url) || p.isCancel(model)) {
       p.cancel('Setup cancelled.');
@@ -95,7 +95,7 @@ export async function runSetup() {
     }
     envContent += `OPENAI_API_KEY=${key}\n`;
   }
-  
+
   if (projectType === 'anthropic') {
     const key = await p.text({
       message: 'Enter your Anthropic API Key:',
@@ -118,8 +118,8 @@ export async function runSetup() {
       placeholder: 'Bearer ...',
     });
     const model = await p.text({
-        message: 'Enter preferred model name:',
-        placeholder: 'local-model',
+      message: 'Enter preferred model name:',
+      placeholder: 'local-model',
     });
     if (p.isCancel(url) || p.isCancel(key) || p.isCancel(model)) {
       p.cancel('Setup cancelled.');

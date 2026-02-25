@@ -59,7 +59,7 @@ export default function App() {
                         <Bot className="w-6 h-6 text-blue-400" />
                     </div>
                     <div>
-                        <h1 className="text-xl font-semibold text-white tracking-tight">Openspider Dashboard</h1>
+                        <h1 className="text-xl font-semibold text-white tracking-tight">OpenSpider Dashboard</h1>
                         <p className="text-xs text-slate-400 tracking-wide font-medium">Autonomous Multi-Agent Engine</p>
                     </div>
                 </div>
