@@ -117,6 +117,20 @@ export function startServer() {
     });
 
     const PORT = process.env.PORT || 4000;
+
+    // Serve static dashboard files if they exist (allows single-command full-stack testing)
+    const dashboardDist = path.join(__dirname, '..', 'dashboard', 'dist');
+    if (fs.existsSync(dashboardDist)) {
+        app.use(express.static(dashboardDist));
+        // Fallback for React Router
+        app.get('*', (req, res) => {
+            res.sendFile(path.join(dashboardDist, 'index.html'));
+        });
+        console.log(`[Server] Web Dashboard statically served on http://localhost:${PORT}`);
+    } else {
+        console.log(`[Server] No compiled dashboard found at ${dashboardDist}. Run 'npm run build:frontend' first if you want the Web UI!`);
+    }
+
     server.listen(PORT, () => {
         console.log(`[Server] OpenSpider API & WebSocket running on http://localhost:${PORT}`);
     });
