@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Activity, Terminal, CheckCircle2, Server, Key, Bot } from 'lucide-react';
+import { Activity, Terminal, CheckCircle2, Server, Key, Bot, Send } from 'lucide-react';
 
 interface LogMessage {
     type: string;
@@ -11,7 +11,10 @@ export default function App() {
     const [logs, setLogs] = useState<LogMessage[]>([]);
     const [config, setConfig] = useState({ provider: 'Loading...', status: 'connecting' });
     const [skills, setSkills] = useState<string[]>([]);
+    const [chatInput, setChatInput] = useState('');
+    const [isTyping, setIsTyping] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
+    const wsRef = useRef<WebSocket | null>(null);
 
     useEffect(() => {
         // Fetch initial config
@@ -33,6 +36,12 @@ export default function App() {
                 const msg = JSON.parse(event.data);
                 if (msg.type === 'log') {
                     setLogs(prev => [...prev.slice(-499), msg]); // Keep last 500 logs
+                } else if (msg.type === 'chat_response') {
+                    setLogs(prev => [...prev.slice(-499), { type: 'chat', data: `[Agent] ${msg.data}`, timestamp: msg.timestamp }]);
+                    setIsTyping(false);
+                } else if (msg.type === 'usage') {
+                    const u = msg.data.usage;
+                    setLogs(prev => [...prev.slice(-499), { type: 'usage', data: `[API Token Usage] Model: ${msg.data.model} | In: ${u.promptTokens} | Out: ${u.completionTokens} | Total: ${u.totalTokens}`, timestamp: msg.timestamp }]);
                 }
             } catch (e) { }
         };
@@ -40,8 +49,25 @@ export default function App() {
         ws.onopen = () => setConfig(prev => ({ ...prev, status: 'connected' }));
         ws.onclose = () => setConfig(prev => ({ ...prev, status: 'disconnected' }));
 
+        wsRef.current = ws;
+
         return () => ws.close();
     }, []);
+
+    const sendChatMessage = () => {
+        if (!chatInput.trim() || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+
+        const payload = { type: 'chat', text: chatInput };
+        wsRef.current.send(JSON.stringify(payload));
+
+        setLogs(prev => [...prev, { type: 'chat', data: `[You] ${chatInput}`, timestamp: new Date().toISOString() }]);
+        setChatInput('');
+        setIsTyping(true);
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter') sendChatMessage();
+    };
 
     // Auto-scroll logs
     useEffect(() => {
@@ -55,8 +81,8 @@ export default function App() {
             {/* Header */}
             <header className="bg-slate-900 border-b border-slate-800 p-4 flex items-center justify-between sticky top-0 z-10 transition-all shadow-sm">
                 <div className="flex items-center gap-3">
-                    <div className="p-2 bg-blue-500/10 rounded-lg">
-                        <Bot className="w-6 h-6 text-blue-400" />
+                    <div className="flex items-center justify-center p-1 bg-slate-950/50 rounded-lg border border-cyan-500/20 shadow-[0_0_15px_rgba(6,182,212,0.15)]">
+                        <img src="/openspider-logo.png" alt="OpenSpider Logo" className="w-9 h-9 object-contain" />
                     </div>
                     <div>
                         <h1 className="text-xl font-semibold text-white tracking-tight">OpenSpider Dashboard</h1>
@@ -74,101 +100,126 @@ export default function App() {
                     <div className="h-10 w-px bg-slate-800 mx-2"></div>
                     <div className="flex flex-col items-end">
                         <div className="flex items-center gap-2">
-                            <div className={\`w-2 h-2 rounded-full \${config.status === 'connected' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}\`}></div>
-                        <span className="text-sm font-medium">Engine Status</span>
+                            <div className={`w-2 h-2 rounded-full ${config.status === 'connected' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`}></div>
+                            <span className="text-sm font-medium">Engine Status</span>
+                        </div>
+                        <span className="text-xs text-slate-400 capitalize mt-1 tracking-wide">{config.status}</span>
                     </div>
-                    <span className="text-xs text-slate-400 capitalize mt-1 tracking-wide">{config.status}</span>
                 </div>
-        </div>
-      </header >
+            </header >
 
-        {/* Main Content */ }
-        < main className = "flex-1 p-6 flex gap-6 overflow-hidden max-w-[1600px] w-full mx-auto" >
+            {/* Main Content */}
+            < main className="flex-1 p-6 flex gap-6 overflow-hidden max-w-[1600px] w-full mx-auto" >
 
-            {/* Left Column: Logs */ }
-            < section className = "flex-1 flex flex-col bg-slate-900/50 rounded-xl border border-slate-800/60 overflow-hidden shadow-lg backdrop-blur-sm" >
-          <div className="p-4 border-b border-slate-800/60 flex items-center gap-2 bg-slate-900">
-            <Terminal className="w-5 h-5 text-slate-400" />
-            <h2 className="font-semibold text-slate-200">Live Agent Communications</h2>
-          </div>
-          <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 font-mono text-sm space-y-2">
-            {logs.length === 0 ? (
-                <div className="text-slate-500 flex flex-col items-center justify-center h-full opacity-60">
-                    <Activity className="w-12 h-12 mb-4 animate-pulse" />
-                    <span>Awaiting agent activity...</span>
-                </div>
-            ) : logs.map((log, i) => (
-              <div key={i} className="flex gap-3 hover:bg-slate-800/30 p-1.5 rounded transition-colors group">
-                <span className="text-slate-500 shrink-0 select-none text-xs mt-0.5">
-                  {new Date(log.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute:'2-digit', second:'2-digit' })}
-                </span>
-                <span className={\`break-all leading-relaxed \${
-                    log.data.includes('[Manager]') ? 'text-amber-300' :
-                    log.data.includes('[Worker') ? 'text-emerald-300' :
-                    log.data.includes('[WhatsApp]') ? 'text-blue-300' :
-                    log.data.includes('Error') ? 'text-red-400 font-semibold' : 'text-slate-300'
-                }\`}>
-                  {log.data}
-                </span>
-              </div>
-            ))
-}
-          </div >
-        </section >
-
-    {/* Right Column: Diagnostics */ }
-    < aside className = "w-[380px] flex flex-col gap-6" >
-
-        {/* Dynamic Skills */ }
-        < div className = "bg-slate-900/50 rounded-xl border border-slate-800/60 p-5 shadow-lg backdrop-blur-sm" >
-            <h3 className="font-semibold text-slate-200 flex items-center gap-2 mb-4">
-                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                Dynamic Skills
-            </h3>
-            <div className="space-y-3">
-                <p className="text-xs text-slate-400 leading-relaxed mb-4">Files and code segments dynamically generated by the Worker Agents.</p>
-                {skills.length === 0 ? (
-                    <div className="p-3 bg-slate-900 rounded-lg border border-slate-800/60 text-xs text-slate-500 text-center text-balance">
-                        No skills installed yet. The agent will compose them dynamically.
+                {/* Left Column: Logs */}
+                < section className="flex-1 flex flex-col bg-slate-900/50 rounded-xl border border-slate-800/60 overflow-hidden shadow-lg backdrop-blur-sm" >
+                    <div className="p-4 border-b border-slate-800/60 flex items-center gap-2 bg-slate-900">
+                        <Terminal className="w-5 h-5 text-slate-400" />
+                        <h2 className="font-semibold text-slate-200">Live Agent Communications</h2>
                     </div>
-                ) : (
-                    <ul className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
-                        {skills.map(skill => (
-                            <li key={skill} className="text-sm font-mono text-slate-300 bg-slate-800/50 px-3 py-2 rounded-lg border border-slate-700/50 flex items-center justify-between group">
-                                <span>{skill}</span>
-                                <span className="text-[10px] uppercase tracking-wider text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity">Loaded</span>
-                            </li>
-                        ))}
-                    </ul>
-                )}
-            </div>
-          </div >
+                    <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 font-mono text-sm space-y-2">
+                        {logs.length === 0 ? (
+                            <div className="text-slate-500 flex flex-col items-center justify-center h-full opacity-60">
+                                <Activity className="w-12 h-12 mb-4 animate-pulse" />
+                                <span>Awaiting agent activity or chat messages...</span>
+                            </div>
+                        ) : logs.map((log, i) => (
+                            <div key={i} className="flex gap-3 hover:bg-slate-800/30 p-1.5 rounded transition-colors group">
+                                <span className="text-slate-500 shrink-0 select-none text-xs mt-0.5">
+                                    {new Date(log.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                </span>
+                                <span className={`break-all leading-relaxed ${log.data.includes('[You]') ? 'text-white font-semibold' :
+                                    log.data.includes('[Agent]') ? 'text-indigo-300 font-semibold' :
+                                        log.data.includes('[Manager]') ? 'text-amber-300' :
+                                            log.data.includes('[Worker') ? 'text-emerald-300' :
+                                                log.data.includes('[WhatsApp]') ? 'text-blue-300' :
+                                                    log.data.includes('[API Token Usage]') ? 'text-fuchsia-400 font-medium' :
+                                                        log.data.includes('Error') ? 'text-red-400 font-semibold' : 'text-slate-300'
+                                    }`}>
+                                    {log.data}
+                                </span>
+                            </div>
+                        ))
+                        }
+                    </div >
 
-    {/* System Info */ }
-    < div className = "bg-slate-900/50 rounded-xl border border-slate-800/60 p-5 shadow-lg backdrop-blur-sm" >
-            <h3 className="font-semibold text-slate-200 flex items-center gap-2 mb-4">
-                <Server className="w-5 h-5 text-purple-400" />
-                System Diagnostics
-            </h3>
-            <div className="space-y-4">
-               <div className="flex justify-between items-center bg-slate-800/30 p-3 rounded-lg border border-slate-800/60">
-                   <span className="text-sm text-slate-400">Node Environment</span>
-                   <span className="text-sm text-slate-200 font-medium font-mono text-emerald-400 text-[13px]">Active</span>
-               </div>
-               <div className="flex justify-between items-center bg-slate-800/30 p-3 rounded-lg border border-slate-800/60">
-                   <span className="text-sm text-slate-400">Memory Usage</span>
-                   <span className="text-sm text-slate-200 font-medium font-mono text-[13px]">{'<'} 100 MB</span>
-               </div>
-               <div className="flex justify-between items-center bg-slate-800/30 p-3 rounded-lg border border-slate-800/60">
-                   <span className="text-sm text-slate-400">WhatsApp Gateway</span>
-                   <span className="text-sm text-slate-200 font-medium font-mono text-[13px] text-blue-400">Listening</span>
-               </div>
-            </div>
-          </div >
+                    {/* Chat Input */}
+                    <div className="p-4 border-t border-slate-800/60 bg-slate-900 flex items-center gap-3">
+                        <input
+                            title="Chat Input"
+                            type="text"
+                            value={chatInput}
+                            onChange={(e) => setChatInput(e.target.value)}
+                            onKeyDown={handleKeyDown}
+                            placeholder="Assign a task to OpenSpider..."
+                            className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-4 py-2.5 text-sm font-medium text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
+                            disabled={config.status !== 'connected' || isTyping}
+                        />
+                        <button
+                            title="Send Message"
+                            type="button"
+                            onClick={sendChatMessage}
+                            disabled={!chatInput.trim() || config.status !== 'connected' || isTyping}
+                            className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white p-2.5 rounded-lg transition-colors flex items-center justify-center shrink-0"
+                        >
+                            <Send className="w-5 h-5" />
+                        </button>
+                    </div>
+                </section >
 
-        </aside >
+                {/* Right Column: Diagnostics */}
+                < aside className="w-[380px] flex flex-col gap-6" >
 
-      </main >
-    </div >
-  );
+                    {/* Dynamic Skills */}
+                    < div className="bg-slate-900/50 rounded-xl border border-slate-800/60 p-5 shadow-lg backdrop-blur-sm" >
+                        <h3 className="font-semibold text-slate-200 flex items-center gap-2 mb-4">
+                            <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                            Dynamic Skills
+                        </h3>
+                        <div className="space-y-3">
+                            <p className="text-xs text-slate-400 leading-relaxed mb-4">Files and code segments dynamically generated by the Worker Agents.</p>
+                            {skills.length === 0 ? (
+                                <div className="p-3 bg-slate-900 rounded-lg border border-slate-800/60 text-xs text-slate-500 text-center text-balance">
+                                    No skills installed yet. The agent will compose them dynamically.
+                                </div>
+                            ) : (
+                                <ul className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
+                                    {skills.map(skill => (
+                                        <li key={skill} className="text-sm font-mono text-slate-300 bg-slate-800/50 px-3 py-2 rounded-lg border border-slate-700/50 flex items-center justify-between group">
+                                            <span>{skill}</span>
+                                            <span className="text-[10px] uppercase tracking-wider text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity">Loaded</span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+                    </div >
+
+                    {/* System Info */}
+                    < div className="bg-slate-900/50 rounded-xl border border-slate-800/60 p-5 shadow-lg backdrop-blur-sm" >
+                        <h3 className="font-semibold text-slate-200 flex items-center gap-2 mb-4">
+                            <Server className="w-5 h-5 text-purple-400" />
+                            System Diagnostics
+                        </h3>
+                        <div className="space-y-4">
+                            <div className="flex justify-between items-center bg-slate-800/30 p-3 rounded-lg border border-slate-800/60">
+                                <span className="text-sm text-slate-400">Node Environment</span>
+                                <span className="text-sm text-slate-200 font-medium font-mono text-emerald-400 text-[13px]">Active</span>
+                            </div>
+                            <div className="flex justify-between items-center bg-slate-800/30 p-3 rounded-lg border border-slate-800/60">
+                                <span className="text-sm text-slate-400">Memory Usage</span>
+                                <span className="text-sm text-slate-200 font-medium font-mono text-[13px]">{'<'} 100 MB</span>
+                            </div>
+                            <div className="flex justify-between items-center bg-slate-800/30 p-3 rounded-lg border border-slate-800/60">
+                                <span className="text-sm text-slate-400">WhatsApp Gateway</span>
+                                <span className="text-sm text-slate-200 font-medium font-mono text-[13px] text-blue-400">Listening</span>
+                            </div>
+                        </div>
+                    </div >
+
+                </aside >
+
+            </main >
+        </div >
+    );
 }

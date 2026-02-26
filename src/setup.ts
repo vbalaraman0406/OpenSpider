@@ -2,12 +2,24 @@ import * as p from '@clack/prompts';
 import { setTimeout } from 'node:timers/promises';
 import fs from 'node:fs';
 import path from 'node:path';
+import { execSync } from 'node:child_process';
+import { GoogleGenAI } from '@google/genai';
+import { onboardWhatsApp } from './whatsapp';
+
 
 export async function runSetup() {
   console.clear();
 
-  p.intro(`🕷️ Welcome to OpenSpider Setup`);
+  p.intro(`
+   ____                   ____        _     __         
+  / __ \\\\____  ___  ____  / __/____   (_)___/ /__  _____
+ / / / / __ \\\\/ _ \\\\/ __ \\\\/\\\\ \\\\/ __ \\\\ / / __  / _ \\\\/ ___/
+/ /_/ / /_/ /  __/ / / /___/ / /_/ // / /_/ /  __/ /    
+\\\\____/ .___/\\\\___/_/ /_//____/ .___//_/\\\\__,_/\\\\___/_/     
+    /_/                    /_/                          
 
+🕷️ Welcome to OpenSpider Setup
+`);
   const s = p.spinner();
   s.start('Checking environment configuration...');
   await setTimeout(1000);
@@ -25,7 +37,7 @@ export async function runSetup() {
       process.exit(0);
     }
     if (!override) {
-      p.outro(`🕷️ Setup complete. Using existing .env file.`);
+      p.outro(`🕷️ Setup complete.Using existing.env file.`);
       return;
     }
   }
@@ -33,12 +45,14 @@ export async function runSetup() {
   const projectType = await p.select({
     message: 'Which main LLM provider will you use?',
     options: [
+      { value: 'antigravity-internal', label: 'Google Antigravity (Internal IDE - Opus Support)', hint: 'Cloud' },
       { value: 'antigravity', label: 'Google Antigravity / Gemini', hint: 'Cloud' },
       { value: 'ollama', label: 'Ollama', hint: 'Local' },
       { value: 'openai', label: 'OpenAI', hint: 'Cloud' },
       { value: 'anthropic', label: 'Anthropic', hint: 'Cloud' },
       { value: 'custom', label: 'Custom OpenAI-compatible', hint: 'e.g. LM Studio' },
     ],
+    initialValue: 'antigravity',
   });
 
   if (p.isCancel(projectType)) {
@@ -48,20 +62,131 @@ export async function runSetup() {
 
   let envContent = `DEFAULT_PROVIDER=${projectType}\n\n`;
 
-  if (projectType === 'antigravity') {
-    const key = await p.text({
-      message: 'Enter your Google Gemini API Key:',
-      placeholder: 'AIzaSy...',
-      validate(value) {
-        if (value.length === 0) return `API Key is required!`;
-      },
+  if (projectType === 'antigravity-internal') {
+    s.start('Initiating Internal IDE Authentication Flow...');
+    try {
+      // We import dynamically to avoid loading open/express if not needed
+      const { loginToAntigravity } = require('./auth/antigravity');
+      await loginToAntigravity();
+      s.stop('Internal IDE Authentication successful!');
+      envContent += `GEMINI_MODEL=claude-opus-4-6-thinking\n`;
+    } catch (e: any) {
+      s.stop(`Internal IDE Auth failed: ${e.message}`);
+      console.warn('Continuing setup, but API calls will fail until you complete login.');
+    }
+  } else if (projectType === 'antigravity') {
+    const authMethod = await p.select({
+      message: 'How would you like to authenticate with Google Antigravity?',
+      options: [
+        { value: 'adc', label: 'Google IDE Login (Recommended)', hint: 'Never expires, uses Google Auth' },
+        { value: 'apikey', label: 'API Key (Gemini Developer API)', hint: 'Standard' }
+      ]
     });
 
-    if (p.isCancel(key)) {
+    if (p.isCancel(authMethod)) {
       p.cancel('Setup cancelled.');
       process.exit(0);
     }
-    envContent += `GEMINI_API_KEY=${key}\n`;
+
+    let tempClient: GoogleGenAI | null = null;
+    let apiKey = '';
+    let vertexProject = '';
+    let vertexLocation = '';
+
+    if (authMethod === 'apikey') {
+      apiKey = await p.text({
+        message: 'Enter your Google Gemini API Key:',
+        placeholder: 'AIzaSy...',
+        validate(value) {
+          if (value.length === 0) return `API Key is required!`;
+        },
+      }) as string;
+
+      if (p.isCancel(apiKey)) {
+        p.cancel('Setup cancelled.');
+        process.exit(0);
+      }
+      envContent += `GEMINI_API_KEY = ${apiKey}\n`;
+      tempClient = new GoogleGenAI({
+        apiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'Google Antigravity IDE',
+            'x-goog-api-client': 'Google Antigravity IDE',
+          }
+        }
+      });
+    } else if (authMethod === 'adc') {
+      const doAuth = await p.confirm({
+        message: 'Do you need to authenticate with Google now? (Runs "gcloud auth application-default login")',
+        initialValue: false,
+      });
+
+      if (p.isCancel(doAuth)) {
+        p.cancel('Setup cancelled.');
+        process.exit(0);
+      }
+
+      if (doAuth) {
+        s.start('Running gcloud auth... Please check your browser.');
+        try {
+          execSync('gcloud auth application-default login', { stdio: 'inherit' });
+          s.stop('Authentication successful.');
+        } catch (e: any) {
+          s.stop(`Authentication failed: ${e.message}`);
+          console.warn('Continuing setup, but Gemini calls may fail if you are not authenticated.');
+        }
+      }
+
+      envContent += `GEMINI_USE_ADC = true\n`;
+      tempClient = new GoogleGenAI({});
+    }
+
+    if (tempClient) {
+      s.start('Fetching available models from Google...');
+      try {
+        const resp = await tempClient.models.list();
+        s.stop('Models fetched successfully.');
+
+        const modelOptions: { value: string, label: string }[] = [];
+        for await (const m of resp) {
+          if (m.name) {
+            modelOptions.push({
+              value: m.name.replace('models/', ''),
+              label: m.name.replace('models/', '')
+            });
+          }
+        }
+
+        // Sort with Gemini 2.5 Flash at the top if it exists
+        modelOptions.sort((a, b) => {
+          if (a.value.includes('gemini-2.5-flash')) return -1;
+          if (b.value.includes('gemini-2.5-flash')) return 1;
+          return a.value.localeCompare(b.value);
+        });
+
+        const selectedModel = await p.select({
+          message: 'Choose your default Google Antigravity model:',
+          options: modelOptions.length > 0 ? modelOptions : [{ value: 'gemini-2.5-flash', label: 'gemini-2.5-flash' }],
+          initialValue: 'gemini-2.5-flash',
+        });
+
+        if (p.isCancel(selectedModel)) {
+          p.cancel('Setup cancelled.');
+          process.exit(0);
+        }
+        envContent += `GEMINI_MODEL = ${selectedModel}\n`;
+
+      } catch (e: any) {
+        s.stop(`Failed to fetch models: ${e.message}`);
+        // Fallback
+        envContent += `GEMINI_MODEL = gemini-2.5-flash\n`;
+        console.log('Falling back to default model: gemini-2.5-flash');
+      }
+    } else {
+      // Assume default model for Cookie auth
+      envContent += `GEMINI_MODEL = gemini-2.5-pro\n`;
+    }
   }
 
   if (projectType === 'ollama') {
@@ -80,8 +205,8 @@ export async function runSetup() {
       p.cancel('Setup cancelled.');
       process.exit(0);
     }
-    envContent += `OLLAMA_URL=${url}\n`;
-    envContent += `OLLAMA_MODEL=${model}\n`;
+    envContent += `OLLAMA_URL = ${url}\n`;
+    envContent += `OLLAMA_MODEL = ${model}\n`;
   }
 
   if (projectType === 'openai') {
@@ -93,7 +218,7 @@ export async function runSetup() {
       p.cancel('Setup cancelled.');
       process.exit(0);
     }
-    envContent += `OPENAI_API_KEY=${key}\n`;
+    envContent += `OPENAI_API_KEY = ${key}\n`;
   }
 
   if (projectType === 'anthropic') {
@@ -101,11 +226,16 @@ export async function runSetup() {
       message: 'Enter your Anthropic API Key:',
       placeholder: 'sk-ant-...',
     });
-    if (p.isCancel(key)) {
+    const model = await p.text({
+      message: 'Enter your preferred Anthropic model (e.g. claude-3-5-sonnet-20241022, opus-4.6-thinking):',
+      initialValue: 'claude-3-5-sonnet-20241022'
+    });
+    if (p.isCancel(key) || p.isCancel(model)) {
       p.cancel('Setup cancelled.');
       process.exit(0);
     }
-    envContent += `ANTHROPIC_API_KEY=${key}\n`;
+    envContent += `ANTHROPIC_API_KEY = ${key}\n`;
+    envContent += `ANTHROPIC_MODEL = ${model}\n`;
   }
 
   if (projectType === 'custom') {
@@ -125,17 +255,60 @@ export async function runSetup() {
       p.cancel('Setup cancelled.');
       process.exit(0);
     }
-    envContent += `CUSTOM_API_URL=${url}\n`;
-    envContent += `CUSTOM_API_KEY=${key}\n`;
-    envContent += `CUSTOM_MODEL=${model}\n`;
+    envContent += `CUSTOM_API_URL = ${url}\n`;
+    envContent += `CUSTOM_API_KEY = ${key}\n`;
+    envContent += `CUSTOM_MODEL = ${model}\n`;
   }
+
+  const persona = await p.text({
+    message: 'Define the Agent Persona (e.g. "You are an expert code intelligence who writes clean React."):',
+    placeholder: 'You are a helpful multi-agent assistant...',
+    initialValue: 'You are a helpful multi-agent assistant designed to write excellent code and utilize terminals.'
+  });
+
+  if (p.isCancel(persona)) {
+    p.cancel('Setup cancelled.');
+    process.exit(0);
+  }
+
+  envContent += `AGENT_PERSONA = "${persona}"\\n\\n`;
+
+  const fallback = await p.text({
+    message: 'Enter a Fallback Model to use if the primary model fails (e.g. gpt-4o-mini, gemini-flash), or leave blank for none:',
+    placeholder: 'gemini-2.5-flash',
+  });
+
+  if (!p.isCancel(fallback) && fallback) {
+    envContent += `FALLBACK_MODEL = ${fallback}\n`;
+  }
+
+  const scanQr = await p.confirm({
+    message: 'Would you like to connect your WhatsApp account now?',
+    initialValue: true,
+  });
+
+  if (p.isCancel(scanQr)) {
+    p.cancel('Setup cancelled.');
+    process.exit(0);
+  }
+
+  envContent += `ENABLE_WHATSAPP = ${scanQr}\n`;
 
   s.start('Writing configuration to .env');
   fs.writeFileSync(envPath, envContent);
   await setTimeout(500);
   s.stop('.env configured successfully!');
 
-  p.outro(`🕷️ Setup complete! You can change these settings in the .env file anytime.`);
+  if (scanQr) {
+    try {
+      await onboardWhatsApp();
+      console.log('\n✅ WhatsApp connected successfully!');
+    } catch (e: any) {
+      console.error(`\n❌ WhatsApp connection failed: ${e.message}`);
+    }
+  }
+
+  p.outro(`🕷️ Setup complete! You can change these settings in the .env file anytime. Run 'openspider gateway' and 'openspider tui'.`);
 }
 
 // Allow running this script directly

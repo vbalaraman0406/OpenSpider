@@ -1,3 +1,9 @@
 node_modules/
 .env
 dist/
+.antigravity-auth.json
+*.js.map
+*.d.ts.map
+openclaw_examine/
+test-proxy-*
+.env

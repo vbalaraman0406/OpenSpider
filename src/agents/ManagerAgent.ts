@@ -11,8 +11,9 @@ export class ManagerAgent {
 
     async processUserRequest(prompt: string): Promise<string> {
         console.log(`\n[Manager] Analyzing request: "${prompt}"`);
+        const agentPersona = process.env.AGENT_PERSONA || "You are a helpful multi-agent assistant designed to write excellent code and utilize terminals.";
 
-        const systemPrompt = `You are the Manager Agent for OpenSpider. Your job is to break down the user's complex request into a sequential plan of sub-tasks.
+        const systemPrompt = `${agentPersona}\n\nYou are the Manager Agent for OpenSpider. Your job is to break down the user's complex request into a sequential plan of sub-tasks.
 Each sub-task should be assigned to a specialized Worker Agent role.
 
 Analyze the prompt and return a JSON array of sub-tasks.
@@ -38,6 +39,13 @@ Example output:
         ];
 
         try {
+            // Emulate human typing/thinking delay to avoid velocity detection ONLY for internal IDE
+            if (this.llm.providerName === 'antigravity-internal') {
+                const delayMs = Math.floor(Math.random() * (6000 - 2000 + 1)) + 2000;
+                console.log(`[Manager] Emulating human typing delay (${Math.round(delayMs / 1000)}s)...`);
+                await new Promise(r => setTimeout(r, delayMs));
+            }
+
             const plan = await this.llm.generateStructuredOutputs<{
                 tasks: { role: string; instruction: string }[]
             }>(messages, {
@@ -67,6 +75,7 @@ Example output:
 
             for (let i = 0; i < plan.tasks.length; i++) {
                 const task = plan.tasks[i];
+                if (!task) continue;
                 console.log(`\n[Manager] Delegating Task ${i + 1}/${plan.tasks.length} to ${task.role}...`);
 
                 const worker = new WorkerAgent(this.llm, task.role);

@@ -4,6 +4,7 @@ import * as http from 'http';
 import cors from 'cors';
 import fs from 'node:fs';
 import path from 'node:path';
+import { ManagerAgent } from './agents/ManagerAgent';
 
 export function startServer() {
     const app = express();
@@ -16,9 +17,44 @@ export function startServer() {
     // Store connected clients
     const clients: Set<WebSocket> = new Set();
 
+    const manager = new ManagerAgent();
+
     wss.on('connection', (ws) => {
         clients.add(ws);
         console.log('[Server] Dashboard client connected');
+
+        ws.on('message', async (messageData) => {
+            try {
+                const parsed = JSON.parse(messageData.toString());
+                if (parsed.type === 'chat') {
+                    console.log(`\n\n[Web Chat] Received message: ${parsed.text}`);
+
+                    // Send an immediate acknowledgement
+                    ws.send(JSON.stringify({
+                        type: 'chat_response',
+                        data: '🕷️ OpenSpider is processing your request...',
+                        timestamp: new Date().toISOString()
+                    }));
+
+                    // Process request
+                    const response = await manager.processUserRequest(parsed.text);
+
+                    // Send final result
+                    ws.send(JSON.stringify({
+                        type: 'chat_response',
+                        data: response,
+                        timestamp: new Date().toISOString()
+                    }));
+                }
+            } catch (err: any) {
+                console.error('[Web Chat] Error processing message:', err.message);
+                ws.send(JSON.stringify({
+                    type: 'chat_response',
+                    data: `❌ Error: ${err.message}`,
+                    timestamp: new Date().toISOString()
+                }));
+            }
+        });
 
         ws.on('close', () => clients.delete(ws));
     });
@@ -29,12 +65,36 @@ export function startServer() {
         originalLog(...args);
         const message = args.map(a => typeof a === 'object' ? JSON.stringify(a) : a).join(' ');
 
-        // Broadcast log to all dashboard clients
-        clients.forEach(client => {
-            if (client.readyState === WebSocket.OPEN) {
-                client.send(JSON.stringify({ type: 'log', data: message, timestamp: new Date().toISOString() }));
+        // Check if this log is a token usage event
+        let isUsage = false;
+        try {
+            if (message.includes('"type":"usage"')) {
+                const parsed = JSON.parse(message);
+                if (parsed.type === 'usage') {
+                    isUsage = true;
+                    clients.forEach(client => {
+                        if (client.readyState === WebSocket.OPEN) {
+                            client.send(JSON.stringify({
+                                type: 'usage',
+                                data: parsed,
+                                timestamp: new Date().toISOString()
+                            }));
+                        }
+                    });
+                }
             }
-        });
+        } catch (e) {
+            // Not JSON
+        }
+
+        if (!isUsage) {
+            // Broadcast standard log to all dashboard clients
+            clients.forEach(client => {
+                if (client.readyState === WebSocket.OPEN) {
+                    client.send(JSON.stringify({ type: 'log', data: message, timestamp: new Date().toISOString() }));
+                }
+            });
+        }
     };
 
     // API Route to fetch current connection config

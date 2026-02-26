@@ -6,7 +6,7 @@ import { runSetup } from './setup';
 import { startServer } from './server';
 import { startWhatsApp } from './whatsapp';
 
-async function bootstrap() {
+export async function bootstrap() {
     console.clear();
     console.log("🕷️ Starting OpenSpider Engine...");
 
@@ -26,8 +26,15 @@ async function bootstrap() {
     startServer();
 
     // 3. Start the WhatsApp Gateway
-    console.log("Initializing WhatsApp Baileys Client...");
-    startWhatsApp();
+    if (process.env.ENABLE_WHATSAPP !== 'false') {
+        console.log("Initializing WhatsApp Baileys Client...");
+        startWhatsApp();
+    } else {
+        console.log("WhatsApp Channel Disabled via .env configuration.");
+    }
 }
 
-bootstrap().catch(console.error);
+// Only auto-run if executed directly via ts-node or node (not when imported)
+if (require.main === module) {
+    bootstrap().catch(console.error);
+}
