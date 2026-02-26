@@ -29,7 +29,11 @@ export default function App() {
             .catch(e => console.error("Could not fetch skills API", e));
 
         // Connect WebSocket for live logs
-        const ws = new WebSocket('ws://localhost:4000');
+        const host = window.location.port === '5173' ? 'localhost:4000' : window.location.host;
+        const wsUrl = window.location.protocol === 'https:'
+            ? `wss://${host}`
+            : `ws://${host}`;
+        const ws = new WebSocket(wsUrl);
 
         ws.onmessage = (event) => {
             try {
