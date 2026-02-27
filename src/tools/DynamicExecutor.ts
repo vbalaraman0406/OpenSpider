@@ -29,11 +29,42 @@ export class DynamicExecutor {
     }
 
     /**
+     * Heuristic Static Analysis to prevent Agentic Prompt Injections
+     */
+    private scanScriptForThreats(content: string, filename: string) {
+        const blocklistedKeywords = [
+            'os.system',
+            'subprocess.',
+            'pty.spawn',
+            'child_process',
+            'exec(',
+            'eval(',
+            'fs.unlink',
+            'fs.rmdir',
+            'shutil.rmtree',
+            'rm -rf'
+        ];
+
+        const normalizedContent = content.toLowerCase();
+        for (const keyword of blocklistedKeywords) {
+            if (normalizedContent.includes(keyword.toLowerCase())) {
+                throw new Error(`Security Guard: Script blocked. The code contains forbidden module or function: ${keyword}`);
+            }
+        }
+    }
+
+    /**
      * Allows the agent to run generic shell commands (within the skills directory)
      */
     async runCommand(command: string): Promise<{ stdout: string; stderr: string; error?: string }> {
+        const blocklistedCmds = ['rm -rf', 'mkfs', 'dd if=', 'sudo ', 'chown ', 'chmod 777'];
+        for (const bad of blocklistedCmds) {
+            if (command.toLowerCase().includes(bad)) {
+                return { stdout: '', stderr: '', error: `Security Guard: Command blocked by Sandbox policy: ${bad}` };
+            }
+        }
         try {
-            const { stdout, stderr } = await execAsync(command, { cwd: this.skillsDir, timeout: 60000 }); // 60s timeout
+            const { stdout, stderr } = await execAsync(command, { cwd: this.skillsDir, timeout: 30000 }); // strict 30s timeout
             return { stdout, stderr };
         } catch (e: any) {
             return { stdout: e.stdout || '', stderr: e.stderr || '', error: e.message };
@@ -53,6 +84,7 @@ export class DynamicExecutor {
      * Writes a script (Python, JS, etc.) to the skills folder
      */
     async writeScript(filename: string, content: string): Promise<string> {
+        this.scanScriptForThreats(content, filename);
         const filePath = path.join(this.skillsDir, filename);
         await fs.writeFile(filePath, content, 'utf-8');
         return `Script saved to ${filePath}`;

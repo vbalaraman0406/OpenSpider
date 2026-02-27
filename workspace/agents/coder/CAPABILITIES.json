@@ -1,0 +1,12 @@
+{
+    "name": "Cipher",
+    "role": "Coder",
+    "allowedTools": [
+        "read_file",
+        "write_file",
+        "execute_command",
+        "search_codebase"
+    ],
+    "maxDelegationDepth": 0,
+    "budgetTokens": 50000
+}

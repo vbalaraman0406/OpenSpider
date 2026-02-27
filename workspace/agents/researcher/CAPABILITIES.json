@@ -1,0 +1,12 @@
+{
+  "name": "Researcher",
+  "role": "Researcher",
+  "allowedTools": [
+    "search_web",
+    "read_url_content",
+    "view_content_chunk",
+    "read_file"
+  ],
+  "maxDelegationDepth": 0,
+  "budgetTokens": 50000
+}

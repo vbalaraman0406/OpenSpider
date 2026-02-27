@@ -1,0 +1,12 @@
+{
+  "name": "Ananta",
+  "role": "Manager",
+  "allowedTools": [
+    "delegate_task",
+    "read_file",
+    "search_web",
+    "ask_user"
+  ],
+  "maxDelegationDepth": 3,
+  "budgetTokens": 100000
+}

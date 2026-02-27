@@ -1,0 +1,12 @@
+{
+  "dmPolicy": "allowlist",
+  "allowedDMs": [
+    "1234567890",
+    "9876543210"
+  ],
+  "groupPolicy": "allowlist",
+  "allowedGroups": [
+    "120363151234567890@g.us"
+  ],
+  "botMode": "mention"
+}

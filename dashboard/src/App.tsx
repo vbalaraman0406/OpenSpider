@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Activity, Terminal, CheckCircle2, Server, Key, Bot, Send, MessageSquare, Radio, Smartphone, MessagesSquare, Users, Globe, Play, Square, Settings, RefreshCw, LayoutDashboard, ListTree, FolderGit2, Wrench, FileText, Search, Download, X, Trash, GitMerge, Timer, Plus, Clock, AlertTriangle } from 'lucide-react';
 import AgentFlowGraph, { AgentFlowEvent } from './components/AgentFlowGraph';
 import { UsageView } from './components/UsageView';
+import { WhatsAppSecurity } from './components/WhatsAppSecurity';
 
 interface ChannelConfig {
     id: string;
@@ -14,12 +15,12 @@ interface ChannelConfig {
     description: string;
 }
 
-function ChannelCard({ channel }: { channel: ChannelConfig }) {
+function ChannelCard({ channel, onConfigure }: { channel: ChannelConfig, onConfigure: () => void }) {
     const isRunning = channel.status === 'running';
     const isOffline = channel.status === 'offline';
 
     return (
-        <div className="bg-slate-900/40 backdrop-blur-xl rounded-2xl border border-white/5 p-6 flex flex-col relative overflow-hidden group hover:bg-slate-900/60 transition-all duration-300 shadow-xl hover:shadow-2xl hover:shadow-blue-500/5">
+        <div className="bg-slate-900/40 backdrop-blur-xl rounded-2xl border border-white/5 p-6 flex flex-col relative group hover:bg-slate-900/60 transition-all duration-300 shadow-xl hover:shadow-2xl hover:shadow-blue-500/5">
             {/* Subtle Gradient Glow inside card */}
             <div className="absolute top-0 inset-x-0 h-px w-full bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
 
@@ -70,7 +71,10 @@ function ChannelCard({ channel }: { channel: ChannelConfig }) {
                     </button>
                 </div>
 
-                <button className={`px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2 ${isRunning ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-900/20' : 'bg-slate-800 hover:bg-slate-700 text-white'}`}>
+                <button
+                    onClick={onConfigure}
+                    className={`px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2 ${isRunning ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-900/20' : 'bg-slate-800 hover:bg-slate-700 text-white'}`}
+                >
                     <Settings className="w-4 h-4" />
                     Configure
                 </button>
@@ -279,8 +283,63 @@ function SessionsView({ provider }: { provider: string }) {
 function AgentsView({ agents, onRefresh, provider, skills }: { agents: any[], onRefresh: () => void, provider: string, skills: string[] }) {
 
     const [selectedAgentId, setSelectedAgentId] = useState('gateway');
+
+    // Auto-select the first available agent if the current selection is invalid (e.g., initial load)
+    useEffect(() => {
+        if (agents.length > 0 && !agents.find(a => a.id === selectedAgentId)) {
+            setSelectedAgentId(agents[0].id);
+        }
+    }, [agents, selectedAgentId]);
+
     const selectedAgent = agents.find(a => a.id === selectedAgentId) || agents[0] || {
-        id: 'error', name: 'No Agents Found', role: '', status: 'red', initial: '?', color: 'red', model: '', prompt: '', skills: []
+        id: 'error', name: 'No Agents Found', role: '', status: 'red', initial: '?', color: 'red', model: '', prompt: '', skills: [], pillars: {}
+    };
+
+    const [activeTab, setActiveTab] = useState<'identity' | 'soul' | 'userContext' | 'capabilities'>('identity');
+    const [editedPillars, setEditedPillars] = useState<any>({});
+    const [isSaving, setIsSaving] = useState(false);
+
+    useEffect(() => {
+        if (selectedAgent && selectedAgent.pillars) {
+            setEditedPillars({
+                identity: selectedAgent.pillars.identity || '',
+                soul: selectedAgent.pillars.soul || '',
+                userContext: selectedAgent.pillars.userContext || '',
+                capabilities: selectedAgent.pillars.capabilities || ''
+            });
+        }
+    }, [selectedAgent.id]);
+
+    let activeCaps: any = {};
+    try {
+        activeCaps = JSON.parse(editedPillars.capabilities || '{}');
+    } catch (e) { }
+
+    const handleNameChange = (newName: string) => {
+        const newCaps = { ...activeCaps, name: newName };
+        setEditedPillars({ ...editedPillars, capabilities: JSON.stringify(newCaps, null, 2) });
+    };
+
+    const handleRoleChange = (newRole: string) => {
+        const newCaps = { ...activeCaps, role: newRole };
+        setEditedPillars({ ...editedPillars, capabilities: JSON.stringify(newCaps, null, 2) });
+    };
+
+    const handleSaveAgent = async () => {
+        setIsSaving(true);
+        try {
+            const res = await fetch(`/api/agents/${selectedAgent.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(editedPillars)
+            });
+            if (res.ok) {
+                onRefresh();
+            } else {
+                alert('Failed to save agent persona');
+            }
+        } catch (e: any) { alert(e.message); }
+        finally { setIsSaving(false); }
     };
 
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -343,19 +402,46 @@ function AgentsView({ agents, onRefresh, provider, skills }: { agents: any[], on
                         <div className={`w-16 h-16 rounded-2xl bg-${selectedAgent.color}-500/20 border border-${selectedAgent.color}-500/30 flex items-center justify-center text-${selectedAgent.color}-400 text-2xl font-bold`}>
                             {selectedAgent.initial}
                         </div>
-                        <div>
-                            <h2 className="text-2xl font-bold text-white tracking-tight">{selectedAgent.name}</h2>
-                            <p className="text-slate-400 text-sm mt-1">Model: {selectedAgent.model}</p>
+                        <div className="flex-1 min-w-0">
+                            <input
+                                type="text"
+                                value={activeCaps.name || selectedAgent.name}
+                                onChange={e => handleNameChange(e.target.value)}
+                                className="text-2xl font-bold bg-transparent text-white tracking-tight border-b border-transparent hover:border-slate-800 focus:border-fuchsia-500 focus:outline-none transition-colors w-full px-1 -ml-1 rounded truncate"
+                                placeholder="Agent Name"
+                            />
+                            <div className="flex items-center gap-3 mt-1.5 w-full">
+                                <span className="text-slate-500 text-[10px] uppercase tracking-widest font-bold shrink-0">Role:</span>
+                                <input
+                                    type="text"
+                                    value={activeCaps.role || selectedAgent.role}
+                                    onChange={e => handleRoleChange(e.target.value)}
+                                    className="text-slate-400 text-sm bg-transparent border-b border-transparent hover:border-slate-800 focus:border-fuchsia-500 focus:outline-none transition-colors flex-1 px-1 -ml-1 rounded truncate"
+                                    placeholder="e.g. Chief Orchestrator"
+                                />
+                                <span className="text-slate-500 text-[10px] uppercase tracking-widest font-bold border-l border-slate-800 pl-3 shrink-0">Model:</span>
+                                <span className="text-slate-400 text-xs font-mono shrink-0">{selectedAgent.model}</span>
+                            </div>
                         </div>
                     </div>
 
                     <div className="space-y-6">
                         <div>
-                            <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-3">System Prompt Details</label>
+                            <div className="flex gap-2 mb-3 border-b border-slate-800/60 pb-2">
+                                {['identity', 'soul', 'userContext', 'capabilities'].map(tab => (
+                                    <button
+                                        key={tab}
+                                        onClick={() => setActiveTab(tab as any)}
+                                        className={`px-4 py-2 text-xs font-bold uppercase tracking-widest rounded-t-lg transition-colors ${activeTab === tab ? `text-${selectedAgent.color}-400 border-b-2 border-${selectedAgent.color}-500` : 'text-slate-500 hover:text-slate-300'}`}
+                                    >
+                                        {tab === 'userContext' ? 'User Context' : tab}
+                                    </button>
+                                ))}
+                            </div>
                             <textarea
-                                className={`w-full h-32 bg-slate-950/50 border border-slate-800 rounded-lg px-4 py-3 text-sm font-mono text-slate-300 focus:outline-none focus:ring-1 focus:ring-${selectedAgent.color}-500/50 resize-none`}
-                                value={selectedAgent.prompt}
-                                readOnly
+                                className={`w-full h-64 bg-slate-950/50 border border-slate-800 rounded-lg px-4 py-3 text-sm font-mono text-slate-300 focus:outline-none focus:ring-1 focus:ring-${selectedAgent.color}-500/50 resize-none`}
+                                value={editedPillars[activeTab] || ''}
+                                onChange={e => setEditedPillars({ ...editedPillars, [activeTab]: e.target.value })}
                             />
                         </div>
 
@@ -374,164 +460,197 @@ function AgentsView({ agents, onRefresh, provider, skills }: { agents: any[], on
                         </div>
                     </div>
 
-                    <div className="mt-auto pt-8 flex justify-end gap-3">
-                        <button className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm font-medium transition-colors border border-slate-700">Discard</button>
-                        <button className={`px-5 py-2.5 bg-${selectedAgent.color}-600 hover:bg-${selectedAgent.color}-500 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-${selectedAgent.color}-900/20`}>Save Changes</button>
+                    <div className="mt-auto pt-8 flex items-center justify-between">
+                        <div>
+                            {selectedAgent.id !== 'manager' && (
+                                <button
+                                    onClick={() => {
+                                        const nextStatus = (activeCaps.status === 'stopped') ? 'running' : 'stopped';
+                                        setEditedPillars({ ...editedPillars, capabilities: JSON.stringify({ ...activeCaps, status: nextStatus }, null, 2) });
+                                    }}
+                                    className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-colors border ${activeCaps.status === 'stopped'
+                                        ? 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.15)]'
+                                        : 'bg-red-500/10 text-red-400 hover:bg-red-500/20 border-red-500/30'
+                                        }`}
+                                >
+                                    {activeCaps.status === 'stopped' ? '▶ Start Agent' : '⏹ Stop Agent'}
+                                </button>
+                            )}
+                        </div>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setEditedPillars(selectedAgent.pillars || {})}
+                                className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm font-medium transition-colors border border-slate-700"
+                            >
+                                Discard
+                            </button>
+                            <button
+                                onClick={handleSaveAgent}
+                                disabled={isSaving}
+                                className={`px-5 py-2.5 bg-${selectedAgent.color}-600 hover:bg-${selectedAgent.color}-500 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-${selectedAgent.color}-900/20 disabled:opacity-50`}
+                            >
+                                {isSaving ? 'Saving...' : 'Save Changes'}
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
 
             {/* Create Agent Modal Overlay */}
-            {isCreateModalOpen && (
-                <div className="absolute inset-0 z-50 flex items-center justify-center p-10 fade-in">
-                    <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md" onClick={() => setIsCreateModalOpen(false)} />
-                    <div className="bg-slate-900/90 border border-fuchsia-500/30 rounded-2xl shadow-[0_0_50px_rgba(217,70,239,0.1)] w-full max-w-2xl relative z-10 overflow-hidden flex flex-col max-h-[85vh]">
-                        <div className="absolute top-0 inset-x-0 h-1 w-full bg-gradient-to-r from-fuchsia-500 to-purple-500"></div>
-                        <header className="px-6 py-5 border-b border-slate-800/60 flex items-center justify-between shrink-0">
-                            <div className="flex items-center gap-3">
-                                <div className="p-2 rounded-lg bg-fuchsia-500/20 text-fuchsia-400">
-                                    <Users className="w-5 h-5" />
-                                </div>
-                                <div>
-                                    <h3 className="text-lg font-bold text-white tracking-tight">Create Agent</h3>
-                                    <p className="text-xs text-slate-400">Configure a new AI worker profile</p>
-                                </div>
-                            </div>
-                            <button onClick={() => setIsCreateModalOpen(false)} className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors">
-                                <X className="w-5 h-5" />
-                            </button>
-                        </header>
-
-                        <div className="p-6 overflow-y-auto flex flex-col gap-6">
-                            <div className="grid grid-cols-2 gap-6">
-                                <div>
-                                    <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Agent Name</label>
-                                    <input type="text" value={createAgentName} onChange={e => setCreateAgentName(e.target.value)} placeholder="e.g. Code Reviewer" className="w-full bg-slate-950/50 border border-slate-800 rounded-lg px-4 py-2.5 text-sm text-slate-300 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/50" />
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Role Summary</label>
-                                    <input type="text" value={createAgentRole} onChange={e => setCreateAgentRole(e.target.value)} placeholder="e.g. Analyzes PRs for bugs" className="w-full bg-slate-950/50 border border-slate-800 rounded-lg px-4 py-2.5 text-sm text-slate-300 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/50" />
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-6">
-                                <div>
-                                    <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Primary Model</label>
-                                    <div className="w-full bg-slate-950/30 border border-slate-800/50 rounded-lg px-4 py-2.5 text-sm text-slate-500 flex items-center gap-2 cursor-not-allowed">
-                                        <Bot className="w-4 h-4 text-slate-500" />
-                                        System Default ({provider})
+            {
+                isCreateModalOpen && (
+                    <div className="absolute inset-0 z-50 flex items-center justify-center p-10 fade-in">
+                        <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md" onClick={() => setIsCreateModalOpen(false)} />
+                        <div className="bg-slate-900/90 border border-fuchsia-500/30 rounded-2xl shadow-[0_0_50px_rgba(217,70,239,0.1)] w-full max-w-2xl relative z-10 overflow-hidden flex flex-col max-h-[85vh]">
+                            <div className="absolute top-0 inset-x-0 h-1 w-full bg-gradient-to-r from-fuchsia-500 to-purple-500"></div>
+                            <header className="px-6 py-5 border-b border-slate-800/60 flex items-center justify-between shrink-0">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 rounded-lg bg-fuchsia-500/20 text-fuchsia-400">
+                                        <Users className="w-5 h-5" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-lg font-bold text-white tracking-tight">Create Agent</h3>
+                                        <p className="text-xs text-slate-400">Configure a new AI worker profile</p>
                                     </div>
                                 </div>
-                                <div>
-                                    <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Theme Color</label>
-                                    <select value={createAgentColor} onChange={e => setCreateAgentColor(e.target.value)} className="w-full bg-slate-950/50 border border-slate-800 rounded-lg px-4 py-2.5 text-sm text-slate-300 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/50 appearance-none">
-                                        <option value="emerald">Emerald</option>
-                                        <option value="blue">Blue</option>
-                                        <option value="fuchsia">Fuchsia</option>
-                                        <option value="amber">Amber</option>
-                                        <option value="rose">Rose</option>
-                                    </select>
+                                <button onClick={() => setIsCreateModalOpen(false)} className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors">
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </header>
+
+                            <div className="p-6 overflow-y-auto flex flex-col gap-6">
+                                <div className="grid grid-cols-2 gap-6">
+                                    <div>
+                                        <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Agent Name</label>
+                                        <input type="text" value={createAgentName} onChange={e => setCreateAgentName(e.target.value)} placeholder="e.g. Code Reviewer" className="w-full bg-slate-950/50 border border-slate-800 rounded-lg px-4 py-2.5 text-sm text-slate-300 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/50" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Role Summary</label>
+                                        <input type="text" value={createAgentRole} onChange={e => setCreateAgentRole(e.target.value)} placeholder="e.g. Analyzes PRs for bugs" className="w-full bg-slate-950/50 border border-slate-800 rounded-lg px-4 py-2.5 text-sm text-slate-300 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/50" />
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-6">
+                                    <div>
+                                        <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Primary Model</label>
+                                        <div className="w-full bg-slate-950/30 border border-slate-800/50 rounded-lg px-4 py-2.5 text-sm text-slate-500 flex items-center gap-2 cursor-not-allowed">
+                                            <Bot className="w-4 h-4 text-slate-500" />
+                                            System Default ({provider})
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Theme Color</label>
+                                        <select value={createAgentColor} onChange={e => setCreateAgentColor(e.target.value)} className="w-full bg-slate-950/50 border border-slate-800 rounded-lg px-4 py-2.5 text-sm text-slate-300 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/50 appearance-none">
+                                            <option value="emerald">Emerald</option>
+                                            <option value="blue">Blue</option>
+                                            <option value="fuchsia">Fuchsia</option>
+                                            <option value="amber">Amber</option>
+                                            <option value="rose">Rose</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div className="flex-1 flex flex-col min-h-[150px]">
+                                    <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">System Prompt</label>
+                                    <textarea
+                                        value={createAgentPrompt} onChange={e => setCreateAgentPrompt(e.target.value)}
+                                        placeholder="You are a helpful coding assistant..."
+                                        className="w-full flex-1 bg-slate-950/80 border border-slate-800 rounded-lg px-4 py-3 text-sm font-mono text-fuchsia-300 focus:outline-none focus:border-fuchsia-500/50 resize-none leading-relaxed"
+                                    />
                                 </div>
                             </div>
 
-                            <div className="flex-1 flex flex-col min-h-[150px]">
-                                <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">System Prompt</label>
-                                <textarea
-                                    value={createAgentPrompt} onChange={e => setCreateAgentPrompt(e.target.value)}
-                                    placeholder="You are a helpful coding assistant..."
-                                    className="w-full flex-1 bg-slate-950/80 border border-slate-800 rounded-lg px-4 py-3 text-sm font-mono text-fuchsia-300 focus:outline-none focus:border-fuchsia-500/50 resize-none leading-relaxed"
-                                />
-                            </div>
+                            <footer className="px-6 py-4 bg-slate-950/50 border-t border-slate-800/60 flex justify-end gap-3 shrink-0">
+                                <button onClick={() => setIsCreateModalOpen(false)} className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white transition-colors">Cancel</button>
+                                <button onClick={async () => {
+                                    try {
+                                        const res = await fetch('/api/agents', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({
+                                                name: createAgentName,
+                                                role: createAgentRole,
+                                                model: provider,
+                                                color: createAgentColor,
+                                                prompt: createAgentPrompt,
+                                                initial: createAgentName.charAt(0).toUpperCase()
+                                            })
+                                        });
+                                        if (res.ok) {
+                                            const data = await res.json();
+                                            setIsCreateModalOpen(false);
+                                            setCreateAgentName('');
+                                            setCreateAgentRole('');
+                                            setCreateAgentPrompt('');
+                                            setSelectedAgentId(data.agent.id);
+                                            onRefresh();
+                                        } else {
+                                            alert('Failed to save agent');
+                                        }
+                                    } catch (e: any) { alert(e.message); }
+                                }} className="px-5 py-2 bg-fuchsia-600 hover:bg-fuchsia-500 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-fuchsia-900/20">Save Agent</button>
+                            </footer>
                         </div>
-
-                        <footer className="px-6 py-4 bg-slate-950/50 border-t border-slate-800/60 flex justify-end gap-3 shrink-0">
-                            <button onClick={() => setIsCreateModalOpen(false)} className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white transition-colors">Cancel</button>
-                            <button onClick={async () => {
-                                try {
-                                    const res = await fetch('/api/agents', {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({
-                                            name: createAgentName,
-                                            role: createAgentRole,
-                                            model: provider,
-                                            color: createAgentColor,
-                                            prompt: createAgentPrompt,
-                                            initial: createAgentName.charAt(0).toUpperCase()
-                                        })
-                                    });
-                                    if (res.ok) {
-                                        const data = await res.json();
-                                        setIsCreateModalOpen(false);
-                                        setCreateAgentName('');
-                                        setCreateAgentRole('');
-                                        setCreateAgentPrompt('');
-                                        setSelectedAgentId(data.agent.id);
-                                        onRefresh();
-                                    } else {
-                                        alert('Failed to save agent');
-                                    }
-                                } catch (e: any) { alert(e.message); }
-                            }} className="px-5 py-2 bg-fuchsia-600 hover:bg-fuchsia-500 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-fuchsia-900/20">Save Agent</button>
-                        </footer>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             {/* Add Skill Modal Overlay */}
-            {isAddSkillModalOpen && (
-                <div className="absolute inset-0 z-50 flex items-center justify-center p-10 fade-in">
-                    <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md" onClick={() => setIsAddSkillModalOpen(false)} />
-                    <div className="bg-slate-900/90 border border-cyan-500/30 rounded-2xl shadow-[0_0_50px_rgba(6,182,212,0.1)] w-full max-w-md relative z-10 overflow-hidden flex flex-col">
-                        <header className="px-6 py-4 border-b border-slate-800/60 flex items-center justify-between">
-                            <h3 className="text-lg font-bold text-white tracking-tight">Assign Tool</h3>
-                            <button onClick={() => setIsAddSkillModalOpen(false)} className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"><X className="w-5 h-5" /></button>
-                        </header>
+            {
+                isAddSkillModalOpen && (
+                    <div className="absolute inset-0 z-50 flex items-center justify-center p-10 fade-in">
+                        <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md" onClick={() => setIsAddSkillModalOpen(false)} />
+                        <div className="bg-slate-900/90 border border-cyan-500/30 rounded-2xl shadow-[0_0_50px_rgba(6,182,212,0.1)] w-full max-w-md relative z-10 overflow-hidden flex flex-col">
+                            <header className="px-6 py-4 border-b border-slate-800/60 flex items-center justify-between">
+                                <h3 className="text-lg font-bold text-white tracking-tight">Assign Tool</h3>
+                                <button onClick={() => setIsAddSkillModalOpen(false)} className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"><X className="w-5 h-5" /></button>
+                            </header>
 
-                        <div className="p-6">
-                            <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Skill Name</label>
-                            {skills.length === 0 ? (
-                                <div className="w-full bg-slate-950/50 border border-slate-800 rounded-lg px-4 py-2.5 text-sm font-mono text-slate-500">
-                                    No dynamic skills available to assign.
-                                </div>
-                            ) : (
-                                <select
-                                    value={skillToAdd}
-                                    onChange={e => setSkillToAdd(e.target.value)}
-                                    className="w-full bg-slate-950/50 border border-slate-800 rounded-lg px-4 py-2.5 text-sm font-mono text-slate-300 focus:outline-none focus:ring-1 focus:ring-cyan-500/50 appearance-none"
-                                >
-                                    {skills.map(skill => (
-                                        <option key={skill} value={skill}>{skill}</option>
-                                    ))}
-                                </select>
-                            )}
+                            <div className="p-6">
+                                <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Skill Name</label>
+                                {skills.length === 0 ? (
+                                    <div className="w-full bg-slate-950/50 border border-slate-800 rounded-lg px-4 py-2.5 text-sm font-mono text-slate-500">
+                                        No dynamic skills available to assign.
+                                    </div>
+                                ) : (
+                                    <select
+                                        value={skillToAdd}
+                                        onChange={e => setSkillToAdd(e.target.value)}
+                                        className="w-full bg-slate-950/50 border border-slate-800 rounded-lg px-4 py-2.5 text-sm font-mono text-slate-300 focus:outline-none focus:ring-1 focus:ring-cyan-500/50 appearance-none"
+                                    >
+                                        {skills.map(skill => (
+                                            <option key={skill} value={skill}>{skill}</option>
+                                        ))}
+                                    </select>
+                                )}
+                            </div>
+
+                            <footer className="px-6 py-4 bg-slate-950/50 border-t border-slate-800/60 flex justify-end gap-3">
+                                <button onClick={() => setIsAddSkillModalOpen(false)} className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white transition-colors">Cancel</button>
+                                <button onClick={async () => {
+                                    if (!skillToAdd) return;
+                                    try {
+                                        const res = await fetch(`/api/agents/${selectedAgent.id}/skills`, {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ skill: skillToAdd })
+                                        });
+                                        if (res.ok) {
+                                            setIsAddSkillModalOpen(false);
+                                            setSkillToAdd('');
+                                            onRefresh();
+                                        } else {
+                                            const err = await res.json();
+                                            alert(`Failed to assign skill: ${err.error}`);
+                                        }
+                                    } catch (e: any) { alert(e.message); }
+                                }} className="px-5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-sm font-medium transition-colors">Assign</button>
+                            </footer>
                         </div>
-
-                        <footer className="px-6 py-4 bg-slate-950/50 border-t border-slate-800/60 flex justify-end gap-3">
-                            <button onClick={() => setIsAddSkillModalOpen(false)} className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white transition-colors">Cancel</button>
-                            <button onClick={async () => {
-                                if (!skillToAdd) return;
-                                try {
-                                    const res = await fetch(`/api/agents/${selectedAgent.id}/skills`, {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({ skill: skillToAdd })
-                                    });
-                                    if (res.ok) {
-                                        setIsAddSkillModalOpen(false);
-                                        setSkillToAdd('');
-                                        onRefresh();
-                                    } else {
-                                        const err = await res.json();
-                                        alert(`Failed to assign skill: ${err.error}`);
-                                    }
-                                } catch (e: any) { alert(e.message); }
-                            }} className="px-5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-sm font-medium transition-colors">Assign</button>
-                        </footer>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+        </div >
     );
 }
 
@@ -1125,6 +1244,7 @@ function CronView({ agents }: { agents: any[] }) {
 export default function App() {
     type TabName = 'overview' | 'channels' | 'sessions' | 'usage' | 'chat' | 'agents' | 'skills' | 'logs' | 'flow' | 'cron';
     const [activeTab, setActiveTab] = useState<TabName>('chat');
+    const [configuredChannel, setConfiguredChannel] = useState<string | null>(null);
     const [logs, setLogs] = useState<LogMessage[]>([]);
     const [flowEvents, setFlowEvents] = useState<AgentFlowEvent[]>([]);
     const [config, setConfig] = useState({ provider: 'Loading...', status: 'connecting' });
@@ -1133,6 +1253,7 @@ export default function App() {
     const [alerts, setAlerts] = useState<{ id: number, message: string }[]>([]);
     const [chatInput, setChatInput] = useState('');
     const [isTyping, setIsTyping] = useState(false);
+    const [isVerbose, setIsVerbose] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
     const wsRef = useRef<WebSocket | null>(null);
 
@@ -1223,7 +1344,7 @@ export default function App() {
         if (scrollRef.current) {
             scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
         }
-    }, [logs]);
+    }, [logs, isTyping]);
 
     return (
         <div className="h-screen bg-slate-950 flex font-sans text-slate-300 overflow-hidden">
@@ -1351,10 +1472,21 @@ export default function App() {
                     <div className="flex-1 p-8 flex gap-8 overflow-hidden max-w-[1600px] w-full mx-auto h-full fade-in">
 
                         {/* Left Column: Logs */}
-                        < section className="flex-1 flex flex-col bg-slate-900/50 rounded-xl border border-slate-800/60 overflow-hidden shadow-lg backdrop-blur-sm" >
-                            <div className="p-4 border-b border-slate-800/60 flex items-center gap-2 bg-slate-900">
-                                <Terminal className="w-5 h-5 text-slate-400" />
-                                <h2 className="font-semibold text-slate-200">Live Agent Communications</h2>
+                        <section className="flex-1 flex flex-col bg-slate-900/50 rounded-xl border border-slate-800/60 overflow-hidden shadow-lg backdrop-blur-sm">
+                            <div className="p-4 border-b border-slate-800/60 flex items-center justify-between bg-slate-900">
+                                <div className="flex items-center gap-2">
+                                    <Terminal className="w-5 h-5 text-slate-400" />
+                                    <h2 className="font-semibold text-slate-200">Live Agent Communications</h2>
+                                </div>
+                                <button
+                                    onClick={() => setIsVerbose(!isVerbose)}
+                                    className={`px-3 py-1.5 text-xs font-bold uppercase tracking-widest rounded-lg transition-colors border ${isVerbose
+                                        ? 'bg-fuchsia-500/10 text-fuchsia-400 hover:bg-fuchsia-500/20 border-fuchsia-500/30 shadow-[0_0_15px_rgba(217,70,239,0.15)]'
+                                        : 'bg-slate-800 hover:bg-slate-700 text-slate-400 border-slate-700'
+                                        }`}
+                                >
+                                    Verbose: {isVerbose ? 'ON' : 'OFF'}
+                                </button>
                             </div>
                             <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 font-mono text-sm space-y-2">
                                 {logs.length === 0 ? (
@@ -1362,7 +1494,22 @@ export default function App() {
                                         <Activity className="w-12 h-12 mb-4 animate-pulse" />
                                         <span>Awaiting agent activity or chat messages...</span>
                                     </div>
-                                ) : logs.map((log, i) => (
+                                ) : logs.filter(log => {
+                                    if (isVerbose) return true;
+                                    const text = log.data;
+                                    // In non-verbose mode, strictly only show User questions and final Agent answers
+                                    if (text.startsWith('[You]')) return true;
+
+                                    if (text.startsWith('[Agent]')) {
+                                        // Filter out intermediate [Agent] system/status updates
+                                        if (text.includes('OpenSpider is processing')) return false;
+                                        if (text.includes('Sending structured request')) return false;
+                                        return true; // Keep genuine [Agent] dialogue responses
+                                    }
+
+                                    // Hide absolutely everything else (raw JSON, [Server], [Web Chat], [Manager], [Worker])
+                                    return false;
+                                }).map((log, i) => (
                                     <div key={i} className="flex gap-3 hover:bg-slate-800/30 p-1.5 rounded transition-colors group">
                                         <span className="text-slate-500 shrink-0 select-none text-xs mt-0.5">
                                             {new Date(log.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
@@ -1375,12 +1522,27 @@ export default function App() {
                                                             log.data.includes('[API Token Usage]') ? 'text-fuchsia-400 font-medium' :
                                                                 log.data.includes('Error') ? 'text-red-400 font-semibold' : 'text-slate-300'
                                             }`}>
-                                            {log.data}
+                                            {log.data.replace(/\[Agent\] Plan execution finished successfully\. Final Output:?[\s\n]*/g, '[Agent] ')}
                                         </span>
                                     </div>
-                                ))
-                                }
-                            </div >
+                                ))}
+
+                                {isTyping && !isVerbose && (
+                                    <div className="flex gap-3 p-1.5 rounded transition-colors group animate-pulse">
+                                        <span className="text-slate-500 shrink-0 select-none text-xs mt-0.5">
+                                            {new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                        </span>
+                                        <span className="text-indigo-400 font-semibold flex items-center gap-1.5">
+                                            [Agent]
+                                            <div className="flex gap-1 ml-1 items-center h-full pt-1">
+                                                <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                                                <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                                                <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                                            </div>
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
 
                             {/* Chat Input */}
                             <div className="p-4 border-t border-slate-800/60 bg-slate-900 flex items-center gap-3">
@@ -1457,65 +1619,92 @@ export default function App() {
                             </div >
                         </aside >
                     </div>
-                )}
+                )
+                }
 
-                {activeTab === 'channels' && (
-                    <div className="flex-1 p-10 overflow-y-auto fade-in">
-                        <div className="max-w-6xl mx-auto">
-                            <header className="mb-10">
-                                <h2 className="text-3xl font-bold text-white tracking-tight">Channels Management</h2>
-                                <p className="text-slate-400 mt-2 text-sm max-w-2xl leading-relaxed">
-                                    Configure and monitor external communication vectors for OpenSpider. Channels act as the sensory inputs and outputs for your autonomous agents.
-                                </p>
-                            </header>
+                {
+                    activeTab === 'channels' && (
+                        <div className="flex-1 p-10 overflow-y-auto fade-in">
+                            <div className="max-w-6xl mx-auto">
+                                <header className="mb-10">
+                                    <h2 className="text-3xl font-bold text-white tracking-tight">Channels Management</h2>
+                                    <p className="text-slate-400 mt-2 text-sm max-w-2xl leading-relaxed">
+                                        Configure and monitor external communication vectors for OpenSpider. Channels act as the sensory inputs and outputs for your autonomous agents.
+                                    </p>
+                                </header>
 
-                            {/* Channels Grid */}
-                            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 pb-20">
-                                {mockChannels.map(channel => (
-                                    <ChannelCard key={channel.id} channel={channel} />
-                                ))}
+                                {configuredChannel ? (
+                                    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                                        <button
+                                            onClick={() => setConfiguredChannel(null)}
+                                            className="mb-8 px-4 py-2 bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 hover:text-white rounded-xl text-sm font-medium transition-colors flex items-center gap-2 w-fit border border-slate-700/50"
+                                        >
+                                            &larr; Back to Channels
+                                        </button>
+
+                                        {configuredChannel === 'wa' && (
+                                            <WhatsAppSecurity isRunning={mockChannels.find(c => c.id === 'wa')?.status === 'running'} />
+                                        )}
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 pb-20">
+                                        {mockChannels.map(channel => (
+                                            <ChannelCard
+                                                key={channel.id}
+                                                channel={channel}
+                                                onConfigure={() => setConfiguredChannel(channel.id)}
+                                            />
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         </div>
-                    </div>
-                )}
+                    )
+                }
 
                 {activeTab === 'overview' && <OverviewView />}
                 {activeTab === 'sessions' && <SessionsView provider={config.provider} />}
-                {activeTab === 'flow' && (
-                    <div className="flex-1 p-8 fade-in h-full flex flex-col">
-                        <AgentFlowGraph events={flowEvents} />
-                    </div>
-                )}
+                {
+                    activeTab === 'flow' && (
+                        <div className="flex-1 p-8 fade-in h-full flex flex-col">
+                            <AgentFlowGraph events={flowEvents} />
+                        </div>
+                    )
+                }
                 {activeTab === 'agents' && <AgentsView agents={agents} onRefresh={fetchAgents} provider={config.provider} skills={skills} />}
-                {activeTab === 'skills' && <SkillsView skills={skills} onRefresh={() => {
-                    return fetch('/api/skills')
-                        .then(r => r.json())
-                        .then(data => setSkills(data.skills))
-                        .catch(e => console.error("Could not refresh skills API", e));
-                }} isGenerating={isGenerating} setIsGenerating={setIsGenerating} />}
+                {
+                    activeTab === 'skills' && <SkillsView skills={skills} onRefresh={() => {
+                        return fetch('/api/skills')
+                            .then(r => r.json())
+                            .then(data => setSkills(data.skills))
+                            .catch(e => console.error("Could not refresh skills API", e));
+                    }} isGenerating={isGenerating} setIsGenerating={setIsGenerating} />
+                }
                 {activeTab === 'usage' && <UsageView />}
                 {activeTab === 'logs' && <LogsView logs={logs} />}
                 {activeTab === 'cron' && <CronView agents={agents} />}
             </main >
 
             {/* Toasts / Alerts Overlay */}
-            <div className="fixed top-6 right-6 z-50 flex flex-col gap-3 pointer-events-none fade-in">
-                {alerts.map(alert => (
-                    <div key={alert.id} className="bg-slate-900 border border-red-500/50 rounded-xl shadow-[0_0_30px_rgba(239,68,68,0.2)] p-4 flex items-start gap-4 w-96 max-w-full relative overflow-hidden pointer-events-auto">
-                        <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-red-500 to-rose-500"></div>
-                        <div className="p-2 bg-red-500/10 rounded-lg shrink-0 mt-0.5">
-                            <AlertTriangle className="w-5 h-5 text-red-500 animate-pulse" />
+            < div className="fixed top-6 right-6 z-50 flex flex-col gap-3 pointer-events-none fade-in" >
+                {
+                    alerts.map(alert => (
+                        <div key={alert.id} className="bg-slate-900 border border-red-500/50 rounded-xl shadow-[0_0_30px_rgba(239,68,68,0.2)] p-4 flex items-start gap-4 w-96 max-w-full relative overflow-hidden pointer-events-auto">
+                            <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-red-500 to-rose-500"></div>
+                            <div className="p-2 bg-red-500/10 rounded-lg shrink-0 mt-0.5">
+                                <AlertTriangle className="w-5 h-5 text-red-500 animate-pulse" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <h4 className="text-sm font-bold text-red-400 mb-1 tracking-tight">System Alert</h4>
+                                <p className="text-xs text-slate-300 leading-relaxed drop-shadow-sm">{alert.message}</p>
+                            </div>
+                            <button onClick={() => setAlerts(prev => prev.filter(a => a.id !== alert.id))} className="text-slate-500 hover:text-white transition-colors">
+                                <X className="w-4 h-4" />
+                            </button>
                         </div>
-                        <div className="flex-1 min-w-0">
-                            <h4 className="text-sm font-bold text-red-400 mb-1 tracking-tight">System Alert</h4>
-                            <p className="text-xs text-slate-300 leading-relaxed drop-shadow-sm">{alert.message}</p>
-                        </div>
-                        <button onClick={() => setAlerts(prev => prev.filter(a => a.id !== alert.id))} className="text-slate-500 hover:text-white transition-colors">
-                            <X className="w-4 h-4" />
-                        </button>
-                    </div>
-                ))}
-            </div>
+                    ))
+                }
+            </div >
 
         </div >
     );

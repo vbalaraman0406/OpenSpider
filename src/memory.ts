@@ -8,18 +8,6 @@ export function initWorkspace() {
     if (!fs.existsSync(WORKSPACE_DIR)) fs.mkdirSync(WORKSPACE_DIR, { recursive: true });
     if (!fs.existsSync(MEMORY_DIR)) fs.mkdirSync(MEMORY_DIR, { recursive: true });
 
-    // Initialize SOUL.md - Defines the Agent's identity and boundaries
-    const soulPath = path.join(WORKSPACE_DIR, 'SOUL.md');
-    if (!fs.existsSync(soulPath)) {
-        fs.writeFileSync(soulPath, `# OpenSpider Soul\n\nYou are OpenSpider, an autonomous agentic system.\nYour primary goal is to safely and intelligently orchestrate tasks on behalf of the user.\n\nBoundary Rules:\n- Do NOT execute destructive terminal commands without explicit user permission.\n- Do NOT delete files outside of the workspace directory.\n- Always be concise and professional.`);
-    }
-
-    // Initialize USER.md - Defines facts about the user
-    const userPath = path.join(WORKSPACE_DIR, 'USER.md');
-    if (!fs.existsSync(userPath)) {
-        fs.writeFileSync(userPath, `# User Context\n\nThis document contains persistent facts about the user for you to remember across sessions.\n`);
-    }
-
     // Initialize memory.md - Long term agent memory
     const memoryPath = path.join(WORKSPACE_DIR, 'memory.md');
     if (!fs.existsSync(memoryPath)) {
@@ -33,12 +21,6 @@ export function readMemoryContext(): string {
     let context = "--- Context Memory ---\n\n";
 
     try {
-        const soul = fs.readFileSync(path.join(WORKSPACE_DIR, 'SOUL.md'), 'utf-8');
-        context += `## SOUL.md (Your Identity & Rules)\n${soul}\n\n`;
-
-        const user = fs.readFileSync(path.join(WORKSPACE_DIR, 'USER.md'), 'utf-8');
-        context += `## USER.md (Facts about the User)\n${user}\n\n`;
-
         const ltm = fs.readFileSync(path.join(WORKSPACE_DIR, 'memory.md'), 'utf-8');
         context += `## memory.md (Long Term Key Information)\n${ltm}\n\n`;
 
@@ -61,14 +43,12 @@ export function readMemoryContext(): string {
     return context;
 }
 
-export function logMemory(role: 'User' | 'OpenSpider', message: string) {
+export function logMemory(sender: 'User' | 'Agent', message: string) {
     initWorkspace();
     const now = new Date();
     const todayStr = now.toISOString().split('T')[0];
-    const timestampStr = now.toISOString().split('T')[1];
-    const timestamp = timestampStr ? timestampStr.replace('Z', '') : now.toLocaleTimeString();
     const todayPath = path.join(MEMORY_DIR, `${todayStr}.md`);
 
-    const logEntry = `[${timestamp}] **${role}**: ${message}\n\n`;
+    const logEntry = `[${now.toLocaleTimeString()}] **${sender}**: ${message}\n\n`;
     fs.appendFileSync(todayPath, logEntry, 'utf-8');
 }

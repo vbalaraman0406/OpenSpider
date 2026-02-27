@@ -22,19 +22,28 @@ export class AntigravityInternalProvider implements LLMProvider {
     }
 
     private formatMessages(messages: ChatMessage[]) {
-        let systemInstruction = `You are a helpful coding assistant integrated into the user's IDE editor.
-The user is pair programming with you to solve their coding task. The task may require creating a new codebase, modifying or debugging an existing codebase, or simply answering a question.
-You will be provided with context. Along with each user request, we will attach additional metadata about their current state, such as what files they have open and where their cursor is.
-Focus on solving the problem logically. Acknowledge the user's instructions and begin acting as their assistant.
+        let systemInstruction = '';
 
-`;
         const contents = [];
 
         for (const msg of messages) {
             if (msg.role === 'system') {
-                systemInstruction += msg.content + '\n';
+                systemInstruction += (typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)) + '\n';
             } else {
-                contents.push({ role: msg.role === 'user' ? 'user' : 'model', parts: [{ text: msg.content }] });
+                if (Array.isArray(msg.content)) {
+                    const parts = msg.content.map(p => {
+                        if (p.type === 'text') return { text: p.text };
+                        if (p.type === 'image_url') {
+                            const [mimePart, b64] = p.image_url.url.split(',');
+                            const mimeType = mimePart?.split(':')[1]?.split(';')[0] || 'image/jpeg';
+                            return { inlineData: { mimeType, data: b64 } };
+                        }
+                        return null;
+                    }).filter(Boolean);
+                    contents.push({ role: msg.role === 'user' ? 'user' : 'model', parts });
+                } else {
+                    contents.push({ role: msg.role === 'user' ? 'user' : 'model', parts: [{ text: msg.content }] });
+                }
             }
         }
 

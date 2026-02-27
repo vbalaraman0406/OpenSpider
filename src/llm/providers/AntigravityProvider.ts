@@ -50,19 +50,28 @@ export class AntigravityProvider implements LLMProvider {
         // Standardize to Gemini's expected format if needed,
         // though the SDK handles basic role conversion well.
 
-        let systemInstruction = `<identity>
-You are Antigravity, a powerful agentic AI coding assistant designed by the Google Deepmind team working on Advanced Agentic Coding.
-You are pair programming with a USER to solve their coding task. The task may require creating a new codebase, modifying or debugging an existing codebase, or simply answering a question.
-The USER will send you requests, which you must always prioritize addressing. Along with each USER request, we will attach additional metadata about their current state, such as what files they have open and where their cursor is.
-This information may or may not be relevant to the coding task, it is up for you to decide.
-</identity>\n\n`;
+        let systemInstruction = '';
         const contents = [];
 
         for (const msg of messages) {
             if (msg.role === 'system') {
-                systemInstruction += msg.content + '\n';
+                systemInstruction += (typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)) + '\n';
             } else {
-                contents.push({ role: msg.role === 'user' ? 'user' : 'model', parts: [{ text: msg.content }] });
+                let parts: any[] = [];
+                if (Array.isArray(msg.content)) {
+                    parts = msg.content.map(p => {
+                        if (p.type === 'text') return { text: p.text };
+                        if (p.type === 'image_url') {
+                            const [mimePart, b64] = p.image_url.url.split(',');
+                            const mimeType = mimePart?.split(':')[1]?.split(';')[0] || 'image/jpeg';
+                            return { inlineData: { mimeType, data: b64 } };
+                        }
+                        return null;
+                    }).filter(Boolean);
+                } else {
+                    parts = [{ text: msg.content }];
+                }
+                contents.push({ role: msg.role === 'user' ? 'user' : 'model', parts });
             }
         }
 
