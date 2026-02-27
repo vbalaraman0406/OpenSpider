@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { Activity, Terminal, CheckCircle2, Server, Key, Bot, Send, MessageSquare, Radio, Smartphone, MessagesSquare, Users, Globe, Play, Square, Settings, RefreshCw, LayoutDashboard, ListTree, FolderGit2, Wrench, FileText, Search, Download, X, Trash, GitMerge, Timer, Plus, Clock } from 'lucide-react';
+import { Activity, Terminal, CheckCircle2, Server, Key, Bot, Send, MessageSquare, Radio, Smartphone, MessagesSquare, Users, Globe, Play, Square, Settings, RefreshCw, LayoutDashboard, ListTree, FolderGit2, Wrench, FileText, Search, Download, X, Trash, GitMerge, Timer, Plus, Clock, AlertTriangle } from 'lucide-react';
 import AgentFlowGraph, { AgentFlowEvent } from './components/AgentFlowGraph';
+import { UsageView } from './components/UsageView';
 
 interface ChannelConfig {
     id: string;
@@ -1122,13 +1123,14 @@ function CronView({ agents }: { agents: any[] }) {
 }
 
 export default function App() {
-    type TabName = 'overview' | 'channels' | 'sessions' | 'chat' | 'agents' | 'skills' | 'logs' | 'flow' | 'cron';
+    type TabName = 'overview' | 'channels' | 'sessions' | 'usage' | 'chat' | 'agents' | 'skills' | 'logs' | 'flow' | 'cron';
     const [activeTab, setActiveTab] = useState<TabName>('chat');
     const [logs, setLogs] = useState<LogMessage[]>([]);
     const [flowEvents, setFlowEvents] = useState<AgentFlowEvent[]>([]);
     const [config, setConfig] = useState({ provider: 'Loading...', status: 'connecting' });
     const [skills, setSkills] = useState<string[]>([]);
     const [agents, setAgents] = useState<any[]>([]);
+    const [alerts, setAlerts] = useState<{ id: number, message: string }[]>([]);
     const [chatInput, setChatInput] = useState('');
     const [isTyping, setIsTyping] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -1169,6 +1171,14 @@ export default function App() {
                 } else if (msg.type === 'agent_flow') {
                     if (msg.data.event === 'plan_generated') setFlowEvents([]); // Reset on new plan
                     setFlowEvents(prev => [...prev, msg.data]);
+                } else if (msg.type === 'alert') {
+                    const alertId = Date.now();
+                    setAlerts(prev => [...prev, { id: alertId, message: msg.data }]);
+
+                    // Auto-dismiss alert after 6 seconds
+                    setTimeout(() => {
+                        setAlerts(prev => prev.filter(a => a.id !== alertId));
+                    }, 6000);
                 }
             } catch (e) { }
         };
@@ -1260,6 +1270,13 @@ export default function App() {
                         >
                             <Timer className="w-4 h-4" />
                             Cron Jobs
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('usage')}
+                            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${activeTab === 'usage' ? 'bg-indigo-600/10 text-indigo-400 ring-1 ring-indigo-500/30 shadow-[0_4px_20px_-4px_rgba(99,102,241,0.2)]' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'}`}
+                        >
+                            <Activity className="w-4 h-4" />
+                            Usage
                         </button>
                     </div>
 
@@ -1476,9 +1493,30 @@ export default function App() {
                         .then(data => setSkills(data.skills))
                         .catch(e => console.error("Could not refresh skills API", e));
                 }} isGenerating={isGenerating} setIsGenerating={setIsGenerating} />}
+                {activeTab === 'usage' && <UsageView />}
                 {activeTab === 'logs' && <LogsView logs={logs} />}
                 {activeTab === 'cron' && <CronView agents={agents} />}
             </main >
+
+            {/* Toasts / Alerts Overlay */}
+            <div className="fixed top-6 right-6 z-50 flex flex-col gap-3 pointer-events-none fade-in">
+                {alerts.map(alert => (
+                    <div key={alert.id} className="bg-slate-900 border border-red-500/50 rounded-xl shadow-[0_0_30px_rgba(239,68,68,0.2)] p-4 flex items-start gap-4 w-96 max-w-full relative overflow-hidden pointer-events-auto">
+                        <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-red-500 to-rose-500"></div>
+                        <div className="p-2 bg-red-500/10 rounded-lg shrink-0 mt-0.5">
+                            <AlertTriangle className="w-5 h-5 text-red-500 animate-pulse" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <h4 className="text-sm font-bold text-red-400 mb-1 tracking-tight">System Alert</h4>
+                            <p className="text-xs text-slate-300 leading-relaxed drop-shadow-sm">{alert.message}</p>
+                        </div>
+                        <button onClick={() => setAlerts(prev => prev.filter(a => a.id !== alert.id))} className="text-slate-500 hover:text-white transition-colors">
+                            <X className="w-4 h-4" />
+                        </button>
+                    </div>
+                ))}
+            </div>
+
         </div >
     );
 }

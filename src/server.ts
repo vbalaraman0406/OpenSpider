@@ -9,6 +9,7 @@ import { getProvider } from './llm';
 import { ChatMessage } from './llm/BaseProvider';
 import { logMemory } from './memory';
 import { initScheduler, runJobForcefully } from './scheduler';
+import { logUsage, getUsageSummary } from './usage';
 
 export function startServer() {
     const app = express();
@@ -84,6 +85,30 @@ export function startServer() {
                     const parsed = JSON.parse(message);
                     if (parsed.type === 'usage' || parsed.type === 'agent_flow') {
                         isSpecialEvent = true;
+
+                        // Specifically intercept usage to durable log and check for alerts
+                        if (parsed.type === 'usage') {
+                            const alertStatus = logUsage({
+                                timestamp: new Date().toISOString(),
+                                model: parsed.model,
+                                usage: parsed.usage,
+                                sessionKey: parsed.sessionKey || 'main',
+                                agentId: parsed.agentId || 'gateway'
+                            });
+
+                            if (alertStatus.isAlert) {
+                                clients.forEach(client => {
+                                    if (client.readyState === WebSocket.OPEN) {
+                                        client.send(JSON.stringify({
+                                            type: 'alert',
+                                            data: alertStatus.message,
+                                            timestamp: new Date().toISOString()
+                                        }));
+                                    }
+                                });
+                            }
+                        }
+
                         clients.forEach(client => {
                             if (client.readyState === WebSocket.OPEN) {
                                 client.send(JSON.stringify({
@@ -114,6 +139,15 @@ export function startServer() {
     app.get('/api/config', (req, res) => {
         const provider = process.env.DEFAULT_PROVIDER || 'ollama';
         res.json({ provider, status: 'running' });
+    });
+
+    // API Route to fetch aggregated usage summary
+    app.get('/api/usage', (req, res) => {
+        try {
+            res.json(getUsageSummary());
+        } catch (e: any) {
+            res.status(500).json({ error: e.message });
+        }
     });
 
     // API Route to generate a new skill from natural language
