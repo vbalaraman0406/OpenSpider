@@ -53,3 +53,12 @@
 {"timestamp":"2026-02-27T17:49:58.655Z","model":"claude-opus-4-6-thinking","usage":{"promptTokens":1069,"completionTokens":136,"totalTokens":1205},"sessionKey":"main","agentId":"gateway"}
 {"timestamp":"2026-02-27T17:50:18.508Z","model":"claude-opus-4-6-thinking","usage":{"promptTokens":540,"completionTokens":987,"totalTokens":1527},"sessionKey":"main","agentId":"gateway"}
 {"timestamp":"2026-02-27T17:50:59.581Z","model":"claude-opus-4-6-thinking","usage":{"promptTokens":1069,"completionTokens":125,"totalTokens":1194},"sessionKey":"main","agentId":"gateway"}
+{"timestamp":"2026-02-27T17:51:24.651Z","model":"claude-opus-4-6-thinking","usage":{"promptTokens":529,"completionTokens":1807,"totalTokens":2336},"sessionKey":"main","agentId":"gateway"}
+{"timestamp":"2026-02-27T17:51:29.887Z","model":"claude-opus-4-6-thinking","usage":{"promptTokens":2365,"completionTokens":39,"totalTokens":2404},"sessionKey":"main","agentId":"gateway"}
+{"timestamp":"2026-02-27T17:51:44.148Z","model":"claude-opus-4-6-thinking","usage":{"promptTokens":2669,"completionTokens":369,"totalTokens":3038},"sessionKey":"main","agentId":"gateway"}
+{"timestamp":"2026-02-27T17:52:01.797Z","model":"claude-opus-4-6-thinking","usage":{"promptTokens":1069,"completionTokens":111,"totalTokens":1180},"sessionKey":"main","agentId":"gateway"}
+{"timestamp":"2026-02-27T17:52:11.043Z","model":"claude-opus-4-6-thinking","usage":{"promptTokens":514,"completionTokens":190,"totalTokens":704},"sessionKey":"main","agentId":"gateway"}
+{"timestamp":"2026-02-27T17:52:58.912Z","model":"claude-opus-4-6-thinking","usage":{"promptTokens":1069,"completionTokens":117,"totalTokens":1186},"sessionKey":"main","agentId":"gateway"}
+{"timestamp":"2026-02-27T17:53:24.113Z","model":"claude-opus-4-6-thinking","usage":{"promptTokens":521,"completionTokens":1564,"totalTokens":2085},"sessionKey":"main","agentId":"gateway"}
+{"timestamp":"2026-02-27T17:53:58.425Z","model":"claude-opus-4-6-thinking","usage":{"promptTokens":1069,"completionTokens":108,"totalTokens":1177},"sessionKey":"main","agentId":"gateway"}
+{"timestamp":"2026-02-27T17:54:12.240Z","model":"claude-opus-4-6-thinking","usage":{"promptTokens":512,"completionTokens":408,"totalTokens":920},"sessionKey":"main","agentId":"gateway"}
