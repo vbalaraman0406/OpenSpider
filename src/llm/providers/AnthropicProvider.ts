@@ -18,11 +18,24 @@ export class AnthropicProvider implements LLMProvider {
 
         for (const msg of messages) {
             if (msg.role === 'system') {
-                systemInstruction += msg.content + '\n';
+                systemInstruction += (typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)) + '\n';
             } else {
+                let formattedContent: any = msg.content;
+                if (Array.isArray(msg.content)) {
+                    formattedContent = msg.content.map(p => {
+                        if (p.type === 'text') return { type: 'text', text: p.text };
+                        if (p.type === 'image_url') {
+                            const [mimePart, b64] = p.image_url.url.split(',');
+                            const mimeType = (mimePart?.split(':')[1]?.split(';')[0] || 'image/jpeg') as any;
+                            return { type: 'image', source: { type: 'base64', media_type: mimeType, data: b64 } };
+                        }
+                        return p;
+                    });
+                }
+
                 formattedMessages.push({
                     role: msg.role === 'user' ? 'user' : 'assistant',
-                    content: msg.content
+                    content: formattedContent
                 });
             }
         }

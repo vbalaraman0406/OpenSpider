@@ -14,7 +14,17 @@ export class OllamaProvider implements LLMProvider {
         console.log(`[Agent] [Ollama] Generating response using ${this.model}...`);
         const response = await this.client.chat({
             model: this.model,
-            messages: messages.map(m => ({ role: m.role, content: m.content })),
+            messages: messages.map(m => {
+                if (typeof m.content === 'string') {
+                    return { role: m.role, content: m.content };
+                }
+                const textParts = m.content.filter(p => p.type === 'text').map(p => (p as any).text).join('\n');
+                const images = m.content.filter(p => p.type === 'image_url').map(p => (p as any).image_url.url.split(',')[1]);
+
+                const msg: any = { role: m.role, content: textParts };
+                if (images.length > 0) msg.images = images;
+                return msg;
+            }),
         });
 
         const text = response.message.content;
@@ -41,7 +51,17 @@ export class OllamaProvider implements LLMProvider {
         // Ollama supports structured outputs natively via the `format` parameter.
         const response = await this.client.chat({
             model: this.model,
-            messages: messages.map(m => ({ role: m.role, content: m.content })),
+            messages: messages.map(m => {
+                if (typeof m.content === 'string') {
+                    return { role: m.role, content: m.content };
+                }
+                const textParts = m.content.filter(p => p.type === 'text').map(p => (p as any).text).join('\n');
+                const images = m.content.filter(p => p.type === 'image_url').map(p => (p as any).image_url.url.split(',')[1]);
+
+                const msg: any = { role: m.role, content: textParts };
+                if (images.length > 0) msg.images = images;
+                return msg;
+            }),
             format: schema as any,
         });
 

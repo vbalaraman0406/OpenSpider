@@ -37,18 +37,13 @@ export function startServer() {
                     // Log user message to session memory
                     logMemory('User', parsed.text);
 
-                    // Send an immediate acknowledgement
-                    ws.send(JSON.stringify({
-                        type: 'chat_response',
-                        data: '🕷️ OpenSpider is processing your request...',
-                        timestamp: new Date().toISOString()
-                    }));
+
 
                     // Process request
                     const response = await manager.processUserRequest(parsed.text);
 
                     // Log agent response to session memory
-                    logMemory('OpenSpider', response);
+                    logMemory('Agent', response);
 
                     // Send final result
                     ws.send(JSON.stringify({
@@ -139,6 +134,56 @@ export function startServer() {
     app.get('/api/config', (req, res) => {
         const provider = process.env.DEFAULT_PROVIDER || 'ollama';
         res.json({ provider, status: 'running' });
+    });
+
+    // API Routes for WhatsApp
+    const { getParticipatingGroups } = require('./whatsapp');
+
+    app.get('/api/whatsapp/groups', async (req, res) => {
+        try {
+            const groups = await getParticipatingGroups();
+            res.json({ groups });
+        } catch (e: any) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    const whatsappConfigPath = path.join(process.cwd(), 'workspace', 'whatsapp_config.json');
+
+    app.get('/api/whatsapp/config', (req, res) => {
+        try {
+            if (!fs.existsSync(whatsappConfigPath)) {
+                return res.json({ dmPolicy: "allowlist", allowedDMs: [], groupPolicy: "disabled", allowedGroups: [], botMode: "mention" });
+            }
+            const config = JSON.parse(fs.readFileSync(whatsappConfigPath, 'utf-8'));
+            res.json(config);
+        } catch (e: any) {
+            res.status(500).json({ error: Object.keys(e).length ? JSON.stringify(e) : e.message });
+        }
+    });
+
+    app.post('/api/whatsapp/config', (req, res) => {
+        try {
+            const { dmPolicy, allowedDMs, groupPolicy, allowedGroups, botMode } = req.body;
+
+            // Validate incoming payload shapes simply
+            if (typeof dmPolicy !== 'string' || !Array.isArray(allowedDMs)) {
+                return res.status(400).json({ error: "Invalid schema for DM constraints." });
+            }
+
+            const newConfig = {
+                dmPolicy,
+                allowedDMs,
+                groupPolicy: groupPolicy || 'disabled',
+                allowedGroups: allowedGroups || [],
+                botMode: botMode || 'mention'
+            };
+
+            fs.writeFileSync(whatsappConfigPath, JSON.stringify(newConfig, null, 2), 'utf-8');
+            res.json({ success: true, config: newConfig });
+        } catch (e: any) {
+            res.status(500).json({ error: Object.keys(e).length ? JSON.stringify(e) : e.message });
+        }
     });
 
     // API Route to fetch aggregated usage summary
@@ -309,26 +354,41 @@ Return ONLY the raw Python code.`;
     });
 
     // Helper for agents DB
-    const agentsDbPath = path.join(process.cwd(), 'agents.json');
     const getAgents = () => {
-        if (!fs.existsSync(agentsDbPath)) {
-            const defaultAgents = [
-                {
-                    id: 'gateway',
-                    name: 'Gateway Architect',
-                    role: 'Handles default routing.',
-                    status: 'emerald',
-                    initial: 'G',
-                    color: 'fuchsia',
-                    model: 'gemini-2.5-flash-thinking-exp',
-                    prompt: 'You are the primary gateway agent for OpenSpider. Analyze all incoming requests across all channels and determine if you can answer them or if you need to dispatch a specialized worker agent.',
-                    skills: ['web_search', 'calculator', 'worker_dispatch']
-                }
-            ];
-            fs.writeFileSync(agentsDbPath, JSON.stringify(defaultAgents, null, 2));
-            return defaultAgents;
+        const { PersonaShell } = require('./agents/PersonaShell');
+        const agentsDir = path.join(process.cwd(), 'workspace', 'agents');
+        const agents: any[] = [];
+
+        if (!fs.existsSync(agentsDir)) {
+            fs.mkdirSync(agentsDir, { recursive: true });
         }
-        return JSON.parse(fs.readFileSync(agentsDbPath, 'utf-8'));
+
+        const agentFolders = fs.readdirSync(agentsDir)
+            .filter(f => fs.statSync(path.join(agentsDir, f)).isDirectory())
+            .sort();
+
+        for (const agentId of agentFolders) {
+            const shell = new PersonaShell(agentId);
+            const caps = shell.getCapabilities() || {};
+            agents.push({
+                id: agentId,
+                name: caps.name || agentId,
+                role: caps.role || 'Unspecified',
+                status: caps.status === 'stopped' ? 'red' : 'emerald',
+                initial: (caps.name || agentId).charAt(0).toUpperCase(),
+                color: caps.color || 'fuchsia',
+                model: caps.model || process.env.DEFAULT_PROVIDER || 'ollama',
+                prompt: shell.compileSystemPrompt(),
+                skills: caps.allowedTools || [],
+                pillars: {
+                    identity: shell.getIdentity(),
+                    soul: shell.getSoul(),
+                    userContext: shell.getUserContext(),
+                    capabilities: JSON.stringify(caps, null, 2)
+                }
+            });
+        }
+        return agents;
     };
 
     // API Route to fetch active agents
@@ -343,16 +403,46 @@ Return ONLY the raw Python code.`;
     // API Route to create a new agent
     app.post('/api/agents', (req, res) => {
         try {
-            const agent = req.body;
-            // Generate a simple ID
-            agent.id = agent.name.toLowerCase().replace(/[^a-z0-9]/g, '-') + '-' + Math.random().toString(36).substr(2, 5);
-            agent.status = 'slate';
-            agent.skills = agent.skills || [];
+            const { name, role, model, color, prompt, initial } = req.body;
+            const id = name.toLowerCase().replace(/[^a-z0-9]/g, '-') + '-' + Math.random().toString(36).substr(2, 5);
 
-            const agents = getAgents();
-            agents.push(agent);
-            fs.writeFileSync(agentsDbPath, JSON.stringify(agents, null, 2));
-            res.json({ success: true, agent });
+            const agentDir = path.join(process.cwd(), 'workspace', 'agents', id);
+            fs.mkdirSync(agentDir, { recursive: true });
+
+            fs.writeFileSync(path.join(agentDir, 'IDENTITY.md'), `# Identity\n\nYou are ${name}, a ${role}.\n\n${prompt}`);
+            fs.writeFileSync(path.join(agentDir, 'SOUL.md'), `# Soul\n\nYou are helpful and concise.`);
+            fs.writeFileSync(path.join(agentDir, 'USER.md'), `# User Context\n\nNo human context provided yet.`);
+
+            const caps = {
+                name: name,
+                role: role,
+                color: color || 'fuchsia',
+                model: model,
+                allowedTools: []
+            };
+            fs.writeFileSync(path.join(agentDir, 'CAPABILITIES.json'), JSON.stringify(caps, null, 2));
+
+            res.json({ success: true, agent: { id } });
+        } catch (e: any) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    // API Route to manually update agent pillars
+    app.put('/api/agents/:id', (req, res) => {
+        try {
+            const id = req.params.id;
+            const { identity, soul, userContext, capabilities } = req.body;
+            const agentDir = path.join(process.cwd(), 'workspace', 'agents', id);
+
+            if (!fs.existsSync(agentDir)) return res.status(404).json({ error: 'Agent not found' });
+
+            if (identity !== undefined) fs.writeFileSync(path.join(agentDir, 'IDENTITY.md'), identity);
+            if (soul !== undefined) fs.writeFileSync(path.join(agentDir, 'SOUL.md'), soul);
+            if (userContext !== undefined) fs.writeFileSync(path.join(agentDir, 'USER.md'), userContext);
+            if (capabilities !== undefined) fs.writeFileSync(path.join(agentDir, 'CAPABILITIES.json'), capabilities);
+
+            res.json({ success: true });
         } catch (e: any) {
             res.status(500).json({ error: e.message });
         }
@@ -365,16 +455,22 @@ Return ONLY the raw Python code.`;
             const { skill } = req.body;
             if (!skill) return res.status(400).json({ error: 'Skill is required' });
 
-            const agents = getAgents();
-            const agent = agents.find((a: any) => a.id === agentId);
-            if (!agent) return res.status(404).json({ error: 'Agent not found' });
+            const agentDir = path.join(process.cwd(), 'workspace', 'agents', agentId);
+            if (!fs.existsSync(agentDir)) return res.status(404).json({ error: 'Agent not found' });
 
-            if (!agent.skills) agent.skills = [];
-            if (!agent.skills.includes(skill)) {
-                agent.skills.push(skill);
-                fs.writeFileSync(agentsDbPath, JSON.stringify(agents, null, 2));
+            const capsPath = path.join(agentDir, 'CAPABILITIES.json');
+            let caps: any = {};
+            if (fs.existsSync(capsPath)) {
+                caps = JSON.parse(fs.readFileSync(capsPath, 'utf-8'));
             }
-            res.json({ success: true, agent });
+
+            if (!caps.allowedTools) caps.allowedTools = [];
+            if (!caps.allowedTools.includes(skill)) {
+                caps.allowedTools.push(skill);
+                fs.writeFileSync(capsPath, JSON.stringify(caps, null, 2));
+            }
+
+            res.json({ success: true });
         } catch (e: any) {
             res.status(500).json({ error: e.message });
         }

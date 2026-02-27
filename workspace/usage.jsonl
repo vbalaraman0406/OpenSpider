@@ -62,3 +62,17 @@
 {"timestamp":"2026-02-27T17:53:24.113Z","model":"claude-opus-4-6-thinking","usage":{"promptTokens":521,"completionTokens":1564,"totalTokens":2085},"sessionKey":"main","agentId":"gateway"}
 {"timestamp":"2026-02-27T17:53:58.425Z","model":"claude-opus-4-6-thinking","usage":{"promptTokens":1069,"completionTokens":108,"totalTokens":1177},"sessionKey":"main","agentId":"gateway"}
 {"timestamp":"2026-02-27T17:54:12.240Z","model":"claude-opus-4-6-thinking","usage":{"promptTokens":512,"completionTokens":408,"totalTokens":920},"sessionKey":"main","agentId":"gateway"}
+{"timestamp":"2026-02-27T18:05:16.738Z","model":"claude-opus-4-6-thinking","usage":{"promptTokens":1072,"completionTokens":109,"totalTokens":1181},"sessionKey":"main","agentId":"gateway"}
+{"timestamp":"2026-02-27T18:05:29.282Z","model":"claude-opus-4-6-thinking","usage":{"promptTokens":516,"completionTokens":187,"totalTokens":703},"sessionKey":"main","agentId":"gateway"}
+{"timestamp":"2026-02-27T20:05:27.190Z","model":"claude-opus-4-6-thinking","usage":{"promptTokens":1827,"completionTokens":72,"totalTokens":1899},"sessionKey":"main","agentId":"gateway"}
+{"timestamp":"2026-02-27T20:05:32.593Z","model":"claude-opus-4-6-thinking","usage":{"promptTokens":1025,"completionTokens":90,"totalTokens":1115},"sessionKey":"main","agentId":"gateway"}
+{"timestamp":"2026-02-27T20:09:46.964Z","model":"claude-opus-4-6-thinking","usage":{"promptTokens":1895,"completionTokens":88,"totalTokens":1983},"sessionKey":"main","agentId":"gateway"}
+{"timestamp":"2026-02-27T20:09:56.870Z","model":"claude-opus-4-6-thinking","usage":{"promptTokens":535,"completionTokens":126,"totalTokens":661},"sessionKey":"main","agentId":"gateway"}
+{"timestamp":"2026-02-27T20:19:15.725Z","model":"claude-opus-4-6-thinking","usage":{"promptTokens":1886,"completionTokens":98,"totalTokens":1984},"sessionKey":"main","agentId":"gateway"}
+{"timestamp":"2026-02-27T20:19:24.839Z","model":"claude-opus-4-6-thinking","usage":{"promptTokens":557,"completionTokens":109,"totalTokens":666},"sessionKey":"main","agentId":"gateway"}
+{"timestamp":"2026-02-27T20:26:12.943Z","model":"claude-opus-4-6-thinking","usage":{"promptTokens":1771,"completionTokens":94,"totalTokens":1865},"sessionKey":"main","agentId":"gateway"}
+{"timestamp":"2026-02-27T20:26:21.044Z","model":"claude-opus-4-6-thinking","usage":{"promptTokens":438,"completionTokens":70,"totalTokens":508},"sessionKey":"main","agentId":"gateway"}
+{"timestamp":"2026-02-27T20:31:20.233Z","model":"claude-opus-4-6-thinking","usage":{"promptTokens":1648,"completionTokens":84,"totalTokens":1732},"sessionKey":"main","agentId":"gateway"}
+{"timestamp":"2026-02-27T20:31:27.164Z","model":"claude-opus-4-6-thinking","usage":{"promptTokens":427,"completionTokens":118,"totalTokens":545},"sessionKey":"main","agentId":"gateway"}
+{"timestamp":"2026-02-27T20:36:55.476Z","model":"claude-opus-4-6-thinking","usage":{"promptTokens":1720,"completionTokens":36,"totalTokens":1756},"sessionKey":"main","agentId":"gateway"}
+{"timestamp":"2026-02-27T20:37:15.335Z","model":"claude-opus-4-6-thinking","usage":{"promptTokens":1770,"completionTokens":90,"totalTokens":1860},"sessionKey":"main","agentId":"gateway"}

@@ -2,6 +2,7 @@ import { LLMProvider, ChatMessage } from '../llm/BaseProvider';
 import { DynamicExecutor } from '../tools/DynamicExecutor';
 import fs from 'node:fs';
 import path from 'node:path';
+import { PersonaShell } from './PersonaShell';
 
 export class WorkerAgent {
     private llm: LLMProvider;
@@ -39,7 +40,12 @@ export class WorkerAgent {
             }
         } catch (e) { console.error("Could not load worker profile."); }
 
-        const systemPrompt = `You are a specialized OpenSpider Worker Agent. 
+        const persona = new PersonaShell(this.role);
+        const compiledPersonaPrompt = persona.compileSystemPrompt();
+
+        const systemPrompt = `${compiledPersonaPrompt}
+
+[TASK INSTRUCTIONS]
 Your Role: ${this.role}
 You have the ability to write scripts (Python, Node.js, Bash) and execute them to solve the user's task.
 If you need a package, write a script that installs it or ask to run npm install.
@@ -50,6 +56,7 @@ Available tools you can request in your JSON response:
 - run_command: { "command": "echo hello" }
 - write_script: { "filename": "test.py", "content": "print('hello')" }
 - execute_script: { "filename": "test.py", "args": "" }
+- message_agent: { "target": "Role Name", "message": "Text to send" }
 - final_answer: { "result": "The final output" }
 
 Context from previous steps:
@@ -73,22 +80,26 @@ ${context.join('\n')}
             }
 
             const response = await this.llm.generateStructuredOutputs<{
-                action: 'run_command' | 'write_script' | 'execute_script' | 'final_answer';
+                action: 'run_command' | 'write_script' | 'execute_script' | 'message_agent' | 'final_answer';
                 command?: string;
                 filename?: string;
                 content?: string;
                 args?: string;
+                target?: string;
+                message?: string;
                 result?: string;
                 thought: string;
             }>(messages, {
                 type: "object",
                 properties: {
-                    action: { type: "string", enum: ["run_command", "write_script", "execute_script", "final_answer"] },
+                    action: { type: "string", enum: ["run_command", "write_script", "execute_script", "message_agent", "final_answer"] },
                     thought: { type: "string" },
                     command: { type: "string" },
                     filename: { type: "string" },
                     content: { type: "string" },
                     args: { type: "string" },
+                    target: { type: "string" },
+                    message: { type: "string" },
                     result: { type: "string" }
                 },
                 required: ["action", "thought"]
@@ -117,8 +128,24 @@ ${context.join('\n')}
                     console.log(`[Worker - ${this.role}] Executing script: ${response.filename}`);
                     const res = await this.executor.executeScript(response.filename, response.args);
                     toolOutput = `stdout: ${res.stdout}\nstderr: ${res.stderr}\nerror: ${res.error || 'none'}`;
+                } else if (response.action === 'message_agent' && response.target && response.message) {
+                    console.log(`[Worker - ${this.role}] Delegating sub-task via message_agent to peer ${response.target}...`);
+                    console.log(JSON.stringify({
+                        type: 'agent_flow',
+                        event: 'task_start',
+                        taskId: `sub-${Date.now()}`,
+                        role: response.target,
+                        instruction: response.message
+                    }));
+
+                    // Recursively instantiate a Worker passing along the contextual dialogue
+                    const subWorker = new WorkerAgent(this.llm, response.target);
+                    const subWorkerContext = [...context, `Message from peer ${this.role}: ${response.message}`];
+                    const subResult = await subWorker.executeTask(response.message, subWorkerContext);
+
+                    toolOutput = `Response from ${response.target}:\n${subResult}`;
                 } else {
-                    toolOutput = `Invalid action or missing parameters. You requested '${response.action}'. Check the schema. run_command needs 'command', write_script needs 'filename' and 'content', execute_script needs 'filename'. You provided: ${JSON.stringify(response)}`;
+                    toolOutput = `Invalid action or missing parameters. You requested '${response.action}'. Check the schema. run_command needs 'command', write_script needs 'filename' and 'content', execute_script needs 'filename', message_agent needs 'target' and 'message'. You provided: ${JSON.stringify(response)}`;
                 }
             } catch (e: any) {
                 toolOutput = `Tool execution failed: ${e.message}`;

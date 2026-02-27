@@ -4,6 +4,7 @@ import { WorkerAgent } from './WorkerAgent';
 import fs from 'node:fs';
 import path from 'node:path';
 import { readMemoryContext } from '../memory';
+import { PersonaShell } from './PersonaShell';
 
 export class ManagerAgent {
     private llm: LLMProvider;
@@ -12,20 +13,24 @@ export class ManagerAgent {
         this.llm = getProvider();
     }
 
-    async processUserRequest(prompt: string): Promise<string> {
+    async processUserRequest(prompt: string, imagesBase64: string[] = []): Promise<string> {
         console.log(`\n[Manager] Analyzing request: "${prompt}"`);
         const agentPersona = process.env.AGENT_PERSONA || "You are a helpful multi-agent assistant designed to write excellent code and utilize terminals.";
 
         // Build dynamic agent catalog
-        let agentCapabilities = "";
+        let agentCapabilities = "\\nAvailable Worker Agents:\\n";
         try {
-            const agentsPath = path.join(process.cwd(), 'agents.json');
-            if (fs.existsSync(agentsPath)) {
-                const agents = JSON.parse(fs.readFileSync(agentsPath, 'utf-8'));
-                agentCapabilities = "\\nAvailable Worker Agents:\\n";
-                for (const agent of agents) {
-                    if (agent.id === 'gateway') continue;
-                    agentCapabilities += `- Role: ${agent.role}\\n  Assigned Skills: ${agent.skills?.join(', ') || 'none'}\\n`;
+            const agentsDir = path.join(process.cwd(), 'workspace', 'agents');
+            if (fs.existsSync(agentsDir)) {
+                const agentFolders = fs.readdirSync(agentsDir).filter(f => fs.statSync(path.join(agentsDir, f)).isDirectory());
+                for (const agentId of agentFolders) {
+                    if (agentId === 'manager') continue;
+                    const shell = new PersonaShell(agentId);
+                    const caps = shell.getCapabilities();
+                    if (caps.status === 'stopped') continue; // Prevent delegating to offline agents
+                    // Grab just the first line of their identity as a summary
+                    const identityStr = shell.getIdentity().split('\\n').filter(l => l.trim().length > 0)[0] || "Specialized Sub-Agent";
+                    agentCapabilities += `- Agent: ${caps.name || agentId} (Role: ${caps.role || agentId})\\n  Summary: ${identityStr}\\n  Tools: ${caps.allowedTools?.join(', ') || 'none'}\\n`;
                 }
             }
 
@@ -42,12 +47,16 @@ export class ManagerAgent {
             }
         } catch (e) { console.error("Could not load agent catalog."); }
 
-        const systemPrompt = `${agentPersona}\n\n${readMemoryContext()}\n\nYou are the Manager Agent for OpenSpider. Your job is to break down the user's complex request into a sequential plan of sub-tasks.
+        const persona = new PersonaShell('manager');
+        const compiledPersonaPrompt = persona.compileSystemPrompt();
+
+        const systemPrompt = `${compiledPersonaPrompt}\n\n[MEMORY CONTEXT]\n${readMemoryContext()}\n\n[TASK INSTRUCTIONS]
+Your job is to break down the user's complex request into a sequential plan of sub-tasks.
 Each sub-task should be assigned to a specialized Worker Agent role. Utilize the existing agents below or define generic roles if none match exactly.
 ${agentCapabilities}
 
-
-Analyze the prompt and return a JSON array of steps.
+If the user is simply saying hello, asking a basic question about you, or making small talk, DO NOT generate a plan. Instead, use the 'direct_response' field to reply strictly in character as your Persona without delegating any subtasks.
+Analyze the prompt and return a JSON object.
 A step can either be:
 1. "task": A standard sequential step executed by a single agent.
 2. "parallel": A block of independent subtasks that can be executed concurrently by multiple agents. Use "parallel" whenever possible for independent data gathering or I/O fetching.
@@ -79,9 +88,17 @@ Example output:
 }
 `;
 
+        let userContent: string | any[] = Object.keys(prompt).length ? JSON.stringify(prompt) : prompt;
+        if (imagesBase64.length > 0) {
+            userContent = [{ type: 'text', text: typeof userContent === 'string' ? userContent : JSON.stringify(userContent) }];
+            for (const img of imagesBase64) {
+                userContent.push({ type: 'image_url', image_url: { url: img } });
+            }
+        }
+
         const messages: ChatMessage[] = [
             { role: 'system', content: systemPrompt },
-            { role: 'user', content: Object.keys(prompt).length ? JSON.stringify(prompt) : prompt }
+            { role: 'user', content: userContent }
         ];
 
         try {
@@ -93,7 +110,8 @@ Example output:
             }
 
             const planResult = await this.llm.generateStructuredOutputs<{
-                plan: Array<{
+                direct_response?: string;
+                plan?: Array<{
                     type: "task" | "parallel";
                     name?: string;
                     role?: string;
@@ -103,6 +121,7 @@ Example output:
             }>(messages, {
                 type: "object",
                 properties: {
+                    direct_response: { type: "string", description: "Use this ONLY for direct conversational replies without creating a plan." },
                     plan: {
                         type: "array",
                         items: {
@@ -127,9 +146,17 @@ Example output:
                             required: ["type"]
                         }
                     }
-                },
-                required: ["plan"]
+                }
             });
+
+            if (planResult.direct_response) {
+                console.log(`[Manager] Direct Response generated.`);
+                return planResult.direct_response;
+            }
+
+            if (!planResult.plan) {
+                return "Error: No plan or direct response generated.";
+            }
 
             console.log(`[Manager] Generated Plan with ${planResult.plan.length} top-level steps.`);
 
