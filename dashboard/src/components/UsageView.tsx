@@ -1,12 +1,13 @@
-import { useState, useEffect } from 'react';
-import { Activity, RefreshCw, AlertTriangle, Cpu, TrendingUp, Coins } from 'lucide-react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { useState, useEffect, useMemo } from 'react';
+import { Activity, RefreshCw, AlertTriangle, Cpu, TrendingUp, Coins, Search, Sparkles, Filter } from 'lucide-react';
+import { BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 export interface UsageSummary {
     totalTokens: number;
     totalCostEst: number;
     models: Record<string, number>;
-    dailyTokens: { date: string, tokens: number }[];
+    agents: Record<string, number>;
+    dailyTokens: { date: string, totalTokens: number, promptTokens: number, completionTokens: number }[];
     recentSessions: any[];
 }
 
@@ -14,10 +15,14 @@ export function UsageView() {
     const [summary, setSummary] = useState<UsageSummary | null>(null);
     const [loading, setLoading] = useState(true);
 
+    // V2 state
+    const [daysScope, setDaysScope] = useState<number>(30);
+    const [sessionSearch, setSessionSearch] = useState('');
+
     const fetchUsage = async () => {
         setLoading(true);
         try {
-            const res = await fetch('/api/usage');
+            const res = await fetch(`/api/usage?days=${daysScope}`);
             const data = await res.json();
             setSummary(data);
         } catch (e) {
@@ -29,7 +34,7 @@ export function UsageView() {
 
     useEffect(() => {
         fetchUsage();
-    }, []);
+    }, [daysScope]);
 
     if (loading && !summary) {
         return (
@@ -51,12 +56,35 @@ export function UsageView() {
     // Prepare chart data format
     const chartData = summary.dailyTokens.map(d => ({
         name: d.date,
-        Tokens: d.tokens
+        Tokens: d.totalTokens, // Still available for tooltip
+        Input: d.promptTokens,
+        Output: d.completionTokens
     }));
 
-    // Calculate dynamic insight
+    // Calculate dynamic insights
     const sortedModels = Object.entries(summary.models).sort(([, a], [, b]) => b - a);
     const topModelEntry = sortedModels.length > 0 ? sortedModels[0] : null;
+
+    const sortedAgents = Object.entries(summary.agents || {}).sort(([, a], [, b]) => b - a);
+    const topAgentEntry = sortedAgents.length > 0 ? sortedAgents[0] : null;
+
+    // Filter recent sessions dynamically
+    const filteredSessions = useMemo(() => {
+        if (!sessionSearch.trim()) return summary.recentSessions;
+        const lowerSearch = sessionSearch.toLowerCase();
+        return summary.recentSessions.filter(s =>
+            (s.agentId || '').toLowerCase().includes(lowerSearch) ||
+            (s.model || '').toLowerCase().includes(lowerSearch)
+        );
+    }, [sessionSearch, summary.recentSessions]);
+
+    // Date Options
+    const ranges = [
+        { label: 'Today', value: 1 },
+        { label: '7d', value: 7 },
+        { label: '30d', value: 30 },
+        { label: 'All', value: 0 }
+    ];
 
     return (
         <div className="flex-1 p-10 overflow-y-auto fade-in">
@@ -65,15 +93,29 @@ export function UsageView() {
                     <div>
                         <h2 className="text-3xl font-bold text-white tracking-tight">Usage Monitoring</h2>
                         <p className="text-slate-400 mt-2 text-sm max-w-2xl leading-relaxed">
-                            See where tokens go, identify usage spikes, and track relative cost estimations.
+                            See where tokens go, identify usage spikes, and exact tracking of API expenses.
                         </p>
                     </div>
-                    <button onClick={fetchUsage} className="p-2.5 rounded-lg bg-slate-800/50 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors border border-transparent hover:border-slate-600 shadow-md">
-                        <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-                    </button>
+
+                    <div className="flex items-center gap-4">
+                        <div className="flex items-center bg-slate-900/50 rounded-lg p-1 border border-slate-800">
+                            {ranges.map(r => (
+                                <button
+                                    key={r.value}
+                                    onClick={() => setDaysScope(r.value)}
+                                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${daysScope === r.value ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
+                                >
+                                    {r.label}
+                                </button>
+                            ))}
+                        </div>
+                        <button onClick={fetchUsage} className="p-2.5 rounded-lg bg-slate-800/50 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors border border-transparent hover:border-slate-600 shadow-md">
+                            <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+                        </button>
+                    </div>
                 </header>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
                     <div className="bg-slate-900/40 backdrop-blur-xl rounded-2xl border border-white/5 p-6 shadow-xl relative overflow-hidden group hover:bg-slate-900/60 transition-all">
                         <div className="absolute top-0 inset-x-0 h-px w-full bg-gradient-to-r from-transparent via-cyan-500/30 to-transparent"></div>
                         <div className="flex items-center gap-3 mb-2 opacity-80">
@@ -109,27 +151,22 @@ export function UsageView() {
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-10">
                     <div className="lg:col-span-2 bg-slate-900/40 backdrop-blur-xl rounded-2xl border border-white/5 p-6 shadow-xl relative overflow-hidden">
                         <div className="absolute top-0 inset-x-0 h-px w-full bg-gradient-to-r from-transparent via-blue-500/30 to-transparent"></div>
-                        <h3 className="text-lg font-semibold text-white mb-6 tracking-tight">Daily Volume</h3>
+                        <h3 className="text-lg font-semibold text-white mb-6 tracking-tight">Daily Input / Output Volume</h3>
 
                         <div className="h-64 mt-4 -ml-4">
                             {chartData.length > 0 ? (
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
-                                        <defs>
-                                            <linearGradient id="colorTokens" x1="0" y1="0" x2="0" y2="1">
-                                                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.6} />
-                                                <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                                            </linearGradient>
-                                        </defs>
+                                    <BarChart data={chartData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
                                         <XAxis dataKey="name" stroke="#475569" fontSize={11} tickMargin={10} axisLine={false} tickLine={false} />
                                         <YAxis stroke="#475569" fontSize={11} tickMargin={10} axisLine={false} tickLine={false} tickFormatter={(val) => `${val / 1000}k`} />
                                         <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
                                         <Tooltip
+                                            cursor={{ fill: '#1e293b', opacity: 0.4 }}
                                             contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '0.5rem', fontSize: '13px', color: '#f8fafc' }}
-                                            itemStyle={{ color: '#60a5fa' }}
                                         />
-                                        <Area type="monotone" dataKey="Tokens" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorTokens)" />
-                                    </AreaChart>
+                                        <Bar dataKey="Input" stackId="a" fill="#3b82f6" radius={[0, 0, 0, 0]} />
+                                        <Bar dataKey="Output" stackId="a" fill="#d946ef" radius={[4, 4, 0, 0]} />
+                                    </BarChart>
                                 </ResponsiveContainer>
                             ) : (
                                 <div className="w-full h-full flex items-center justify-center text-slate-500 text-sm font-medium">
@@ -169,8 +206,21 @@ export function UsageView() {
 
                 <div className="bg-slate-900/40 backdrop-blur-xl rounded-2xl border border-white/5 pb-2 shadow-xl overflow-hidden">
                     <div className="p-5 border-b border-slate-800/60 bg-slate-900/80 flex items-center justify-between">
-                        <h3 className="text-lg font-semibold text-white tracking-tight">Recent Sessions</h3>
-                        <span className="text-xs text-slate-400 font-medium">Last 50 recorded invocations</span>
+                        <div>
+                            <h3 className="text-lg font-semibold text-white tracking-tight">Recent Sessions Data</h3>
+                            <span className="text-xs text-slate-400 font-medium">Tracking the most latest events from {daysScope === 0 ? 'All Time' : `${daysScope} Days`}</span>
+                        </div>
+
+                        <div className="relative">
+                            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                            <input
+                                type="text"
+                                placeholder="Search by agent or model..."
+                                value={sessionSearch}
+                                onChange={(e) => setSessionSearch(e.target.value)}
+                                className="w-64 bg-slate-950/80 border border-slate-800 rounded-lg pl-9 pr-4 py-2 text-sm text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
+                            />
+                        </div>
                     </div>
 
                     <div className="overflow-x-auto">
@@ -186,7 +236,7 @@ export function UsageView() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-800/60 text-slate-300">
-                                {summary.recentSessions.length > 0 ? summary.recentSessions.map((session, i) => {
+                                {filteredSessions.length > 0 ? filteredSessions.map((session, i) => {
                                     const isSpike = session.usage?.totalTokens > 5000;
                                     return (
                                         <tr key={session.timestamp + i} className={`transition-colors ${isSpike ? 'bg-red-500/5 hover:bg-red-500/10' : 'hover:bg-slate-800/30'}`}>

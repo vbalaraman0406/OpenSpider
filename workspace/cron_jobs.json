@@ -4,7 +4,7 @@
     "description": "Integration Test Job",
     "prompt": "This is a test background run.",
     "intervalHours": 0.0001,
-    "lastRunTimestamp": 1772212270240,
+    "lastRunTimestamp": 1772214652402,
     "agentId": "gateway"
   },
   {
