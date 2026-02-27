@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { Activity, Terminal, CheckCircle2, Server, Key, Bot, Send, MessageSquare, Radio, Smartphone, MessagesSquare, Users, Globe, Play, Square, Settings, RefreshCw, LayoutDashboard, ListTree, FolderGit2, Wrench, FileText, Search, Download, X } from 'lucide-react';
+import { Activity, Terminal, CheckCircle2, Server, Key, Bot, Send, MessageSquare, Radio, Smartphone, MessagesSquare, Users, Globe, Play, Square, Settings, RefreshCw, LayoutDashboard, ListTree, FolderGit2, Wrench, FileText, Search, Download, X, Trash, GitMerge, Timer, Plus, Clock } from 'lucide-react';
+import AgentFlowGraph, { AgentFlowEvent } from './components/AgentFlowGraph';
 
 interface ChannelConfig {
     id: string;
@@ -186,7 +187,7 @@ function OverviewView() {
     );
 }
 
-function SessionsView() {
+function SessionsView({ provider }: { provider: string }) {
     return (
         <div className="flex-1 p-10 overflow-y-auto fade-in">
             <div className="max-w-6xl mx-auto">
@@ -241,7 +242,7 @@ function SessionsView() {
                             <tbody className="divide-y divide-slate-800/60 text-slate-300">
                                 <tr className="hover:bg-slate-800/30 transition-colors">
                                     <td className="px-6 py-4 font-mono text-amber-400">main</td>
-                                    <td className="px-6 py-4"><span className="bg-slate-800 px-2 py-1 rounded text-xs">gemini-2.5-flash</span></td>
+                                    <td className="px-6 py-4"><span className="bg-slate-800 px-2 py-1 rounded text-xs">{provider}</span></td>
                                     <td className="px-6 py-4">Gateway</td>
                                     <td className="px-6 py-4 text-slate-400 text-xs">2 mins ago</td>
                                     <td className="px-6 py-4 text-right font-mono">1,024</td>
@@ -254,7 +255,7 @@ function SessionsView() {
                                 </tr>
                                 <tr className="hover:bg-slate-800/30 transition-colors">
                                     <td className="px-6 py-4 font-mono text-amber-400">worker-a</td>
-                                    <td className="px-6 py-4"><span className="bg-slate-800 px-2 py-1 rounded text-xs">claude-3-opus</span></td>
+                                    <td className="px-6 py-4"><span className="bg-slate-800 px-2 py-1 rounded text-xs">{provider}</span></td>
                                     <td className="px-6 py-4">Worker</td>
                                     <td className="px-6 py-4 text-slate-400 text-xs">15 mins ago</td>
                                     <td className="px-6 py-4 text-right font-mono">8,401</td>
@@ -274,34 +275,21 @@ function SessionsView() {
     );
 }
 
-function AgentsView() {
-    const mockAgents = [
-        {
-            id: 'gateway',
-            name: 'Gateway Architect',
-            role: 'Handles default routing.',
-            status: 'emerald',
-            initial: 'G',
-            color: 'fuchsia',
-            model: 'gemini-2.5-flash-thinking-exp',
-            prompt: 'You are the primary gateway agent for OpenSpider. Analyze all incoming requests across all channels and determine if you can answer them or if you need to dispatch a specialized worker agent.',
-            skills: ['web_search', 'calculator', 'worker_dispatch']
-        },
-        {
-            id: 'analyst',
-            name: 'Data Analyst',
-            role: 'Python chart generator.',
-            status: 'slate',
-            initial: 'D',
-            color: 'blue',
-            model: 'claude-3-5-sonnet-20241022',
-            prompt: 'You are a data analysis agent. You write python to analyze CSVs and plot charts.',
-            skills: ['run_python', 'read_file']
-        }
-    ];
+function AgentsView({ agents, onRefresh, provider, skills }: { agents: any[], onRefresh: () => void, provider: string, skills: string[] }) {
 
     const [selectedAgentId, setSelectedAgentId] = useState('gateway');
-    const selectedAgent = mockAgents.find(a => a.id === selectedAgentId) || mockAgents[0];
+    const selectedAgent = agents.find(a => a.id === selectedAgentId) || agents[0] || {
+        id: 'error', name: 'No Agents Found', role: '', status: 'red', initial: '?', color: 'red', model: '', prompt: '', skills: []
+    };
+
+    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+    const [createAgentName, setCreateAgentName] = useState('');
+    const [createAgentRole, setCreateAgentRole] = useState('');
+    const [createAgentColor, setCreateAgentColor] = useState('emerald');
+    const [createAgentPrompt, setCreateAgentPrompt] = useState('');
+
+    const [isAddSkillModalOpen, setIsAddSkillModalOpen] = useState(false);
+    const [skillToAdd, setSkillToAdd] = useState(skills.length > 0 ? skills[0] : '');
 
     return (
         <div className="flex-1 p-10 overflow-y-auto fade-in h-full flex flex-col">
@@ -312,7 +300,7 @@ function AgentsView() {
                         Manage agent profiles, specific system prompts, and tool access permissions.
                     </p>
                 </div>
-                <button className="px-4 py-2 bg-fuchsia-600 hover:bg-fuchsia-500 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-fuchsia-900/20" onClick={() => alert('Create Agent dialog would open here')}>
+                <button className="px-4 py-2 bg-fuchsia-600 hover:bg-fuchsia-500 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-fuchsia-900/20" onClick={() => setIsCreateModalOpen(true)}>
                     Create Agent
                 </button>
             </header>
@@ -325,7 +313,7 @@ function AgentsView() {
                     </div>
 
                     <div className="flex-1 overflow-y-auto space-y-2 pr-2">
-                        {mockAgents.map(agent => (
+                        {agents.map(agent => (
                             <button
                                 key={agent.id}
                                 onClick={() => setSelectedAgentId(agent.id)}
@@ -373,12 +361,12 @@ function AgentsView() {
                         <div>
                             <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-3">Capabilities (Skills context)</label>
                             <div className="flex flex-wrap gap-2">
-                                {selectedAgent.skills.map(skill => (
+                                {selectedAgent.skills.map((skill: string) => (
                                     <span key={skill} className="px-3 py-1.5 bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 rounded-lg text-xs font-semibold">
                                         {skill}
                                     </span>
                                 ))}
-                                <button className="px-3 py-1.5 border border-dashed border-slate-700 text-slate-500 rounded-lg text-xs font-semibold hover:border-slate-500 hover:text-slate-300 transition-colors" onClick={() => alert('Add skill dialog would open here')}>
+                                <button className="px-3 py-1.5 border border-dashed border-slate-700 text-slate-500 rounded-lg text-xs font-semibold hover:border-slate-500 hover:text-slate-300 transition-colors" onClick={() => setIsAddSkillModalOpen(true)}>
                                     + Add Skill
                                 </button>
                             </div>
@@ -391,12 +379,248 @@ function AgentsView() {
                     </div>
                 </div>
             </div>
+
+            {/* Create Agent Modal Overlay */}
+            {isCreateModalOpen && (
+                <div className="absolute inset-0 z-50 flex items-center justify-center p-10 fade-in">
+                    <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md" onClick={() => setIsCreateModalOpen(false)} />
+                    <div className="bg-slate-900/90 border border-fuchsia-500/30 rounded-2xl shadow-[0_0_50px_rgba(217,70,239,0.1)] w-full max-w-2xl relative z-10 overflow-hidden flex flex-col max-h-[85vh]">
+                        <div className="absolute top-0 inset-x-0 h-1 w-full bg-gradient-to-r from-fuchsia-500 to-purple-500"></div>
+                        <header className="px-6 py-5 border-b border-slate-800/60 flex items-center justify-between shrink-0">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 rounded-lg bg-fuchsia-500/20 text-fuchsia-400">
+                                    <Users className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-bold text-white tracking-tight">Create Agent</h3>
+                                    <p className="text-xs text-slate-400">Configure a new AI worker profile</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setIsCreateModalOpen(false)} className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </header>
+
+                        <div className="p-6 overflow-y-auto flex flex-col gap-6">
+                            <div className="grid grid-cols-2 gap-6">
+                                <div>
+                                    <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Agent Name</label>
+                                    <input type="text" value={createAgentName} onChange={e => setCreateAgentName(e.target.value)} placeholder="e.g. Code Reviewer" className="w-full bg-slate-950/50 border border-slate-800 rounded-lg px-4 py-2.5 text-sm text-slate-300 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/50" />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Role Summary</label>
+                                    <input type="text" value={createAgentRole} onChange={e => setCreateAgentRole(e.target.value)} placeholder="e.g. Analyzes PRs for bugs" className="w-full bg-slate-950/50 border border-slate-800 rounded-lg px-4 py-2.5 text-sm text-slate-300 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/50" />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-6">
+                                <div>
+                                    <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Primary Model</label>
+                                    <div className="w-full bg-slate-950/30 border border-slate-800/50 rounded-lg px-4 py-2.5 text-sm text-slate-500 flex items-center gap-2 cursor-not-allowed">
+                                        <Bot className="w-4 h-4 text-slate-500" />
+                                        System Default ({provider})
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Theme Color</label>
+                                    <select value={createAgentColor} onChange={e => setCreateAgentColor(e.target.value)} className="w-full bg-slate-950/50 border border-slate-800 rounded-lg px-4 py-2.5 text-sm text-slate-300 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/50 appearance-none">
+                                        <option value="emerald">Emerald</option>
+                                        <option value="blue">Blue</option>
+                                        <option value="fuchsia">Fuchsia</option>
+                                        <option value="amber">Amber</option>
+                                        <option value="rose">Rose</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="flex-1 flex flex-col min-h-[150px]">
+                                <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">System Prompt</label>
+                                <textarea
+                                    value={createAgentPrompt} onChange={e => setCreateAgentPrompt(e.target.value)}
+                                    placeholder="You are a helpful coding assistant..."
+                                    className="w-full flex-1 bg-slate-950/80 border border-slate-800 rounded-lg px-4 py-3 text-sm font-mono text-fuchsia-300 focus:outline-none focus:border-fuchsia-500/50 resize-none leading-relaxed"
+                                />
+                            </div>
+                        </div>
+
+                        <footer className="px-6 py-4 bg-slate-950/50 border-t border-slate-800/60 flex justify-end gap-3 shrink-0">
+                            <button onClick={() => setIsCreateModalOpen(false)} className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white transition-colors">Cancel</button>
+                            <button onClick={async () => {
+                                try {
+                                    const res = await fetch('/api/agents', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                            name: createAgentName,
+                                            role: createAgentRole,
+                                            model: provider,
+                                            color: createAgentColor,
+                                            prompt: createAgentPrompt,
+                                            initial: createAgentName.charAt(0).toUpperCase()
+                                        })
+                                    });
+                                    if (res.ok) {
+                                        const data = await res.json();
+                                        setIsCreateModalOpen(false);
+                                        setCreateAgentName('');
+                                        setCreateAgentRole('');
+                                        setCreateAgentPrompt('');
+                                        setSelectedAgentId(data.agent.id);
+                                        onRefresh();
+                                    } else {
+                                        alert('Failed to save agent');
+                                    }
+                                } catch (e: any) { alert(e.message); }
+                            }} className="px-5 py-2 bg-fuchsia-600 hover:bg-fuchsia-500 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-fuchsia-900/20">Save Agent</button>
+                        </footer>
+                    </div>
+                </div>
+            )}
+
+            {/* Add Skill Modal Overlay */}
+            {isAddSkillModalOpen && (
+                <div className="absolute inset-0 z-50 flex items-center justify-center p-10 fade-in">
+                    <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md" onClick={() => setIsAddSkillModalOpen(false)} />
+                    <div className="bg-slate-900/90 border border-cyan-500/30 rounded-2xl shadow-[0_0_50px_rgba(6,182,212,0.1)] w-full max-w-md relative z-10 overflow-hidden flex flex-col">
+                        <header className="px-6 py-4 border-b border-slate-800/60 flex items-center justify-between">
+                            <h3 className="text-lg font-bold text-white tracking-tight">Assign Tool</h3>
+                            <button onClick={() => setIsAddSkillModalOpen(false)} className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"><X className="w-5 h-5" /></button>
+                        </header>
+
+                        <div className="p-6">
+                            <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Skill Name</label>
+                            {skills.length === 0 ? (
+                                <div className="w-full bg-slate-950/50 border border-slate-800 rounded-lg px-4 py-2.5 text-sm font-mono text-slate-500">
+                                    No dynamic skills available to assign.
+                                </div>
+                            ) : (
+                                <select
+                                    value={skillToAdd}
+                                    onChange={e => setSkillToAdd(e.target.value)}
+                                    className="w-full bg-slate-950/50 border border-slate-800 rounded-lg px-4 py-2.5 text-sm font-mono text-slate-300 focus:outline-none focus:ring-1 focus:ring-cyan-500/50 appearance-none"
+                                >
+                                    {skills.map(skill => (
+                                        <option key={skill} value={skill}>{skill}</option>
+                                    ))}
+                                </select>
+                            )}
+                        </div>
+
+                        <footer className="px-6 py-4 bg-slate-950/50 border-t border-slate-800/60 flex justify-end gap-3">
+                            <button onClick={() => setIsAddSkillModalOpen(false)} className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white transition-colors">Cancel</button>
+                            <button onClick={async () => {
+                                if (!skillToAdd) return;
+                                try {
+                                    const res = await fetch(`/api/agents/${selectedAgent.id}/skills`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ skill: skillToAdd })
+                                    });
+                                    if (res.ok) {
+                                        setIsAddSkillModalOpen(false);
+                                        setSkillToAdd('');
+                                        onRefresh();
+                                    } else {
+                                        const err = await res.json();
+                                        alert(`Failed to assign skill: ${err.error}`);
+                                    }
+                                } catch (e: any) { alert(e.message); }
+                            }} className="px-5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-sm font-medium transition-colors">Assign</button>
+                        </footer>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
 
-function SkillsView() {
+interface SkillsViewProps {
+    skills: string[];
+    onRefresh: () => Promise<void> | void;
+    isGenerating: boolean;
+    setIsGenerating: (generating: boolean) => void;
+}
+
+function SkillsView({ skills, onRefresh, isGenerating, setIsGenerating }: SkillsViewProps) {
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+    const [skillName, setSkillName] = useState('');
+    const [skillDesc, setSkillDesc] = useState('');
+    const [skillInstruct, setSkillInstruct] = useState('');
+    const [skillToDelete, setSkillToDelete] = useState<string | null>(null);
+
+    const [detailsModalSkill, setDetailsModalSkill] = useState<{ name: string, content: string } | null>(null);
+    const [isFetchingDetails, setIsFetchingDetails] = useState(false);
+
+    const handleViewDetails = async (name: string) => {
+        setIsFetchingDetails(true);
+        try {
+            if (name === 'web_search') {
+                setDetailsModalSkill({ name, content: "# Built-in System Skill\n\nThis skill is natively provided by the OpenSpider runtime and proxy-forwards search queries to an external provider." });
+                return;
+            }
+
+            const res = await fetch(`/api/skills/${name}`);
+            const data = await res.json();
+            if (data.content) {
+                setDetailsModalSkill({ name, content: data.content });
+            } else {
+                alert(`Error: ${data.error || 'Failed to fetch'}`);
+            }
+        } catch (e: any) {
+            alert(`Error: ${e.message}`);
+        } finally {
+            setIsFetchingDetails(false);
+        }
+    };
+
+    const handleSaveSkill = async () => {
+        if (!skillName || !skillInstruct) return alert('Name and instructions are required');
+
+        // Optimistic UI update: Close modal immediately, don't trap the user
+        setIsAddModalOpen(false);
+        setSkillName('');
+        setSkillDesc('');
+        setSkillInstruct('');
+        setIsGenerating(true);
+
+        try {
+            const res = await fetch('/api/skills/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: skillName, description: skillDesc, instructions: skillInstruct })
+            });
+            const data = await res.json();
+            if (!data.success) {
+                alert(`Error: ${data.error}`);
+            }
+        } catch (e: any) {
+            alert(`Error: ${e.message}`);
+        } finally {
+            await onRefresh(); // Explicitly await refresh so UI re-renders BEFORE dropping banner
+            setIsGenerating(false);
+        }
+    };
+
+    const handleDeleteSkill = (e: React.MouseEvent, name: string) => {
+        e.stopPropagation();
+        setSkillToDelete(name);
+    };
+
+    const confirmDeleteSkill = async () => {
+        if (!skillToDelete) return;
+        try {
+            const res = await fetch(`/api/skills/${skillToDelete}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (data.success) {
+                setSkillToDelete(null);
+                onRefresh();
+            } else {
+                alert(`Error deleting skill: ${data.error}`);
+            }
+        } catch (e: any) {
+            alert(`Error: ${e.message}`);
+        }
+    };
 
     return (
         <div className="flex-1 p-10 overflow-y-auto fade-in relative">
@@ -419,7 +643,46 @@ function SkillsView() {
                     </div>
                 </header>
 
+                {/* Show a global loading indicator if background generation is happening */}
+                {isGenerating && (
+                    <div className="mb-6 bg-cyan-900/30 border border-cyan-800/50 rounded-xl p-4 flex items-center gap-4 animate-pulse">
+                        <div className="w-8 h-8 rounded-full bg-cyan-500/20 flex items-center justify-center">
+                            <Bot className="w-4 h-4 text-cyan-400 animate-bounce" />
+                        </div>
+                        <div>
+                            <h4 className="text-sm font-medium text-cyan-200">Generating Skill Script...</h4>
+                            <p className="text-xs text-cyan-400/70">The LLM is writing complex Python execution code. This can take up to 30 seconds.</p>
+                        </div>
+                    </div>
+                )}
+
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 flex-1 min-h-0 overflow-y-auto pb-10">
+                    {skills.map(skillName => (
+                        <div key={skillName} className="bg-slate-900/40 backdrop-blur-xl rounded-2xl border border-white/5 p-6 shadow-xl relative overflow-hidden group hover:bg-slate-900/60 transition-all">
+                            <div className="absolute top-0 inset-x-0 h-px w-full bg-gradient-to-r from-transparent via-cyan-500/30 to-transparent"></div>
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="p-2.5 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                                    <Terminal className="w-5 h-5" />
+                                </div>
+                                <h3 className="text-lg font-semibold text-white tracking-tight">{skillName}</h3>
+                            </div>
+                            <p className="text-sm text-slate-400 mb-6 line-clamp-2">Dynamically loaded system tool.</p>
+
+                            <div className="flex items-center justify-between mt-auto">
+                                <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold bg-slate-950/50 px-2.5 py-1 rounded border border-slate-800/60">Local File</span>
+                                <div className="flex items-center gap-3">
+                                    <button className="text-xs font-semibold text-rose-400 hover:text-rose-300 transition-colors" onClick={(e) => handleDeleteSkill(e, skillName)}>
+                                        Delete
+                                    </button>
+                                    <button className="text-xs font-semibold text-slate-400 hover:text-cyan-400 transition-colors" onClick={() => handleViewDetails(skillName)}>
+                                        {isFetchingDetails ? '...' : 'Details'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+
+                    {/* Add built-in core skills as well */}
                     <div className="bg-slate-900/40 backdrop-blur-xl rounded-2xl border border-white/5 p-6 shadow-xl relative overflow-hidden group hover:bg-slate-900/60 transition-all">
                         <div className="absolute top-0 inset-x-0 h-px w-full bg-gradient-to-r from-transparent via-cyan-500/30 to-transparent"></div>
                         <div className="flex items-center gap-3 mb-4">
@@ -432,27 +695,54 @@ function SkillsView() {
 
                         <div className="flex items-center justify-between mt-auto">
                             <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold bg-slate-950/50 px-2.5 py-1 rounded border border-slate-800/60 text-emerald-400">System Required</span>
-                            <button className="text-xs font-semibold text-slate-400 hover:text-cyan-400 transition-colors" onClick={() => alert('Skill details panel would open here')}>Details</button>
-                        </div>
-                    </div>
-
-                    <div className="bg-slate-900/40 backdrop-blur-xl rounded-2xl border border-white/5 p-6 shadow-xl relative overflow-hidden group hover:bg-slate-900/60 transition-all">
-                        <div className="absolute top-0 inset-x-0 h-px w-full bg-gradient-to-r from-transparent via-cyan-500/30 to-transparent"></div>
-                        <div className="flex items-center gap-3 mb-4">
-                            <div className="p-2.5 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-                                <Terminal className="w-5 h-5" />
-                            </div>
-                            <h3 className="text-lg font-semibold text-white tracking-tight">run_python</h3>
-                        </div>
-                        <p className="text-sm text-slate-400 mb-6 line-clamp-2">Executes python code in an isolated sandbox environment.</p>
-
-                        <div className="flex items-center justify-between mt-auto">
-                            <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold bg-slate-950/50 px-2.5 py-1 rounded border border-slate-800/60">Managed</span>
-                            <button className="text-xs font-semibold text-slate-400 hover:text-cyan-400 transition-colors" onClick={() => alert('Skill details panel would open here')}>Details</button>
+                            <button className="text-xs font-semibold text-slate-400 hover:text-cyan-400 transition-colors" onClick={() => handleViewDetails('web_search')}>Details</button>
                         </div>
                     </div>
                 </div>
             </div>
+
+            {/* Skill Details Modal Overlay */}
+            {detailsModalSkill && (
+                <div className="absolute inset-0 z-50 flex items-center justify-center p-10 fade-in">
+                    <div
+                        className="absolute inset-0 bg-slate-950/80 backdrop-blur-md"
+                        onClick={() => setDetailsModalSkill(null)}
+                    />
+                    <div className="bg-slate-900/90 border border-cyan-500/30 rounded-2xl shadow-[0_0_50px_rgba(6,182,212,0.1)] w-full max-w-4xl relative z-10 overflow-hidden flex flex-col max-h-[85vh]">
+                        <div className="absolute top-0 inset-x-0 h-1 w-full bg-gradient-to-r from-cyan-500 to-blue-500"></div>
+                        <header className="px-6 py-5 border-b border-slate-800/60 flex items-center justify-between shrink-0">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 rounded-lg bg-cyan-500/20 text-cyan-400">
+                                    <Terminal className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-bold text-white tracking-tight">{detailsModalSkill.name}</h3>
+                                    <p className="text-xs text-slate-400">Local Tool Execution Script</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setDetailsModalSkill(null)}
+                                className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </header>
+                        <div className="p-6 overflow-y-auto flex-1 bg-[#0d1117]">
+                            <pre className="font-mono text-xs text-slate-300 leading-relaxed overflow-x-auto">
+                                <code>{detailsModalSkill.content}</code>
+                            </pre>
+                        </div>
+                        <footer className="px-6 py-4 bg-slate-950/50 border-t border-slate-800/60 flex justify-end shrink-0">
+                            <button
+                                onClick={() => setDetailsModalSkill(null)}
+                                className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm font-medium transition-colors"
+                            >
+                                Close
+                            </button>
+                        </footer>
+                    </div>
+                </div>
+            )}
 
             {/* Glassmorphic Modal Overlay */}
             {isAddModalOpen && (
@@ -489,22 +779,23 @@ function SkillsView() {
                         <div className="p-6 overflow-y-auto flex flex-col gap-6">
                             <div>
                                 <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Skill Name</label>
-                                <input type="text" placeholder="e.g. format_date" className="w-full bg-slate-950/50 border border-slate-800 rounded-lg px-4 py-2.5 text-sm font-mono text-slate-300 focus:outline-none focus:ring-1 focus:ring-cyan-500/50" />
+                                <input type="text" value={skillName} onChange={e => setSkillName(e.target.value)} placeholder="e.g. format_date" className="w-full bg-slate-950/50 border border-slate-800 rounded-lg px-4 py-2.5 text-sm font-mono text-slate-300 focus:outline-none focus:ring-1 focus:ring-cyan-500/50" />
                             </div>
 
                             <div>
                                 <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Description</label>
-                                <input type="text" placeholder="Explains what this tool does to the LLM" className="w-full bg-slate-950/50 border border-slate-800 rounded-lg px-4 py-2.5 text-sm text-slate-300 focus:outline-none focus:ring-1 focus:ring-cyan-500/50" />
+                                <input type="text" value={skillDesc} onChange={e => setSkillDesc(e.target.value)} placeholder="Explains what this tool does to the LLM" className="w-full bg-slate-950/50 border border-slate-800 rounded-lg px-4 py-2.5 text-sm text-slate-300 focus:outline-none focus:ring-1 focus:ring-cyan-500/50" />
                             </div>
 
                             <div className="flex-1 flex flex-col min-h-[200px]">
                                 <div className="flex items-center justify-between mb-2">
-                                    <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold">Execution Code</label>
-                                    <span className="text-[10px] font-mono text-slate-500 bg-slate-800 px-2 py-0.5 rounded">Python 3.10</span>
+                                    <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold">Natural Language Instructions</label>
+                                    <span className="text-[10px] font-mono text-slate-500 bg-slate-800 px-2 py-0.5 rounded">AI Assisted</span>
                                 </div>
                                 <textarea
+                                    value={skillInstruct} onChange={e => setSkillInstruct(e.target.value)}
+                                    placeholder="Describe exactly what this skill should do in plain English..."
                                     className="w-full flex-1 bg-slate-950/80 border border-slate-800 rounded-lg px-4 py-3 text-sm font-mono text-cyan-300 focus:outline-none focus:border-cyan-500/50 resize-none leading-relaxed"
-                                    defaultValue={"def execute(args):\n    # Context: worker execution sandbox\n    return {\"status\": \"success\"}\n"}
                                 />
                             </div>
                         </div>
@@ -516,8 +807,40 @@ function SkillsView() {
                             >
                                 Cancel
                             </button>
-                            <button className="px-5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-cyan-900/20">
-                                Save Skill
+                            <button onClick={handleSaveSkill} disabled={isGenerating} className={`px-5 py-2 hover:bg-cyan-500 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-cyan-900/20 ${isGenerating ? 'bg-cyan-800 cursor-not-allowed' : 'bg-cyan-600'}`}>
+                                {isGenerating ? 'Generating...' : 'Save Skill'}
+                            </button>
+                        </footer>
+                    </div>
+                </div>
+            )}
+
+            {/* Delete Confirmation Modal */}
+            {skillToDelete && (
+                <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 fade-in" onClick={() => setSkillToDelete(null)}>
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col scale-in" onClick={e => e.stopPropagation()}>
+                        <header className="px-6 py-4 border-b border-slate-800/60 flex items-center gap-3 bg-red-950/20">
+                            <div className="p-2 rounded-lg bg-red-500/10 text-red-500 border border-red-500/20">
+                                <Trash className="w-5 h-5" />
+                            </div>
+                            <h3 className="text-lg font-bold text-white">Delete Skill</h3>
+                        </header>
+                        <div className="p-6">
+                            <p className="text-slate-300 leading-relaxed">Are you sure you want to permanently delete the custom tool <span className="text-white font-semibold">"{skillToDelete}"</span>?</p>
+                            <p className="text-sm text-slate-500 mt-3 bg-black/20 p-3 rounded-lg border border-white/5">This action cannot be undone and will remove both the execution script and its capabilities metadata.</p>
+                        </div>
+                        <footer className="px-6 py-4 bg-slate-900 border-t border-slate-800 flex justify-end gap-3">
+                            <button
+                                onClick={() => setSkillToDelete(null)}
+                                className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors border border-slate-700"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={confirmDeleteSkill}
+                                className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-red-900/20"
+                            >
+                                Delete {skillToDelete}
                             </button>
                         </footer>
                     </div>
@@ -585,12 +908,227 @@ function LogsView({ logs }: { logs: LogMessage[] }) {
     );
 }
 
+function CronView({ agents }: { agents: any[] }) {
+    const [jobs, setJobs] = useState<any[]>([]);
+    const [showModal, setShowModal] = useState(false);
+    const [formData, setFormData] = useState({ description: '', prompt: '', intervalHours: '24', agentId: 'gateway', status: 'enabled' });
+
+    useEffect(() => {
+        fetchJobs();
+    }, []);
+
+    const fetchJobs = async () => {
+        try {
+            const res = await fetch('/api/cron');
+            const data = await res.json();
+            setJobs(data);
+        } catch (e) {
+            console.error("Failed to fetch cron jobs", e);
+        }
+    };
+
+    const handleDelete = async (id: string) => {
+        try {
+            await fetch(`/api/cron/${id}`, { method: 'DELETE' });
+            fetchJobs();
+        } catch (e) { }
+    };
+
+    const toggleStatus = async (job: any) => {
+        try {
+            const newStatus = job.status === 'enabled' ? 'disabled' : 'enabled';
+            await fetch(`/api/cron/${job.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: newStatus })
+            });
+            fetchJobs();
+        } catch (e) { }
+    };
+
+    const handleRunForcefully = async (id: string) => {
+        try {
+            await fetch(`/api/cron/${id}/run`, { method: 'POST' });
+            // We just optimistically refetch to update the last run time
+            setTimeout(fetchJobs, 1000);
+        } catch (e) { }
+    };
+
+    const handleCreate = async (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            await fetch('/api/cron', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(formData)
+            });
+            setShowModal(false);
+            setFormData({ description: '', prompt: '', intervalHours: '24', agentId: 'gateway', status: 'enabled' });
+            fetchJobs();
+        } catch (e) { }
+    };
+
+    const formatTimeDelta = (ms: number) => {
+        if (ms < 0) return 'n/a';
+        const hours = Math.floor(ms / (1000 * 60 * 60));
+        const days = Math.floor(hours / 24);
+        if (days > 0) return `${days}d`;
+        if (hours > 0) return `${hours}h`;
+        const mins = Math.floor(ms / (1000 * 60));
+        return `${mins}m`;
+    };
+
+    return (
+        <div className="flex-1 p-10 overflow-y-auto fade-in">
+            <div className="max-w-5xl mx-auto">
+                <header className="mb-10 flex justify-between items-center">
+                    <div>
+                        <h2 className="text-3xl font-bold text-white tracking-tight flex items-center gap-3">
+                            <Clock className="w-8 h-8 text-rose-500" />
+                            Autonomous Cron Jobs
+                        </h2>
+                        <p className="text-slate-400 mt-2 text-sm max-w-2xl leading-relaxed">
+                            Deploy tasks that wake up OpenSpider agents at scheduled intervals. Keep your system running 24/7.
+                        </p>
+                    </div>
+                    <button
+                        onClick={() => setShowModal(true)}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-sm font-semibold transition-all shadow-[0_0_20px_rgba(225,29,72,0.3)] hover:shadow-[0_0_30px_rgba(225,29,72,0.5)] border border-rose-500/50"
+                    >
+                        <Plus className="w-4 h-4" />
+                        Deploy Job
+                    </button>
+                </header>
+
+                <div className="space-y-4">
+                    {jobs.length === 0 ? (
+                        <div className="bg-slate-900/40 backdrop-blur-xl rounded-2xl border border-white/5 p-10 text-center text-slate-500 shadow-xl">
+                            No autonomous jobs currently running.
+                        </div>
+                    ) : jobs.map((job: any) => {
+                        const isEnabled = job.status !== 'disabled';
+                        const neverRun = job.lastRunTimestamp === 0;
+
+                        const intervalMs = job.intervalHours * 60 * 60 * 1000;
+                        const timeSinceLast = Date.now() - job.lastRunTimestamp;
+                        const timeUntilNext = intervalMs - timeSinceLast;
+
+                        return (
+                            <div key={job.id} className="bg-slate-900/60 backdrop-blur-xl rounded-2xl border border-white/5 p-6 flex flex-col gap-4 shadow-xl hover:bg-slate-900/80 transition-all">
+
+                                {/* Header Details */}
+                                <div className="flex justify-between items-start">
+                                    <div>
+                                        <h3 className="text-xl font-bold text-white tracking-tight mb-1">{job.description}</h3>
+                                        <div className="text-xs text-slate-500 font-mono flex gap-2">
+                                            <span>Cron Every {job.intervalHours} Hours</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Execution Metrics (Right Aligned) */}
+                                    <div className="text-right text-xs space-y-2">
+                                        <div className="flex justify-between gap-6 items-center">
+                                            <span className="text-slate-500 font-bold tracking-widest uppercase">Status</span>
+                                            {isEnabled ?
+                                                <span className="bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-500/20 font-mono">ok</span> :
+                                                <span className="bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full border border-slate-700 font-mono">n/a</span>
+                                            }
+                                        </div>
+                                        <div className="flex justify-between gap-6 items-center">
+                                            <span className="text-slate-500 font-bold tracking-widest uppercase">Next</span>
+                                            <span className="text-slate-300 font-mono">{isEnabled ? `in ${formatTimeDelta(timeUntilNext)}` : 'n/a'}</span>
+                                        </div>
+                                        <div className="flex justify-between gap-6 items-center">
+                                            <span className="text-slate-500 font-bold tracking-widest uppercase">Last</span>
+                                            <span className="text-slate-400 font-mono">{neverRun ? 'never' : `${formatTimeDelta(timeSinceLast)} ago`}</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Prompt Block */}
+                                <div className="mt-2 text-sm text-slate-400 leading-relaxed max-w-3xl">
+                                    <span className="text-[10px] uppercase font-bold text-slate-500 tracking-widest block mb-1">Prompt</span>
+                                    {job.prompt}
+                                </div>
+
+                                {/* Action Bar */}
+                                <div className="mt-4 flex justify-between items-center pt-4 border-t border-slate-800/60">
+                                    <div className="flex gap-2">
+                                        <span className={`px-3 py-1 text-[11px] uppercase tracking-widest font-bold rounded-full border ${isEnabled ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-slate-800 text-slate-500 border-slate-700'
+                                            }`}>
+                                            {isEnabled ? 'enabled' : 'disabled'}
+                                        </span>
+                                        <span className="px-3 py-1 bg-slate-800/50 text-slate-400 text-[11px] uppercase tracking-widest font-bold rounded-full border border-slate-700/50">
+                                            {job.agentId}
+                                        </span>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <button className="px-4 py-1.5 text-xs font-semibold text-slate-300 hover:text-white bg-slate-800/50 hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors">Clone</button>
+                                        <button onClick={() => toggleStatus(job)} className="px-4 py-1.5 text-xs font-semibold text-slate-300 hover:text-white bg-slate-800/50 hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors">{isEnabled ? 'Disable' : 'Enable'}</button>
+                                        <button onClick={() => handleRunForcefully(job.id)} className="px-4 py-1.5 text-xs font-semibold text-slate-300 hover:text-white bg-slate-800/50 hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors">Run</button>
+                                        <button onClick={() => handleDelete(job.id)} className="px-4 py-1.5 text-xs font-semibold text-red-400 hover:text-white hover:bg-red-500/80 bg-red-500/10 rounded-lg border border-red-500/20 transition-colors">Remove</button>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+
+            {/* Create Job Modal */}
+            {showModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm fade-in">
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 w-full max-w-xl shadow-2xl relative overflow-hidden">
+                        <div className="absolute top-0 inset-x-0 h-px w-full bg-gradient-to-r from-transparent via-rose-500/50 to-transparent"></div>
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                                <Clock className="w-5 h-5 text-rose-500" />
+                                Deploy Autonomous Job
+                            </h3>
+                            <button onClick={() => setShowModal(false)} className="text-slate-500 hover:text-white transition-colors">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <form onSubmit={handleCreate} className="space-y-4">
+                            <div>
+                                <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Internal Description</label>
+                                <input required type="text" value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} placeholder="e.g. Daily Hackernews Digest" className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm text-slate-200 focus:ring-1 focus:ring-rose-500 focus:border-rose-500 outline-none" />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Assigned Agent</label>
+                                <select value={formData.agentId} onChange={e => setFormData({ ...formData, agentId: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm text-slate-200 focus:ring-1 focus:ring-rose-500 focus:border-rose-500 outline-none">
+                                    <option value="gateway">Gateway Architect (Default Routing)</option>
+                                    {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Interval (Hours)</label>
+                                <input required type="number" min="1" max="8760" value={formData.intervalHours} onChange={e => setFormData({ ...formData, intervalHours: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm text-slate-200 focus:ring-1 focus:ring-rose-500 focus:border-rose-500 outline-none" />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Task Prompt</label>
+                                <textarea required rows={4} value={formData.prompt} onChange={e => setFormData({ ...formData, prompt: e.target.value })} placeholder="Agent instructions..." className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm text-slate-200 focus:ring-1 focus:ring-rose-500 focus:border-rose-500 outline-none resize-none" />
+                            </div>
+                            <div className="pt-4 flex justify-end gap-3">
+                                <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 border border-slate-700 text-slate-300 rounded-lg text-sm hover:bg-slate-800 transition-colors">Cancel</button>
+                                <button type="submit" className="px-5 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-sm font-semibold transition-colors">Deploy Job</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
 export default function App() {
-    type TabName = 'overview' | 'channels' | 'sessions' | 'chat' | 'agents' | 'skills' | 'logs';
+    type TabName = 'overview' | 'channels' | 'sessions' | 'chat' | 'agents' | 'skills' | 'logs' | 'flow' | 'cron';
     const [activeTab, setActiveTab] = useState<TabName>('chat');
     const [logs, setLogs] = useState<LogMessage[]>([]);
+    const [flowEvents, setFlowEvents] = useState<AgentFlowEvent[]>([]);
     const [config, setConfig] = useState({ provider: 'Loading...', status: 'connecting' });
     const [skills, setSkills] = useState<string[]>([]);
+    const [agents, setAgents] = useState<any[]>([]);
     const [chatInput, setChatInput] = useState('');
     const [isTyping, setIsTyping] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -607,6 +1145,8 @@ export default function App() {
             .then(r => r.json())
             .then(data => setSkills(data.skills))
             .catch(e => console.error("Could not fetch skills API", e));
+
+        fetchAgents();
 
         // Connect WebSocket for live logs
         const host = window.location.port === '5173' ? 'localhost:4000' : window.location.host;
@@ -626,6 +1166,9 @@ export default function App() {
                 } else if (msg.type === 'usage') {
                     const u = msg.data.usage;
                     setLogs(prev => [...prev.slice(-499), { type: 'usage', data: `[API Token Usage] Model: ${msg.data.model} | In: ${u.promptTokens} | Out: ${u.completionTokens} | Total: ${u.totalTokens}`, timestamp: msg.timestamp }]);
+                } else if (msg.type === 'agent_flow') {
+                    if (msg.data.event === 'plan_generated') setFlowEvents([]); // Reset on new plan
+                    setFlowEvents(prev => [...prev, msg.data]);
                 }
             } catch (e) { }
         };
@@ -637,6 +1180,16 @@ export default function App() {
 
         return () => ws.close();
     }, []);
+
+    const fetchAgents = async () => {
+        try {
+            const res = await fetch('/api/agents');
+            const data = await res.json();
+            setAgents(data);
+        } catch (e) {
+            console.error("Could not fetch agents", e);
+        }
+    };
 
     const sendChatMessage = () => {
         if (!chatInput.trim() || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
@@ -652,6 +1205,8 @@ export default function App() {
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
         if (e.key === 'Enter') sendChatMessage();
     };
+
+    const [isGenerating, setIsGenerating] = useState(false);
 
     // Auto-scroll logs
     useEffect(() => {
@@ -699,6 +1254,13 @@ export default function App() {
                             <ListTree className="w-4 h-4" />
                             Sessions
                         </button>
+                        <button
+                            onClick={() => setActiveTab('cron')}
+                            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${activeTab === 'cron' ? 'bg-rose-600/10 text-rose-400 ring-1 ring-rose-500/30 shadow-[0_4px_20px_-4px_rgba(225,29,72,0.2)]' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'}`}
+                        >
+                            <Timer className="w-4 h-4" />
+                            Cron Jobs
+                        </button>
                     </div>
 
                     {/* Agent Group */}
@@ -710,6 +1272,13 @@ export default function App() {
                         >
                             <MessageSquare className="w-4 h-4" />
                             Agent Chat
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('flow')}
+                            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${activeTab === 'flow' ? 'bg-indigo-600/10 text-indigo-400 ring-1 ring-indigo-500/30 shadow-[0_4px_20px_-4px_rgba(99,102,241,0.2)]' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'}`}
+                        >
+                            <GitMerge className="w-4 h-4" />
+                            Agent Flow
                         </button>
                         <button
                             onClick={() => setActiveTab('agents')}
@@ -894,10 +1463,21 @@ export default function App() {
                 )}
 
                 {activeTab === 'overview' && <OverviewView />}
-                {activeTab === 'sessions' && <SessionsView />}
-                {activeTab === 'agents' && <AgentsView />}
-                {activeTab === 'skills' && <SkillsView />}
+                {activeTab === 'sessions' && <SessionsView provider={config.provider} />}
+                {activeTab === 'flow' && (
+                    <div className="flex-1 p-8 fade-in h-full flex flex-col">
+                        <AgentFlowGraph events={flowEvents} />
+                    </div>
+                )}
+                {activeTab === 'agents' && <AgentsView agents={agents} onRefresh={fetchAgents} provider={config.provider} skills={skills} />}
+                {activeTab === 'skills' && <SkillsView skills={skills} onRefresh={() => {
+                    return fetch('/api/skills')
+                        .then(r => r.json())
+                        .then(data => setSkills(data.skills))
+                        .catch(e => console.error("Could not refresh skills API", e));
+                }} isGenerating={isGenerating} setIsGenerating={setIsGenerating} />}
                 {activeTab === 'logs' && <LogsView logs={logs} />}
+                {activeTab === 'cron' && <CronView agents={agents} />}
             </main >
         </div >
     );

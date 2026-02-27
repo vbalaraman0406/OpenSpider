@@ -1,5 +1,7 @@
 import { LLMProvider, ChatMessage } from '../llm/BaseProvider';
 import { DynamicExecutor } from '../tools/DynamicExecutor';
+import fs from 'node:fs';
+import path from 'node:path';
 
 export class WorkerAgent {
     private llm: LLMProvider;
@@ -15,11 +17,34 @@ export class WorkerAgent {
     async executeTask(instruction: string, context: string[]): Promise<string> {
         await this.executor.initialize();
 
+        // Look up this worker's capabilities
+        let assignedSkillsContext = "";
+        try {
+            const agentsPath = path.join(process.cwd(), 'agents.json');
+            if (fs.existsSync(agentsPath)) {
+                const agents = JSON.parse(fs.readFileSync(agentsPath, 'utf-8'));
+                // Attempt to find an agent profile that matches this role name (case insensitive)
+                const workerProfile = agents.find((a: any) => a.role.toLowerCase().includes(this.role.toLowerCase()) || a.name.toLowerCase() === this.role.toLowerCase());
+
+                if (workerProfile && workerProfile.skills && workerProfile.skills.length > 0) {
+                    assignedSkillsContext = "\\n\\nYOUR ASSIGNED SKILLS:\\nYou have access to the following specialized tools. To use them, invoke `execute_script` with the listed filename.\\n";
+                    const skillsDir = path.join(process.cwd(), 'skills');
+                    for (const skill of workerProfile.skills) {
+                        try {
+                            const metadata = JSON.parse(fs.readFileSync(path.join(skillsDir, `${skill}.json`), 'utf-8'));
+                            assignedSkillsContext += `\\n### Skill: ${skill}\\nFile: ${skill}.py\\nDescription: ${metadata.description}\\nInstructions: ${metadata.instructions}\\n`;
+                        } catch (e) { }
+                    }
+                }
+            }
+        } catch (e) { console.error("Could not load worker profile."); }
+
         const systemPrompt = `You are a specialized OpenSpider Worker Agent. 
 Your Role: ${this.role}
 You have the ability to write scripts (Python, Node.js, Bash) and execute them to solve the user's task.
 If you need a package, write a script that installs it or ask to run npm install.
 Your goal is to complete the task autonomously and return the final result.
+${assignedSkillsContext}
 
 Available tools you can request in your JSON response:
 - run_command: { "command": "echo hello" }

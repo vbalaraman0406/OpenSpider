@@ -1,0 +1,19 @@
+[
+  {
+    "id": "cron-test123",
+    "description": "Integration Test Job",
+    "prompt": "This is a test background run.",
+    "intervalHours": 0.0001,
+    "lastRunTimestamp": 1772212270240,
+    "agentId": "gateway"
+  },
+  {
+    "id": "cron-o2xbxg95q",
+    "description": "Mock Test Job",
+    "prompt": "This is a test prompt for the mock job.",
+    "intervalHours": 1,
+    "lastRunTimestamp": 1772211859423,
+    "agentId": "gateway",
+    "status": "enabled"
+  }
+]
