@@ -144,7 +144,8 @@ export function startServer() {
     // API Route to fetch aggregated usage summary
     app.get('/api/usage', (req, res) => {
         try {
-            res.json(getUsageSummary());
+            const days = parseInt(req.query.days as string) || 30;
+            res.json(getUsageSummary(days));
         } catch (e: any) {
             res.status(500).json({ error: e.message });
         }
