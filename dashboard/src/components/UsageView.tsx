@@ -35,6 +35,16 @@ export function UsageView() {
     useEffect(() => {
         fetchUsage();
     }, [daysScope]);
+    // Filter recent sessions dynamically (hook rules dictate this must be before conditionals)
+    const filteredSessions = useMemo(() => {
+        if (!summary || !summary.recentSessions) return [];
+        if (!sessionSearch.trim()) return summary.recentSessions;
+        const lowerSearch = sessionSearch.toLowerCase();
+        return summary.recentSessions.filter((s: any) =>
+            (s.agentId || '').toLowerCase().includes(lowerSearch) ||
+            (s.model || '').toLowerCase().includes(lowerSearch)
+        );
+    }, [sessionSearch, summary]);
 
     if (loading && !summary) {
         return (
@@ -54,29 +64,19 @@ export function UsageView() {
     }
 
     // Prepare chart data format
-    const chartData = summary.dailyTokens.map(d => ({
+    const chartData = summary.dailyTokens.map((d: any) => ({
         name: d.date,
-        Tokens: d.totalTokens, // Still available for tooltip
+        Tokens: d.totalTokens,
         Input: d.promptTokens,
         Output: d.completionTokens
     }));
 
     // Calculate dynamic insights
-    const sortedModels = Object.entries(summary.models).sort(([, a], [, b]) => b - a);
+    const sortedModels = Object.entries(summary.models).sort(([, a]: any, [, b]: any) => b - a);
     const topModelEntry = sortedModels.length > 0 ? sortedModels[0] : null;
 
-    const sortedAgents = Object.entries(summary.agents || {}).sort(([, a], [, b]) => b - a);
+    const sortedAgents = Object.entries(summary.agents || {}).sort(([, a]: any, [, b]: any) => b - a);
     const topAgentEntry = sortedAgents.length > 0 ? sortedAgents[0] : null;
-
-    // Filter recent sessions dynamically
-    const filteredSessions = useMemo(() => {
-        if (!sessionSearch.trim()) return summary.recentSessions;
-        const lowerSearch = sessionSearch.toLowerCase();
-        return summary.recentSessions.filter(s =>
-            (s.agentId || '').toLowerCase().includes(lowerSearch) ||
-            (s.model || '').toLowerCase().includes(lowerSearch)
-        );
-    }, [sessionSearch, summary.recentSessions]);
 
     // Date Options
     const ranges = [
