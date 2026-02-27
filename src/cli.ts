@@ -116,6 +116,22 @@ program
         });
     });
 
+program
+    .command('dashboard')
+    .description('Open the OpenSpider dashboard in your default browser')
+    .action(async () => {
+        try {
+            // dynamic import because 'open' is often an ESM module
+            const open = (await import('open')).default;
+            console.log('\n🕷️ Opening OpenSpider Dashboard at http://localhost:4000...');
+            await open('http://localhost:4000');
+            process.exit(0);
+        } catch (error: any) {
+            console.error('Failed to open dashboard:', error.message);
+            process.exit(1);
+        }
+    });
+
 const channelsMenu = program
     .command('channels')
     .description('Manage communication channels');
@@ -150,10 +166,10 @@ modelsMenu
         console.log('---------------------------------');
         console.log(`Default Provider:   ${process.env.DEFAULT_PROVIDER || 'Not Set'}`);
         console.log(`Primary Model:      ${process.env.DEFAULT_PROVIDER === 'antigravity' ? process.env.GEMINI_MODEL :
-                process.env.DEFAULT_PROVIDER === 'ollama' ? process.env.OLLAMA_MODEL :
-                    process.env.DEFAULT_PROVIDER === 'openai' ? process.env.OPENAI_MODEL :
-                        process.env.DEFAULT_PROVIDER === 'anthropic' ? process.env.ANTHROPIC_MODEL :
-                            process.env.DEFAULT_PROVIDER === 'custom' ? process.env.CUSTOM_MODEL : 'Unknown'
+            process.env.DEFAULT_PROVIDER === 'ollama' ? process.env.OLLAMA_MODEL :
+                process.env.DEFAULT_PROVIDER === 'openai' ? process.env.OPENAI_MODEL :
+                    process.env.DEFAULT_PROVIDER === 'anthropic' ? process.env.ANTHROPIC_MODEL :
+                        process.env.DEFAULT_PROVIDER === 'custom' ? process.env.CUSTOM_MODEL : 'Unknown'
             }`);
         console.log(`Fallback Model:     ${process.env.FALLBACK_MODEL || 'None'}`);
         console.log('---------------------------------');

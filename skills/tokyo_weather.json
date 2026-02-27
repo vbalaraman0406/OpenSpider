@@ -1,0 +1,15 @@
+{
+  "location": "Tokyo, Japan",
+  "conditions": "Partly cloudy",
+  "weather_code": 2,
+  "temperature_c": 13.7,
+  "temperature_f": 56.7,
+  "feels_like_c": 12.8,
+  "feels_like_f": 55.0,
+  "humidity": 72,
+  "wind_speed_kmph": 3.7,
+  "wind_speed_mph": 2.3,
+  "wind_direction": "E",
+  "wind_direction_degrees": 79,
+  "pressure_hpa": 1006.3
+}
