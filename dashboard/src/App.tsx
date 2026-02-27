@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Activity, Terminal, CheckCircle2, Server, Key, Bot, Send, MessageSquare, Radio, Smartphone, MessagesSquare, Users, Globe, Play, Square, Settings, RefreshCw } from 'lucide-react';
+import { Activity, Terminal, CheckCircle2, Server, Key, Bot, Send, MessageSquare, Radio, Smartphone, MessagesSquare, Users, Globe, Play, Square, Settings, RefreshCw, LayoutDashboard, ListTree, FolderGit2, Wrench, FileText, Search, Download } from 'lucide-react';
 
 interface ChannelConfig {
     id: string;
@@ -78,12 +78,7 @@ function ChannelCard({ channel }: { channel: ChannelConfig }) {
 }
 
 const mockChannels: ChannelConfig[] = [
-    { id: 'wa', name: 'WhatsApp', icon: Smartphone, status: 'running', lastProbe: '2m ago', authAge: '14d 2h', description: 'Primary agent interface for direct user SMS.' },
-    { id: 'tg', name: 'Telegram', icon: MessagesSquare, status: 'offline', lastProbe: '1h ago', description: 'Telegram bot API polling. Currently disabled.' },
-    { id: 'dc', name: 'Discord', icon: Users, status: 'configured', description: 'Discord webhook interop. Pending token.' },
-    { id: 'gc', name: 'Google Chat', icon: MessageSquare, status: 'configured', description: 'Google Workspace Chat integration.' },
-    { id: 'sl', name: 'Slack', icon: Activity, status: 'offline', description: 'Slack Enterprise Grid connector.' },
-    { id: 'si', name: 'Signal', icon: Globe, status: 'configured', description: 'Encrypted Signal proxy bridge.' }
+    { id: 'wa', name: 'WhatsApp', icon: Smartphone, status: 'running', lastProbe: '2m ago', authAge: '14d 2h', description: 'Primary agent interface for direct user SMS.' }
 ];
 
 interface LogMessage {
@@ -92,8 +87,388 @@ interface LogMessage {
     timestamp: string;
 }
 
+function OverviewView() {
+    return (
+        <div className="flex-1 p-10 overflow-y-auto fade-in">
+            <div className="max-w-6xl mx-auto">
+                <header className="mb-10">
+                    <h2 className="text-3xl font-bold text-white tracking-tight">System Overview</h2>
+                    <p className="text-slate-400 mt-2 text-sm max-w-2xl leading-relaxed">
+                        Gateway status, entry points, and a fast health read.
+                    </p>
+                </header>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    {/* Gateway Access */}
+                    <div className="bg-slate-900/40 backdrop-blur-xl rounded-2xl border border-white/5 p-6 shadow-xl relative overflow-hidden group hover:bg-slate-900/60 transition-all">
+                        <div className="absolute top-0 inset-x-0 h-px w-full bg-gradient-to-r from-transparent via-indigo-500/30 to-transparent"></div>
+                        <h3 className="text-lg font-semibold text-white mb-2 tracking-tight">Gateway Access</h3>
+                        <p className="text-sm text-slate-400 mb-6">Where the dashboard connects and how it authenticates.</p>
+
+                        <div className="grid grid-cols-2 gap-5 mb-5">
+                            <div>
+                                <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">WebSocket URL</label>
+                                <input type="text" value="ws://127.0.0.1:4000" readOnly className="w-full bg-slate-950/50 border border-slate-800 rounded-lg px-4 py-2.5 text-sm font-mono text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500/50" />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Gateway Token</label>
+                                <input type="password" value="****************" readOnly className="w-full bg-slate-950/50 border border-slate-800 rounded-lg px-4 py-2.5 text-sm font-mono text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500/50" />
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-5 mb-8">
+                            <div>
+                                <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Password (not stored)</label>
+                                <input type="password" placeholder="system or shared password" disabled className="w-full bg-slate-950/30 border border-slate-800/50 rounded-lg px-4 py-2.5 text-sm text-slate-500 cursor-not-allowed" />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Default Session Key</label>
+                                <input type="text" value="main" readOnly className="w-full bg-slate-950/50 border border-slate-800 rounded-lg px-4 py-2.5 text-sm font-mono text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500/50" />
+                            </div>
+                        </div>
+
+                        <div className="flex gap-3">
+                            <button className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-indigo-900/20">Connect</button>
+                            <button className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm font-medium transition-colors border border-slate-700">Refresh</button>
+                        </div>
+                    </div>
+
+                    {/* Snapshot */}
+                    <div className="bg-slate-900/40 backdrop-blur-xl rounded-2xl border border-white/5 p-6 shadow-xl relative overflow-hidden group hover:bg-slate-900/60 transition-all">
+                        <div className="absolute top-0 inset-x-0 h-px w-full bg-gradient-to-r from-transparent via-emerald-500/30 to-transparent"></div>
+                        <h3 className="text-lg font-semibold text-white mb-2 tracking-tight">Snapshot</h3>
+                        <p className="text-sm text-slate-400 mb-6">Latest gateway handshake information.</p>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="bg-slate-950/50 rounded-xl border border-slate-800/60 p-5">
+                                <div className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Status</div>
+                                <div className="text-2xl font-bold tracking-tight text-emerald-400 flex items-center gap-2">
+                                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse relative top-0.5"></span>
+                                    Online
+                                </div>
+                            </div>
+                            <div className="bg-slate-950/50 rounded-xl border border-slate-800/60 p-5">
+                                <div className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Uptime</div>
+                                <div className="text-2xl font-bold tracking-tight text-slate-200">2d 4h</div>
+                            </div>
+                            <div className="bg-slate-950/50 rounded-xl border border-slate-800/60 p-5">
+                                <div className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Tick Interval</div>
+                                <div className="text-2xl font-bold tracking-tight text-slate-200 font-mono">1000ms</div>
+                            </div>
+                            <div className="bg-slate-950/50 rounded-xl border border-slate-800/60 p-5">
+                                <div className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Channels Refresh</div>
+                                <div className="text-2xl font-bold tracking-tight text-slate-200 font-mono">2m ago</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* 3 Stats Bar */}
+                <div className="grid grid-cols-3 gap-6 mt-8 pb-20">
+                    <div className="bg-slate-900/40 backdrop-blur-xl rounded-2xl border border-white/5 p-6 shadow-xl relative overflow-hidden group hover:bg-slate-900/60 transition-all">
+                        <div className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-3">Instances</div>
+                        <div className="text-5xl font-bold tracking-tight text-white mb-3">1</div>
+                        <div className="text-sm text-slate-400 font-medium leading-relaxed">Presence beacons tracking active gateways in the last 5 minutes.</div>
+                    </div>
+                    <div className="bg-slate-900/40 backdrop-blur-xl rounded-2xl border border-white/5 p-6 shadow-xl relative overflow-hidden group hover:bg-slate-900/60 transition-all">
+                        <div className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-3">Sessions</div>
+                        <div className="text-5xl font-bold tracking-tight text-white mb-3">3</div>
+                        <div className="text-sm text-slate-400 font-medium leading-relaxed">Recent unique session keys currently being managed by the gateway.</div>
+                    </div>
+                    <div className="bg-slate-900/40 backdrop-blur-xl rounded-2xl border border-white/5 p-6 shadow-xl relative overflow-hidden group hover:bg-slate-900/60 transition-all opacity-70">
+                        <div className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-3">Cron</div>
+                        <div className="text-5xl font-bold tracking-tight text-slate-600 mb-3">n/a</div>
+                        <div className="text-sm text-slate-500 font-medium leading-relaxed">Next wake disabled. No recurring jobs are currently scheduled.</div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    );
+}
+
+function SessionsView() {
+    return (
+        <div className="flex-1 p-10 overflow-y-auto fade-in">
+            <div className="max-w-6xl mx-auto">
+                <header className="mb-8 flex justify-between items-end">
+                    <div>
+                        <h2 className="text-3xl font-bold text-white tracking-tight">Active Sessions</h2>
+                        <p className="text-slate-400 mt-2 text-sm max-w-2xl leading-relaxed">
+                            Inspect active conversation sessions and adjust per-session overrides.
+                        </p>
+                    </div>
+                    <button className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-sm font-medium transition-colors border border-slate-700 flex items-center gap-2">
+                        <RefreshCw className="w-4 h-4" />
+                        Refresh
+                    </button>
+                </header>
+
+                <div className="bg-slate-900/40 backdrop-blur-xl rounded-2xl border border-white/5 pb-2 shadow-xl overflow-hidden">
+                    <div className="p-4 border-b border-slate-800/60 bg-slate-900/80 flex items-center gap-6">
+                        <div className="flex items-center gap-3">
+                            <label className="text-xs font-semibold text-slate-400">Active within (min)</label>
+                            <input type="text" placeholder="120" className="w-16 bg-slate-950 border border-slate-800 rounded px-2 py-1 text-sm text-slate-300 focus:outline-none focus:border-amber-500/50" />
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <label className="text-xs font-semibold text-slate-400">Limit</label>
+                            <input type="text" placeholder="100" className="w-16 bg-slate-950 border border-slate-800 rounded px-2 py-1 text-sm text-slate-300 focus:outline-none focus:border-amber-500/50" />
+                        </div>
+                        <div className="flex items-center gap-2 ml-4">
+                            <input type="checkbox" className="rounded bg-slate-950 border-slate-800 text-amber-500 focus:ring-amber-500/30" />
+                            <label className="text-xs font-semibold text-slate-400">Include global</label>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <input type="checkbox" className="rounded bg-slate-950 border-slate-800 text-amber-500 focus:ring-amber-500/30" />
+                            <label className="text-xs font-semibold text-slate-400">Include unknown</label>
+                        </div>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left text-sm whitespace-nowrap">
+                            <thead className="bg-slate-950/30 text-slate-500 text-[10px] uppercase tracking-widest font-semibold border-b border-slate-800/60">
+                                <tr>
+                                    <th className="px-6 py-4">Key</th>
+                                    <th className="px-6 py-4">Label</th>
+                                    <th className="px-6 py-4">Kind</th>
+                                    <th className="px-6 py-4">Updated</th>
+                                    <th className="px-6 py-4 text-right">Tokens</th>
+                                    <th className="px-6 py-4 text-center">Thinking</th>
+                                    <th className="px-6 py-4 text-center">Verbose</th>
+                                    <th className="px-6 py-4 text-center">Reasoning</th>
+                                    <th className="px-6 py-4 text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-800/60 text-slate-300">
+                                <tr className="hover:bg-slate-800/30 transition-colors">
+                                    <td className="px-6 py-4 font-mono text-amber-400">main</td>
+                                    <td className="px-6 py-4"><span className="bg-slate-800 px-2 py-1 rounded text-xs">gemini-2.5-flash</span></td>
+                                    <td className="px-6 py-4">Gateway</td>
+                                    <td className="px-6 py-4 text-slate-400 text-xs">2 mins ago</td>
+                                    <td className="px-6 py-4 text-right font-mono">1,024</td>
+                                    <td className="px-6 py-4 text-center"><input type="checkbox" className="rounded bg-slate-950 border-slate-800 text-amber-500 focus:ring-amber-500" /></td>
+                                    <td className="px-6 py-4 text-center"><input type="checkbox" className="rounded bg-slate-950 border-slate-800 text-amber-500 focus:ring-amber-500" /></td>
+                                    <td className="px-6 py-4 text-center"><input type="checkbox" className="rounded bg-slate-950 border-slate-800 text-amber-500 focus:ring-amber-500" /></td>
+                                    <td className="px-6 py-4 text-right">
+                                        <button className="text-xs text-red-400 hover:text-red-300 transition-colors px-2 py-1 border border-red-500/20 rounded hover:bg-red-500/10">Clear</button>
+                                    </td>
+                                </tr>
+                                <tr className="hover:bg-slate-800/30 transition-colors">
+                                    <td className="px-6 py-4 font-mono text-amber-400">worker-a</td>
+                                    <td className="px-6 py-4"><span className="bg-slate-800 px-2 py-1 rounded text-xs">claude-3-opus</span></td>
+                                    <td className="px-6 py-4">Worker</td>
+                                    <td className="px-6 py-4 text-slate-400 text-xs">15 mins ago</td>
+                                    <td className="px-6 py-4 text-right font-mono">8,401</td>
+                                    <td className="px-6 py-4 text-center"><input type="checkbox" className="rounded bg-slate-950 border-slate-800 text-amber-500 focus:ring-amber-500" /></td>
+                                    <td className="px-6 py-4 text-center"><input type="checkbox" className="rounded bg-slate-950 border-slate-800 text-amber-500 focus:ring-amber-500" /></td>
+                                    <td className="px-6 py-4 text-center"><input type="checkbox" className="rounded bg-slate-950 border-slate-800 text-amber-500 focus:ring-amber-500" defaultChecked /></td>
+                                    <td className="px-6 py-4 text-right">
+                                        <button className="text-xs text-red-400 hover:text-red-300 transition-colors px-2 py-1 border border-red-500/20 rounded hover:bg-red-500/10">Clear</button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function AgentsView() {
+    return (
+        <div className="flex-1 p-10 overflow-y-auto fade-in h-full flex flex-col">
+            <header className="mb-8 shrink-0 flex justify-between items-end">
+                <div>
+                    <h2 className="text-3xl font-bold text-white tracking-tight">Agents Workspace</h2>
+                    <p className="text-slate-400 mt-2 text-sm max-w-2xl leading-relaxed">
+                        Manage agent profiles, specific system prompts, and tool access permissions.
+                    </p>
+                </div>
+                <button className="px-4 py-2 bg-fuchsia-600 hover:bg-fuchsia-500 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-fuchsia-900/20">
+                    Create Agent
+                </button>
+            </header>
+
+            <div className="flex-1 min-h-0 flex gap-6">
+                <div className="w-[300px] flex flex-col gap-3 shrink-0">
+                    <div className="relative">
+                        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                        <input type="text" placeholder="Search agents..." className="w-full bg-slate-900/50 border border-slate-800 rounded-lg pl-9 pr-4 py-2.5 text-sm text-slate-300 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/50" />
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto space-y-2 pr-2">
+                        <button className="w-full text-left p-4 rounded-xl border border-fuchsia-500/30 bg-fuchsia-500/10 transition-all flex items-center justify-between group">
+                            <div>
+                                <h4 className="text-sm font-semibold text-fuchsia-400">Gateway Architect</h4>
+                                <p className="text-xs text-slate-400 mt-1">Handles default routing.</p>
+                            </div>
+                            <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                        </button>
+                        <button className="w-full text-left p-4 rounded-xl border border-white/5 bg-slate-900/40 hover:bg-slate-800/60 transition-all flex items-center justify-between group">
+                            <div>
+                                <h4 className="text-sm font-semibold text-slate-300 group-hover:text-white transition-colors">Data Analyst</h4>
+                                <p className="text-xs text-slate-500 mt-1">Python chart generator.</p>
+                            </div>
+                            <span className="w-2 h-2 rounded-full bg-slate-600"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <div className="flex-1 bg-slate-900/40 backdrop-blur-xl rounded-2xl border border-white/5 p-8 shadow-xl relative overflow-hidden group hover:bg-slate-900/60 transition-all">
+                    <div className="absolute top-0 inset-x-0 h-px w-full bg-gradient-to-r from-transparent via-fuchsia-500/30 to-transparent"></div>
+                    <div className="flex items-center gap-4 mb-8">
+                        <div className="w-16 h-16 rounded-2xl bg-fuchsia-500/20 border border-fuchsia-500/30 flex items-center justify-center text-fuchsia-400 text-2xl font-bold">
+                            G
+                        </div>
+                        <div>
+                            <h2 className="text-2xl font-bold text-white tracking-tight">Gateway Architect</h2>
+                            <p className="text-slate-400 text-sm mt-1">Model: gemini-2.5-flash-thinking-exp</p>
+                        </div>
+                    </div>
+
+                    <div className="space-y-6">
+                        <div>
+                            <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-3">System Prompt Details</label>
+                            <textarea className="w-full h-32 bg-slate-950/50 border border-slate-800 rounded-lg px-4 py-3 text-sm font-mono text-slate-300 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/50 resize-none" defaultValue="You are the primary gateway agent for OpenSpider. Analyze all incoming requests across all channels and determine if you can answer them or if you need to dispatch a specialized worker agent." />
+                        </div>
+
+                        <div>
+                            <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-3">Capabilities (Skills context)</label>
+                            <div className="flex flex-wrap gap-2">
+                                <span className="px-3 py-1.5 bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 rounded-lg text-xs font-semibold">web_search</span>
+                                <span className="px-3 py-1.5 bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 rounded-lg text-xs font-semibold">calculator</span>
+                                <span className="px-3 py-1.5 bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 rounded-lg text-xs font-semibold">worker_dispatch</span>
+                                <button className="px-3 py-1.5 border border-dashed border-slate-700 text-slate-500 rounded-lg text-xs font-semibold hover:border-slate-500 hover:text-slate-300 transition-colors">+ Add Skill</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="mt-auto pt-8 flex justify-end gap-3">
+                        <button className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm font-medium transition-colors border border-slate-700">Discard</button>
+                        <button className="px-5 py-2.5 bg-fuchsia-600 hover:bg-fuchsia-500 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-fuchsia-900/20">Save Changes</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function SkillsView() {
+    return (
+        <div className="flex-1 p-10 overflow-y-auto fade-in">
+            <div className="max-w-6xl mx-auto">
+                <header className="mb-8 flex justify-between items-end">
+                    <div>
+                        <h2 className="text-3xl font-bold text-white tracking-tight">Dynamic Skills</h2>
+                        <p className="text-slate-400 mt-2 text-sm max-w-2xl leading-relaxed">
+                            View and manage functional capabilities loaded into the agent context windows.
+                        </p>
+                    </div>
+                    <div className="relative">
+                        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                        <input type="text" placeholder="Filter skills..." className="w-64 bg-slate-900/50 border border-slate-800 rounded-lg pl-9 pr-4 py-2 text-sm text-slate-300 focus:outline-none focus:ring-1 focus:ring-cyan-500/50" />
+                    </div>
+                </header>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div className="bg-slate-900/40 backdrop-blur-xl rounded-2xl border border-white/5 p-6 shadow-xl relative overflow-hidden group hover:bg-slate-900/60 transition-all">
+                        <div className="absolute top-0 inset-x-0 h-px w-full bg-gradient-to-r from-transparent via-cyan-500/30 to-transparent"></div>
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="p-2.5 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                                <Globe className="w-5 h-5" />
+                            </div>
+                            <h3 className="text-lg font-semibold text-white tracking-tight">web_search</h3>
+                        </div>
+                        <p className="text-sm text-slate-400 mb-6 line-clamp-2">Performs a Google Search and returns the snippet and URL results.</p>
+
+                        <div className="flex items-center justify-between mt-auto">
+                            <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold bg-slate-950/50 px-2.5 py-1 rounded border border-slate-800/60 text-emerald-400">System Required</span>
+                            <button className="text-xs font-semibold text-slate-400 hover:text-cyan-400 transition-colors">Details</button>
+                        </div>
+                    </div>
+
+                    <div className="bg-slate-900/40 backdrop-blur-xl rounded-2xl border border-white/5 p-6 shadow-xl relative overflow-hidden group hover:bg-slate-900/60 transition-all">
+                        <div className="absolute top-0 inset-x-0 h-px w-full bg-gradient-to-r from-transparent via-cyan-500/30 to-transparent"></div>
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="p-2.5 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                                <Terminal className="w-5 h-5" />
+                            </div>
+                            <h3 className="text-lg font-semibold text-white tracking-tight">run_python</h3>
+                        </div>
+                        <p className="text-sm text-slate-400 mb-6 line-clamp-2">Executes python code in an isolated sandbox environment.</p>
+
+                        <div className="flex items-center justify-between mt-auto">
+                            <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold bg-slate-950/50 px-2.5 py-1 rounded border border-slate-800/60">Managed</span>
+                            <button className="text-xs font-semibold text-slate-400 hover:text-cyan-400 transition-colors">Details</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function LogsView({ logs }: { logs: LogMessage[] }) {
+    return (
+        <div className="flex-1 p-10 overflow-y-auto fade-in flex flex-col max-h-screen">
+            <div className="flex-1 flex flex-col min-h-0 bg-slate-900/40 backdrop-blur-xl rounded-2xl border border-white/5 shadow-xl relative overflow-hidden group">
+                <div className="absolute top-0 inset-x-0 h-px w-full bg-gradient-to-r from-transparent via-slate-500/30 to-transparent z-10"></div>
+
+                <header className="px-6 py-5 border-b border-slate-800/60 shrink-0 flex items-center justify-between bg-slate-900/80">
+                    <div className="flex items-center gap-4">
+                        <h2 className="text-xl font-bold text-white tracking-tight">JSONL Telemetry</h2>
+                        <div className="h-6 w-px bg-slate-800"></div>
+                        <div className="flex items-center gap-2">
+                            <input type="checkbox" className="rounded bg-slate-950 border-slate-800 text-blue-500 focus:ring-blue-500/30" defaultChecked />
+                            <label className="text-xs font-semibold text-slate-400">Auto-follow</label>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-4">
+                        <div className="flex p-1 bg-slate-950 rounded-lg border border-slate-800">
+                            <button className="px-3 py-1 text-[10px] uppercase tracking-widest font-bold text-slate-500 hover:text-white transition-colors">Trace</button>
+                            <button className="px-3 py-1 text-[10px] uppercase tracking-widest font-bold text-slate-500 hover:text-white transition-colors">Debug</button>
+                            <button className="px-3 py-1 text-[10px] uppercase tracking-widest font-bold bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30 transition-colors shadow-sm">Info</button>
+                            <button className="px-3 py-1 text-[10px] uppercase tracking-widest font-bold text-amber-500 hover:text-amber-400 hover:bg-amber-500/10 rounded transition-colors">Warn</button>
+                            <button className="px-3 py-1 text-[10px] uppercase tracking-widest font-bold text-red-500 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors">Error</button>
+                        </div>
+                        <div className="relative w-48">
+                            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                            <input type="text" placeholder="Search logs..." className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-4 py-1.5 text-sm font-mono text-slate-300 focus:outline-none focus:border-blue-500/50" />
+                        </div>
+                        <button className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors border border-slate-700" title="Refresh">
+                            <RefreshCw className="w-4 h-4" />
+                        </button>
+                        <button className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors border border-slate-700" title="Export visible">
+                            <Download className="w-4 h-4" />
+                        </button>
+                    </div>
+                </header>
+
+                <div className="flex-1 bg-slate-950/80 p-6 overflow-y-auto font-mono text-[13px] leading-relaxed text-slate-300">
+                    {logs.length === 0 ? (
+                        <div className="text-slate-500 opacity-60 text-center mt-20">Awaiting stream...</div>
+                    ) : logs.map((l, i) => (
+                        <div key={i} className="mb-1.5 break-all hover:bg-slate-800/50 px-2 py-0.5 rounded transition-colors">
+                            <span className="text-slate-500 mr-4 select-none">{new Date(l.timestamp).toISOString().split('T')[1].replace('Z', '')}</span>
+                            <span className={
+                                l.data.includes('Error') || l.data.includes('Failed') ? 'text-red-400' :
+                                    l.data.includes('Usage') ? 'text-blue-400' :
+                                        l.data.includes('Worker') ? 'text-fuchsia-400' : 'text-slate-300'
+                            }>
+                                {l.data}
+                            </span>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export default function App() {
-    const [activeTab, setActiveTab] = useState<'chat' | 'channels'>('chat');
+    type TabName = 'overview' | 'channels' | 'sessions' | 'chat' | 'agents' | 'skills' | 'logs';
+    const [activeTab, setActiveTab] = useState<TabName>('chat');
     const [logs, setLogs] = useState<LogMessage[]>([]);
     const [config, setConfig] = useState({ provider: 'Loading...', status: 'connecting' });
     const [skills, setSkills] = useState<string[]>([]);
@@ -180,22 +555,70 @@ export default function App() {
                     </div>
                 </div>
 
-                <nav className="flex-1 px-4 py-8 space-y-2">
-                    <div className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-4 px-2">Views</div>
-                    <button
-                        onClick={() => setActiveTab('chat')}
-                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${activeTab === 'chat' ? 'bg-blue-600/10 text-blue-400 ring-1 ring-blue-500/30 shadow-[0_4px_20px_-4px_rgba(37,99,235,0.2)]' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'}`}
-                    >
-                        <MessageSquare className="w-5 h-5" />
-                        Agent Chat
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('channels')}
-                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${activeTab === 'channels' ? 'bg-emerald-600/10 text-emerald-400 ring-1 ring-emerald-500/30 shadow-[0_4px_20px_-4px_rgba(16,185,129,0.2)]' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'}`}
-                    >
-                        <Radio className="w-5 h-5" />
-                        Channels Manager
-                    </button>
+                <nav className="flex-1 px-4 py-8 overflow-y-auto space-y-6">
+                    {/* Control Group */}
+                    <div className="space-y-1">
+                        <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 px-2">Control</div>
+                        <button
+                            onClick={() => setActiveTab('overview')}
+                            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${activeTab === 'overview' ? 'bg-indigo-600/10 text-indigo-400 ring-1 ring-indigo-500/30 shadow-[0_4px_20px_-4px_rgba(99,102,241,0.2)]' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'}`}
+                        >
+                            <LayoutDashboard className="w-4 h-4" />
+                            Overview
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('channels')}
+                            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${activeTab === 'channels' ? 'bg-emerald-600/10 text-emerald-400 ring-1 ring-emerald-500/30 shadow-[0_4px_20px_-4px_rgba(16,185,129,0.2)]' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'}`}
+                        >
+                            <Radio className="w-4 h-4" />
+                            Channels
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('sessions')}
+                            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${activeTab === 'sessions' ? 'bg-amber-600/10 text-amber-400 ring-1 ring-amber-500/30 shadow-[0_4px_20px_-4px_rgba(245,158,11,0.2)]' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'}`}
+                        >
+                            <ListTree className="w-4 h-4" />
+                            Sessions
+                        </button>
+                    </div>
+
+                    {/* Agent Group */}
+                    <div className="space-y-1">
+                        <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 px-2">Agent</div>
+                        <button
+                            onClick={() => setActiveTab('chat')}
+                            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${activeTab === 'chat' ? 'bg-blue-600/10 text-blue-400 ring-1 ring-blue-500/30 shadow-[0_4px_20px_-4px_rgba(37,99,235,0.2)]' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'}`}
+                        >
+                            <MessageSquare className="w-4 h-4" />
+                            Agent Chat
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('agents')}
+                            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${activeTab === 'agents' ? 'bg-fuchsia-600/10 text-fuchsia-400 ring-1 ring-fuchsia-500/30 shadow-[0_4px_20px_-4px_rgba(217,70,239,0.2)]' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'}`}
+                        >
+                            <FolderGit2 className="w-4 h-4" />
+                            Agents Workspace
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('skills')}
+                            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${activeTab === 'skills' ? 'bg-cyan-600/10 text-cyan-400 ring-1 ring-cyan-500/30 shadow-[0_4px_20px_-4px_rgba(6,182,212,0.2)]' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'}`}
+                        >
+                            <Wrench className="w-4 h-4" />
+                            Dynamic Skills
+                        </button>
+                    </div>
+
+                    {/* Settings Group */}
+                    <div className="space-y-1">
+                        <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 px-2">Settings</div>
+                        <button
+                            onClick={() => setActiveTab('logs')}
+                            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${activeTab === 'logs' ? 'bg-slate-600/20 text-white ring-1 ring-slate-500/30 shadow-[0_4px_20px_-4px_rgba(100,116,139,0.2)]' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'}`}
+                        >
+                            <FileText className="w-4 h-4" />
+                            System Logs
+                        </button>
+                    </div>
                 </nav>
 
                 <div className="p-6 border-t border-slate-800/60 bg-slate-900/30 space-y-4">
@@ -219,7 +642,7 @@ export default function App() {
 
             {/* Main Content Area */}
             <main className="flex-1 flex flex-col h-screen overflow-hidden relative bg-slate-950/50">
-                {activeTab === 'chat' ? (
+                {activeTab === 'chat' && (
                     <div className="flex-1 p-8 flex gap-8 overflow-hidden max-w-[1600px] w-full mx-auto h-full fade-in">
 
                         {/* Left Column: Logs */}
@@ -329,7 +752,9 @@ export default function App() {
                             </div >
                         </aside >
                     </div>
-                ) : (
+                )}
+
+                {activeTab === 'channels' && (
                     <div className="flex-1 p-10 overflow-y-auto fade-in">
                         <div className="max-w-6xl mx-auto">
                             <header className="mb-10">
@@ -348,6 +773,12 @@ export default function App() {
                         </div>
                     </div>
                 )}
+
+                {activeTab === 'overview' && <OverviewView />}
+                {activeTab === 'sessions' && <SessionsView />}
+                {activeTab === 'agents' && <AgentsView />}
+                {activeTab === 'skills' && <SkillsView />}
+                {activeTab === 'logs' && <LogsView logs={logs} />}
             </main >
         </div >
     );
