@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Activity, Terminal, CheckCircle2, Server, Key, Bot, Send, MessageSquare, Radio, Smartphone, MessagesSquare, Users, Globe, Play, Square, Settings, RefreshCw, LayoutDashboard, ListTree, FolderGit2, Wrench, FileText, Search, Download } from 'lucide-react';
+import { Activity, Terminal, CheckCircle2, Server, Key, Bot, Send, MessageSquare, Radio, Smartphone, MessagesSquare, Users, Globe, Play, Square, Settings, RefreshCw, LayoutDashboard, ListTree, FolderGit2, Wrench, FileText, Search, Download, X } from 'lucide-react';
 
 interface ChannelConfig {
     id: string;
@@ -275,6 +275,34 @@ function SessionsView() {
 }
 
 function AgentsView() {
+    const mockAgents = [
+        {
+            id: 'gateway',
+            name: 'Gateway Architect',
+            role: 'Handles default routing.',
+            status: 'emerald',
+            initial: 'G',
+            color: 'fuchsia',
+            model: 'gemini-2.5-flash-thinking-exp',
+            prompt: 'You are the primary gateway agent for OpenSpider. Analyze all incoming requests across all channels and determine if you can answer them or if you need to dispatch a specialized worker agent.',
+            skills: ['web_search', 'calculator', 'worker_dispatch']
+        },
+        {
+            id: 'analyst',
+            name: 'Data Analyst',
+            role: 'Python chart generator.',
+            status: 'slate',
+            initial: 'D',
+            color: 'blue',
+            model: 'claude-3-5-sonnet-20241022',
+            prompt: 'You are a data analysis agent. You write python to analyze CSVs and plot charts.',
+            skills: ['run_python', 'read_file']
+        }
+    ];
+
+    const [selectedAgentId, setSelectedAgentId] = useState('gateway');
+    const selectedAgent = mockAgents.find(a => a.id === selectedAgentId) || mockAgents[0];
+
     return (
         <div className="flex-1 p-10 overflow-y-auto fade-in h-full flex flex-col">
             <header className="mb-8 shrink-0 flex justify-between items-end">
@@ -284,7 +312,7 @@ function AgentsView() {
                         Manage agent profiles, specific system prompts, and tool access permissions.
                     </p>
                 </div>
-                <button className="px-4 py-2 bg-fuchsia-600 hover:bg-fuchsia-500 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-fuchsia-900/20">
+                <button className="px-4 py-2 bg-fuchsia-600 hover:bg-fuchsia-500 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-fuchsia-900/20" onClick={() => alert('Create Agent dialog would open here')}>
                     Create Agent
                 </button>
             </header>
@@ -297,55 +325,69 @@ function AgentsView() {
                     </div>
 
                     <div className="flex-1 overflow-y-auto space-y-2 pr-2">
-                        <button className="w-full text-left p-4 rounded-xl border border-fuchsia-500/30 bg-fuchsia-500/10 transition-all flex items-center justify-between group">
-                            <div>
-                                <h4 className="text-sm font-semibold text-fuchsia-400">Gateway Architect</h4>
-                                <p className="text-xs text-slate-400 mt-1">Handles default routing.</p>
-                            </div>
-                            <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-                        </button>
-                        <button className="w-full text-left p-4 rounded-xl border border-white/5 bg-slate-900/40 hover:bg-slate-800/60 transition-all flex items-center justify-between group">
-                            <div>
-                                <h4 className="text-sm font-semibold text-slate-300 group-hover:text-white transition-colors">Data Analyst</h4>
-                                <p className="text-xs text-slate-500 mt-1">Python chart generator.</p>
-                            </div>
-                            <span className="w-2 h-2 rounded-full bg-slate-600"></span>
-                        </button>
+                        {mockAgents.map(agent => (
+                            <button
+                                key={agent.id}
+                                onClick={() => setSelectedAgentId(agent.id)}
+                                className={`w-full text-left p-4 rounded-xl border transition-all flex items-center justify-between group ${selectedAgentId === agent.id
+                                    ? `border-${agent.color}-500/30 bg-${agent.color}-500/10`
+                                    : 'border-white/5 bg-slate-900/40 hover:bg-slate-800/60'
+                                    }`}
+                            >
+                                <div>
+                                    <h4 className={`text-sm font-semibold transition-colors ${selectedAgentId === agent.id ? `text-${agent.color}-400` : 'text-slate-300 group-hover:text-white'}`}>
+                                        {agent.name}
+                                    </h4>
+                                    <p className={`text-xs mt-1 ${selectedAgentId === agent.id ? 'text-slate-400' : 'text-slate-500'}`}>
+                                        {agent.role}
+                                    </p>
+                                </div>
+                                <span className={`w-2 h-2 rounded-full bg-${agent.status}-400`}></span>
+                            </button>
+                        ))}
                     </div>
                 </div>
 
                 <div className="flex-1 bg-slate-900/40 backdrop-blur-xl rounded-2xl border border-white/5 p-8 shadow-xl relative overflow-hidden group hover:bg-slate-900/60 transition-all">
-                    <div className="absolute top-0 inset-x-0 h-px w-full bg-gradient-to-r from-transparent via-fuchsia-500/30 to-transparent"></div>
+                    <div className={`absolute top-0 inset-x-0 h-px w-full bg-gradient-to-r from-transparent via-${selectedAgent.color}-500/30 to-transparent`}></div>
                     <div className="flex items-center gap-4 mb-8">
-                        <div className="w-16 h-16 rounded-2xl bg-fuchsia-500/20 border border-fuchsia-500/30 flex items-center justify-center text-fuchsia-400 text-2xl font-bold">
-                            G
+                        <div className={`w-16 h-16 rounded-2xl bg-${selectedAgent.color}-500/20 border border-${selectedAgent.color}-500/30 flex items-center justify-center text-${selectedAgent.color}-400 text-2xl font-bold`}>
+                            {selectedAgent.initial}
                         </div>
                         <div>
-                            <h2 className="text-2xl font-bold text-white tracking-tight">Gateway Architect</h2>
-                            <p className="text-slate-400 text-sm mt-1">Model: gemini-2.5-flash-thinking-exp</p>
+                            <h2 className="text-2xl font-bold text-white tracking-tight">{selectedAgent.name}</h2>
+                            <p className="text-slate-400 text-sm mt-1">Model: {selectedAgent.model}</p>
                         </div>
                     </div>
 
                     <div className="space-y-6">
                         <div>
                             <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-3">System Prompt Details</label>
-                            <textarea className="w-full h-32 bg-slate-950/50 border border-slate-800 rounded-lg px-4 py-3 text-sm font-mono text-slate-300 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/50 resize-none" defaultValue="You are the primary gateway agent for OpenSpider. Analyze all incoming requests across all channels and determine if you can answer them or if you need to dispatch a specialized worker agent." />
+                            <textarea
+                                className={`w-full h-32 bg-slate-950/50 border border-slate-800 rounded-lg px-4 py-3 text-sm font-mono text-slate-300 focus:outline-none focus:ring-1 focus:ring-${selectedAgent.color}-500/50 resize-none`}
+                                value={selectedAgent.prompt}
+                                readOnly
+                            />
                         </div>
 
                         <div>
                             <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-3">Capabilities (Skills context)</label>
                             <div className="flex flex-wrap gap-2">
-                                <span className="px-3 py-1.5 bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 rounded-lg text-xs font-semibold">web_search</span>
-                                <span className="px-3 py-1.5 bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 rounded-lg text-xs font-semibold">calculator</span>
-                                <span className="px-3 py-1.5 bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 rounded-lg text-xs font-semibold">worker_dispatch</span>
-                                <button className="px-3 py-1.5 border border-dashed border-slate-700 text-slate-500 rounded-lg text-xs font-semibold hover:border-slate-500 hover:text-slate-300 transition-colors">+ Add Skill</button>
+                                {selectedAgent.skills.map(skill => (
+                                    <span key={skill} className="px-3 py-1.5 bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 rounded-lg text-xs font-semibold">
+                                        {skill}
+                                    </span>
+                                ))}
+                                <button className="px-3 py-1.5 border border-dashed border-slate-700 text-slate-500 rounded-lg text-xs font-semibold hover:border-slate-500 hover:text-slate-300 transition-colors" onClick={() => alert('Add skill dialog would open here')}>
+                                    + Add Skill
+                                </button>
                             </div>
                         </div>
                     </div>
 
                     <div className="mt-auto pt-8 flex justify-end gap-3">
                         <button className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm font-medium transition-colors border border-slate-700">Discard</button>
-                        <button className="px-5 py-2.5 bg-fuchsia-600 hover:bg-fuchsia-500 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-fuchsia-900/20">Save Changes</button>
+                        <button className={`px-5 py-2.5 bg-${selectedAgent.color}-600 hover:bg-${selectedAgent.color}-500 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-${selectedAgent.color}-900/20`}>Save Changes</button>
                     </div>
                 </div>
             </div>
@@ -354,23 +396,30 @@ function AgentsView() {
 }
 
 function SkillsView() {
+    const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+
     return (
-        <div className="flex-1 p-10 overflow-y-auto fade-in">
-            <div className="max-w-6xl mx-auto">
-                <header className="mb-8 flex justify-between items-end">
+        <div className="flex-1 p-10 overflow-y-auto fade-in relative">
+            <div className="max-w-6xl mx-auto h-full flex flex-col">
+                <header className="mb-8 flex justify-between items-end shrink-0">
                     <div>
                         <h2 className="text-3xl font-bold text-white tracking-tight">Dynamic Skills</h2>
                         <p className="text-slate-400 mt-2 text-sm max-w-2xl leading-relaxed">
                             View and manage functional capabilities loaded into the agent context windows.
                         </p>
                     </div>
-                    <div className="relative">
-                        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                        <input type="text" placeholder="Filter skills..." className="w-64 bg-slate-900/50 border border-slate-800 rounded-lg pl-9 pr-4 py-2 text-sm text-slate-300 focus:outline-none focus:ring-1 focus:ring-cyan-500/50" />
+                    <div className="flex items-center gap-4">
+                        <div className="relative">
+                            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                            <input type="text" placeholder="Filter skills..." className="w-64 bg-slate-900/50 border border-slate-800 rounded-lg pl-9 pr-4 py-2 text-sm text-slate-300 focus:outline-none focus:ring-1 focus:ring-cyan-500/50" />
+                        </div>
+                        <button className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-cyan-900/20" onClick={() => setIsAddModalOpen(true)}>
+                            + Add Skill
+                        </button>
                     </div>
                 </header>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 flex-1 min-h-0 overflow-y-auto pb-10">
                     <div className="bg-slate-900/40 backdrop-blur-xl rounded-2xl border border-white/5 p-6 shadow-xl relative overflow-hidden group hover:bg-slate-900/60 transition-all">
                         <div className="absolute top-0 inset-x-0 h-px w-full bg-gradient-to-r from-transparent via-cyan-500/30 to-transparent"></div>
                         <div className="flex items-center gap-3 mb-4">
@@ -383,7 +432,7 @@ function SkillsView() {
 
                         <div className="flex items-center justify-between mt-auto">
                             <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold bg-slate-950/50 px-2.5 py-1 rounded border border-slate-800/60 text-emerald-400">System Required</span>
-                            <button className="text-xs font-semibold text-slate-400 hover:text-cyan-400 transition-colors">Details</button>
+                            <button className="text-xs font-semibold text-slate-400 hover:text-cyan-400 transition-colors" onClick={() => alert('Skill details panel would open here')}>Details</button>
                         </div>
                     </div>
 
@@ -399,11 +448,81 @@ function SkillsView() {
 
                         <div className="flex items-center justify-between mt-auto">
                             <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold bg-slate-950/50 px-2.5 py-1 rounded border border-slate-800/60">Managed</span>
-                            <button className="text-xs font-semibold text-slate-400 hover:text-cyan-400 transition-colors">Details</button>
+                            <button className="text-xs font-semibold text-slate-400 hover:text-cyan-400 transition-colors" onClick={() => alert('Skill details panel would open here')}>Details</button>
                         </div>
                     </div>
                 </div>
             </div>
+
+            {/* Glassmorphic Modal Overlay */}
+            {isAddModalOpen && (
+                <div className="absolute inset-0 z-50 flex items-center justify-center p-10 fade-in">
+                    {/* Darker Blur Backdrop */}
+                    <div
+                        className="absolute inset-0 bg-slate-950/80 backdrop-blur-md"
+                        onClick={() => setIsAddModalOpen(false)}
+                    />
+
+                    {/* Modal Window */}
+                    <div className="bg-slate-900/90 border border-cyan-500/30 rounded-2xl shadow-[0_0_50px_rgba(6,182,212,0.1)] w-full max-w-2xl relative z-10 overflow-hidden flex flex-col max-h-[85vh]">
+                        {/* Top Gradient Bar */}
+                        <div className="absolute top-0 inset-x-0 h-1 w-full bg-gradient-to-r from-cyan-500 to-blue-500"></div>
+
+                        <header className="px-6 py-5 border-b border-slate-800/60 flex items-center justify-between shrink-0">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 rounded-lg bg-cyan-500/20 text-cyan-400">
+                                    <ListTree className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-bold text-white tracking-tight">Add Dynamic Skill</h3>
+                                    <p className="text-xs text-slate-400">Create a new Python or Node capability</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setIsAddModalOpen(false)}
+                                className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </header>
+
+                        <div className="p-6 overflow-y-auto flex flex-col gap-6">
+                            <div>
+                                <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Skill Name</label>
+                                <input type="text" placeholder="e.g. format_date" className="w-full bg-slate-950/50 border border-slate-800 rounded-lg px-4 py-2.5 text-sm font-mono text-slate-300 focus:outline-none focus:ring-1 focus:ring-cyan-500/50" />
+                            </div>
+
+                            <div>
+                                <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Description</label>
+                                <input type="text" placeholder="Explains what this tool does to the LLM" className="w-full bg-slate-950/50 border border-slate-800 rounded-lg px-4 py-2.5 text-sm text-slate-300 focus:outline-none focus:ring-1 focus:ring-cyan-500/50" />
+                            </div>
+
+                            <div className="flex-1 flex flex-col min-h-[200px]">
+                                <div className="flex items-center justify-between mb-2">
+                                    <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold">Execution Code</label>
+                                    <span className="text-[10px] font-mono text-slate-500 bg-slate-800 px-2 py-0.5 rounded">Python 3.10</span>
+                                </div>
+                                <textarea
+                                    className="w-full flex-1 bg-slate-950/80 border border-slate-800 rounded-lg px-4 py-3 text-sm font-mono text-cyan-300 focus:outline-none focus:border-cyan-500/50 resize-none leading-relaxed"
+                                    defaultValue={"def execute(args):\n    # Context: worker execution sandbox\n    return {\"status\": \"success\"}\n"}
+                                />
+                            </div>
+                        </div>
+
+                        <footer className="px-6 py-4 bg-slate-950/50 border-t border-slate-800/60 flex justify-end gap-3 shrink-0">
+                            <button
+                                onClick={() => setIsAddModalOpen(false)}
+                                className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button className="px-5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-cyan-900/20">
+                                Save Skill
+                            </button>
+                        </footer>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
