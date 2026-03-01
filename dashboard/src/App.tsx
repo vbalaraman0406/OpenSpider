@@ -1370,8 +1370,8 @@ export default function App() {
                         return;
                     }
 
-                    if (msg.data.startsWith('[You]')) setIsTyping(true);
-                    if (msg.data.startsWith('[Agent]')) setIsTyping(false);
+                    if (msg.data.includes('[You]')) setIsTyping(true);
+                    if (msg.data.includes('[Agent]')) setIsTyping(false);
 
                     setLogs(prev => [...prev.slice(-49999), msg]); // Keep last 50000 logs to prevent chat eviction
                 } else if (msg.type === 'chat_response') {
@@ -1596,9 +1596,9 @@ export default function App() {
                                     if (isVerbose) return true;
                                     const text = log.data.trim(); // MUST Be trimmed so \n doesn't break startsWith!
                                     // In non-verbose mode, strictly only show User questions and final Agent answers
-                                    if (text.startsWith('[You]')) return true;
+                                    if (text.includes('[You]')) return true;
 
-                                    if (text.startsWith('[Agent]')) {
+                                    if (text.includes('[Agent]')) {
                                         // Filter out intermediate [Agent] system/status updates
                                         if (text.includes('OpenSpider is processing')) return false;
                                         if (text.includes('Sending structured request')) return false;
@@ -1609,16 +1609,17 @@ export default function App() {
                                     return false;
                                 }).map((log, i) => {
                                     const text = log.data.trim();
-                                    const isUser = text.startsWith('[You]');
-                                    const isAgent = text.startsWith('[Agent]');
+                                    const isUser = text.includes('[You]');
+                                    const isAgent = text.includes('[Agent]');
                                     const isSystem = !isUser && !isAgent;
 
                                     // Strip the prefixes
                                     let content = text;
-                                    if (isUser) content = content.replace('[You] ', '');
-                                    else if (isAgent) {
-                                        content = content.replace(/\[Agent\] Plan execution finished successfully\. Final Output:?[\s\n]*/g, '');
-                                        content = content.replace(/^\[Agent\]\s*/, '');
+                                    if (isUser) {
+                                        content = content.substring(content.indexOf('[You]') + 5).trim();
+                                    } else if (isAgent) {
+                                        content = content.substring(content.indexOf('[Agent]') + 7).trim();
+                                        content = content.replace(/Plan execution finished successfully\. Final Output:?[\s\n]*/g, '').trim();
                                     }
 
                                     return (

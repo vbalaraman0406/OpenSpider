@@ -198,10 +198,15 @@ export async function startWhatsApp() {
         // We require either text or image
         const imageMessage = msg.message.imageMessage || msg.message.extendedTextMessage?.contextInfo?.quotedMessage?.imageMessage;
 
-        // Fast-path composing trigger: Fire instantly before the Ghost Trap so self-messages show a typing
-        // bubble instantaneously while Baileys negotiates the 2-second Bad MAC retry in the background.
-        if (msg.key.fromMe && msg.key.remoteJid) {
-            sock.sendPresenceUpdate('composing', msg.key.remoteJid).catch(() => { });
+        // Fast-path composing trigger: Fire instantly before the Ghost Trap so messages show a typing
+        // bubble instantaneously while Baileys negotiates the Bad MAC retry in the background.
+        // For @lid JIDs (self-message device proxies), reroute composing to the bot's primary JID.
+        if (msg.key.remoteJid) {
+            const botIdStr = sock.user?.id ? sock.user.id.split(':')[0] : '';
+            const composingTarget = msg.key.remoteJid.includes('@lid')
+                ? `${botIdStr}@s.whatsapp.net`
+                : msg.key.remoteJid;
+            sock.sendPresenceUpdate('composing', composingTarget).catch(() => { });
         }
 
         // 🔥 BAD MAC NUCLEAR GHOST TRAP 🔥
@@ -248,9 +253,16 @@ export async function startWhatsApp() {
 
         const botIdString = sock.user?.id ? sock.user.id.split(':')[0] : '';
         const botJid = `${botIdString}@s.whatsapp.net`;
-        const replyJid = msg.key.remoteJid!;
+
+        // For self-messages, the remoteJid often arrives as an @lid device proxy which is
+        // invisible in the chat UI. Route replies to the bot's primary @s.whatsapp.net JID
+        // so messages actually appear in the "Message Yourself" chat window.
+        const replyJid = (isNoteToSelf && msg.key.remoteJid?.includes('@lid'))
+            ? botJid
+            : msg.key.remoteJid!;
 
         // Acknowledge receipt natively with a continuous typing indicator heartbeat
+        // Following OpenClaw's pattern: always attempt composing, silently catch failures.
         let composingInterval: NodeJS.Timeout | null = null;
         try {
             await sock.sendPresenceUpdate('composing', replyJid);
@@ -258,7 +270,7 @@ export async function startWhatsApp() {
                 sock.sendPresenceUpdate('composing', replyJid).catch(() => { });
             }, 8000);
         } catch (e) {
-            console.error('[WhatsApp] Failed to send initial composing presence:', e);
+            // Silently swallow — Meta may reject composing for self-JIDs but connection stays alive
         }
 
         try {
@@ -320,11 +332,11 @@ export async function startWhatsApp() {
             }
 
             // Clear typing indicator
-            await sock.sendPresenceUpdate('paused', replyJid);
+            await sock.sendPresenceUpdate('paused', replyJid).catch(() => { });
 
         } catch (error: any) {
             if (composingInterval) clearInterval(composingInterval);
-            await sock.sendPresenceUpdate('paused', replyJid);
+            await sock.sendPresenceUpdate('paused', replyJid).catch(() => { });
             await sock.sendMessage(replyJid, { text: `❌ *Error processing request:*\n${error.message}` });
         }
     });
