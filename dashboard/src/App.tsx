@@ -1594,7 +1594,7 @@ export default function App() {
                                     </div>
                                 ) : logs.filter(log => {
                                     if (isVerbose) return true;
-                                    const text = log.data;
+                                    const text = log.data.trim(); // MUST Be trimmed so \n doesn't break startsWith!
                                     // In non-verbose mode, strictly only show User questions and final Agent answers
                                     if (text.startsWith('[You]')) return true;
 
@@ -1608,16 +1608,17 @@ export default function App() {
                                     // Hide absolutely everything else (raw JSON, [Server], [Web Chat], [Manager], [Worker])
                                     return false;
                                 }).map((log, i) => {
-                                    const isUser = log.data.startsWith('[You]');
-                                    const isAgent = log.data.startsWith('[Agent]');
+                                    const text = log.data.trim();
+                                    const isUser = text.startsWith('[You]');
+                                    const isAgent = text.startsWith('[Agent]');
                                     const isSystem = !isUser && !isAgent;
 
                                     // Strip the prefixes
-                                    let content = log.data;
+                                    let content = text;
                                     if (isUser) content = content.replace('[You] ', '');
                                     else if (isAgent) {
                                         content = content.replace(/\[Agent\] Plan execution finished successfully\. Final Output:?[\s\n]*/g, '');
-                                        content = content.replace('[Agent] ', '');
+                                        content = content.replace(/^\[Agent\]\s*/, '');
                                     }
 
                                     return (
