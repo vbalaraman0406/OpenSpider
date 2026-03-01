@@ -1,81 +1,42 @@
 # OpenSpider Handoff Document
 
-This document serves as a comprehensive context summary for the next agent picking up the development of the **OpenSpider** framework.
+## Session Summary (March 1, 2026)
 
-## Project Overview
+This session focused heavily on fixing edge cases surrounding WhatsApp's "Message Yourself" feature and the React Dashboard Web UI chat rendering.
 
-OpenSpider is an autonomous, hierarchical multi-agent system designed to act aggressively and autonomously, executing tools without waiting for user permission unless absolutely necessary. It features a robust WhatsApp integration for remote control and an Apple-style, premium glassmorphic web dashboard for complete system visibility.
+### 1. The 503 Service Unavailable Error (Presence Updates)
+- **Problem**: When the user texted the bot using their own number ("Message Yourself"), the bot would send a `composing` (typing) presence update back to the sender's JID (`@s.whatsapp.net`). Meta's servers forbid sending presence updates to yourself and instantly crash the connection with a HTTP 503 Service Unavailable stream error.
+- **Fix**: We added a strict `isNoteToSelf` check. We ensure that we only send `composing` and `paused` presence updates if the sender is not the bot's own number.
 
-### Core Architecture
-- **Language:** TypeScript/Node.js for both the backend engine and frontend dashboard.
-- **Backend:** Express API serving the Dashboard and managing a native WebSocket (`ws`) layer for real-time telemetry, logs, and gateway status.
-- **Frontend Dashboard:** A Vite + React web application (`dashboard/`) running on port `4000`.
-- **LLM Engine:** A flexible inference engine (`src/llm/`) supporting OpenAI (GPT-4o) and internal custom providers (e.g., Antigravity-Internal).
-- **Communication Channel:** An implemented `WhatsAppChannel` utilizing `whatsapp-web.js` with session persistence, falling back to a Terminal UI if WhatsApp is unconfigured/fails.
-- **Agent Hierarchy:** 
-    - `ManagerAgent`: The primary gateway that parses incoming channel messages and orchestrates workers.
-    - `WorkerAgent`: Specialized agents spun up by the Manager to execute specific tasks (Python code execution, web searches) in isolated contexts.
+### 2. The "Ghost Payload" (Bad MAC) Decryption Error
+- **Problem**: "Message Yourself" packets from linked devices occasionally desync the end-to-end encryption ratchets. `libsignal` throws a "Bad MAC" error and strips the payload, resulting in an empty message hitting the Baileys event listener.
+- **Discovery**: We reviewed the legacy `OpenClaw` codebase and discovered that OpenClaw simply dropped these messages silently. In OpenSpider, Baileys' native `msgRetryCounterCache` catches this Bad MAC and securely requests a fresh key from Meta, re-delivering the true payload approximately 2 seconds later.
+- **Fix**: We removed the noisy `console.warn` statements about the "Ghost Payload" so the terminal remains clean while the native Baileys retry orchestration happens transparently in the background.
 
----
+### 3. Web UI Chat Rendering Broken by Logger Formatting
+- **Problem**: The user noticed that the React Dashboard Web UI was no longer showing new chat bubbles.
+- **Discovery**: We had added `\n` prefixes to the `console.log("[You] ...")` and `console.log("[Agent] ...")` statements in the backend (`whatsapp.ts`) to make terminal logs cleaner. However, the frontend (`App.tsx`) parsed these logs via WebSocket and strictly checked `if (log.data.startsWith('[You]'))`. The leading newlines broke the matcher, causing the frontend to silently drop all chat messages.
+- **Fix**: We modified the frontend parser in `dashboard/src/App.tsx` to call `.trim()` on the log data before performing the `startsWith` checks. We also recompiled and deployed the React frontend.
 
-## Completed Work (Phases 1-6)
+### 4. The Native "Typing..." Bubble for Self-Messages (Current Issue)
+- **Problem**: The user strongly preferred seeing the native "typing..." WhatsApp bubble when talking to the bot, *even* when using the "Message Yourself" feature, instead of a custom emoji reaction (⏳).
+- **Attempted Fixes**: 
+  - We reverted the `replyJid` logic to route outbound messages and presence updates strictly to `msg.key.remoteJid`. For multi-device self-messages, this JID often comes in as an encrypted Device Proxy ID (`...something...@lid`).
+  - We attempted a "Fast-Path Composing Trigger" very early in the `whatsapp.ts` `messages.upsert` handler:
+    ```typescript
+    if (msg.key.fromMe && msg.key.remoteJid) {
+        sock.sendPresenceUpdate('composing', msg.key.remoteJid).catch(() => {});
+    }
+    ```
+    This was intended to fire the "typing..." indicator *before* the empty Ghost Payload is dropped by the Bad MAC trap, masking the 2-second decryption retry delay.
 
-### Phase 1: Core Engine & Gateway Foundation
-- Setup the TypeScript project structure (`src/`, `dashboard/`).
-- Implemented `AntigravityProvider` and `OpenAIProvider` for LLM inference.
-- Created the core `Server` architecture handling Express API routes and WebSocket broadcasting.
+## Current Broken State (For the Next Agent)
 
-### Phase 2: Multi-Channel Communication Layer
-- Built the `WhatsAppChannel` for authenticating and receiving/sending remote messages.
-- Created a robust Terminal UI (`cli-tui.ts`) fallback mechanism for local testing when WhatsApp isn't available. Both route to the `ManagerAgent`.
+The user reported two critical failures with the current active build:
+1. **Typing Bubble Delay**: The 2-second delay in the typing bubble is *still* happening on self-messages, suggesting the fast-path trigger is failing to reach the device proxy, or Baileys queues presence updates behind decryption retries.
+2. **Web UI Regression**: The React Web UI has completely lost all WhatsApp messages again and is not displaying new messages. The frontend parsing logic or WebSocket broadcasting might be broken again.
 
-### Phase 3: Telemetry & Tracing
-- Implemented a unified system logger that intercepts `console.log/warn/error` and broadcasts them as JSONL over WebSockets to the dashboard.
-- Implemented Token Usage tracking metrics, streaming exact token counts and costs per completion to the dashboard. 
-
-### Phase 4: Apple-Style Dashboard Overhaul
-- Configured Vite + React with TailwindCSS for the dashboard.
-- Implemented a premium, dark-mode, glassmorphic UI system (`backdrop-blur-xl`, `bg-slate-900/40`, colored glows).
-- Rebuilt the landing experience into a multi-tab router with a sophisticated Sidebar.
-- Completely redesigned the "Channels Manager" to show running channels (WhatsApp) as beautiful, animated cards.
-
-### Phase 5: OpenClaw Feature Parity
-Added five new dedicated views to achieve feature parity with the reference "OpenClaw" architecture:
-- **Overview:** Gateway specs, connection strings, instances, and cron active queues.
-- **Sessions:** Fine-grained log of active session keys and token tracking tables.
-- **Agents:** Workspace to inspect `ManagerAgent` and `WorkerAgent` identity definitions and system prompts.
-- **Skills:** Management grid of loaded tools (`web_search`, `run_python`).
-- **Logs:** A JSONL telemetry tab with Trace/Debug/Info/Error severity switches and auto-tailing behavior.
-
-### Phase 6: Interactive UI Components
-- Wired up the **Agents Workspace** view with state management (`useState`) to allow selecting different agents (e.g., Gateway Architect vs. Data Analyst) from a list, instantly updating the right-hand details pane.
-- Established a **Glassmorphic Modal Overlay** pattern for data entry. 
-- Implemented the `+ Add Skill` button to trigger a sleek, blurred modal overlay containing an execution code editor instead of navigating away to a new page.
-
----
-
-## Current State & Known Issues
-
-- **Build Status:** The dashboard compiles successfully via `npm run build` and serves static assets from `dashboard/dist` via the Express server on port `4000`. 
-- **API Wiring:** The dashboard views (Overview, Sessions, Agents, Skills) are largely populated with **mock data state/arrays** to establish the glassmorphic aesthetics and verify layouts. The UI looks incredible and interactions work, but it is not pulling actual live internal state from the Node.js backend yet.
-
----
-
-## Pending Objectives (Next Steps)
-
-For the next agent picking up this context, here is what needs to be accomplished to make OpenSpider a production-ready system:
-
-1. **Connect Dashboard to Backend Live State:**
-   - The React components in `dashboard/src/App.tsx` (like `AgentsView` and `SkillsView`) need to fetch real configuration data from the Express backend via REST (`/api/agents`, `/api/skills`) instead of using hardcoded mock arrays.
-   - Wire the active session tables and overview stats to live system metrics.
-
-2. **Implement Modal Business Logic:**
-   - The newly created `+ Add Skill` modal only controls UI state. You need to implement the backend `POST` endpoint to actually save dynamically generated Python/Node code snippets to the file system or database.
-   - Build a similar Glassmorphic Modal overlay for the "Create Agent" button in the Agents Workspace.
-
-3. **Complete the Agentic Loop:**
-   - Ensure the `ManagerAgent` logic correctly parses intent and dispatches to the `WorkerAgent`.
-   - Ensure the `WorkerAgent` can natively read the dynamic skills loaded from the interface and execute them in a secure sandbox context.
-
-4. **Testing workflows:**
-   - Test an end-to-end flow: Send a message via WhatsApp -> Manager routes to Worker -> Worker executes a dynamic python script skill -> Result sends back via WhatsApp. All while the live traces are observable on the Dashboard Logs view.
+### Next Steps for the Incoming Agent:
+1. Check `pm2 logs openspider-gateway` and verify the `msg.key.remoteJid` for self-messages. Why is the early `sendPresenceUpdate('composing', msg.key.remoteJid)` failing, or is it blocked by the 503 error again?
+2. Check `dashboard/src/App.tsx` log filtering logic. Did the recent `.trim()` fix regress, or is the backend no longer dispatching the exact `[You]` and `[Agent]` string structures?
+3. Carefully review `whatsapp.ts` line ~190-250. The interplay between `isNoteToSelf`, `@lid` proxies, the Bad MAC return trap, and the presence update is brittle and needs a robust architectural cleanup.
