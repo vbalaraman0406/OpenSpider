@@ -35,13 +35,20 @@ export async function startWhatsApp() {
     console.log(`[WhatsApp] Using WA v${version.join('.')}, isLatest: ${isLatest}`);
 
     const pino = require('pino');
+    const NodeCache = require('node-cache');
+    const msgRetryCounterCache = new NodeCache();
+
     const sock = makeWASocket({
         version,
         printQRInTerminal: true,
         auth: state,
         logger: pino({ level: 'error' }),
         markOnlineOnConnect: true,
-        syncFullHistory: false
+        syncFullHistory: false,
+        msgRetryCounterCache,
+        getMessage: async (key) => {
+            return { conversation: '' } as any;
+        }
     });
 
     globalSocket = sock;
@@ -94,16 +101,6 @@ export async function startWhatsApp() {
         // Keep memory footprint small
         if (processedMessageIds.size > 5000) processedMessageIds.delete(Array.from(processedMessageIds)[0]!);
 
-        // Handle Decryption Failures natively (WAMessageStubType.CIPHERTEXT === 2)
-        if (msg.messageStubType === WAMessageStubType.CIPHERTEXT || msg.messageStubType === 24) {
-            console.warn(`\n⚠️ [WhatsApp] Decryption Failure for ${msg.key.remoteJid}. Force-flushing libsignal session to trigger retry...`);
-            if (msg.key.remoteJid) {
-                // Force drop the broken session so Meta servers issue a fresh pre-key bundle on the automatic retry
-                await state.keys.set({ 'session': { [msg.key.remoteJid]: null } });
-            }
-            return;
-        }
-
         // We ignore automated broadcasts/status updates
         if (!msg.message || msg.key.remoteJid === 'status@broadcast') return;
 
@@ -112,18 +109,6 @@ export async function startWhatsApp() {
 
         console.log(`\n[DEBUG - RAW WA MSG] fromMe: ${msg.key.fromMe}, remoteJid: ${msg.key.remoteJid}, text: ${textMessage}`);
         const isGroup = msg.key.remoteJid?.endsWith('@g.us');
-
-        // 🔥 BAD MAC NUCLEAR TRAP 🔥
-        // 'Message Yourself' packets from companion devices frequently de-sync end-to-end encryption ratchets.
-        // Libsignal throws a "Bad MAC" error internally and completely strips the payload, delivering a ghost message.
-        if (msg.key.fromMe && !msg.message?.imageMessage && textMessage.trim() === '') {
-            console.warn(`\n☢️ [WhatsApp] BAD MAC DETECTED! 'Message Yourself' payload from ${msg.key.remoteJid} was stripped natively by libsignal.`);
-            console.warn(`☢️ [WhatsApp] Nuking corrupted cryptographic session to force Meta key-exchange...`);
-            if (msg.key.remoteJid) {
-                await state.keys.set({ 'session': { [msg.key.remoteJid]: null } });
-            }
-            return; // Drop the ghost message so it doesn't crash the Manager Agent
-        }
 
         let isNoteToSelf = false;
         // Prevent Infinite Loops without hardcoded signatures:
