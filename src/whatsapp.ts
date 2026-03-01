@@ -242,20 +242,17 @@ export async function startWhatsApp() {
 
         const botIdString = sock.user?.id ? sock.user.id.split(':')[0] : '';
         const botJid = `${botIdString}@s.whatsapp.net`;
-        const replyJid = (isNoteToSelf && (msg.key.remoteJid?.includes('@lid') || !msg.key.remoteJid)) ? botJid : msg.key.remoteJid!;
+        const replyJid = msg.key.remoteJid!;
 
         // Acknowledge receipt natively with a continuous typing indicator heartbeat
-        // We MUST NOT send presence updates to our own number, otherwise Meta throws a 503 stream error!
         let composingInterval: NodeJS.Timeout | null = null;
-        if (!isNoteToSelf) {
-            try {
-                await sock.sendPresenceUpdate('composing', replyJid);
-                composingInterval = setInterval(() => {
-                    sock.sendPresenceUpdate('composing', replyJid).catch(() => { });
-                }, 8000);
-            } catch (e) {
-                console.error('[WhatsApp] Failed to send initial composing presence:', e);
-            }
+        try {
+            await sock.sendPresenceUpdate('composing', replyJid);
+            composingInterval = setInterval(() => {
+                sock.sendPresenceUpdate('composing', replyJid).catch(() => { });
+            }, 8000);
+        } catch (e) {
+            console.error('[WhatsApp] Failed to send initial composing presence:', e);
         }
 
         try {
@@ -317,9 +314,7 @@ export async function startWhatsApp() {
             }
 
             // Clear typing indicator
-            if (!isNoteToSelf) {
-                await sock.sendPresenceUpdate('paused', replyJid);
-            }
+            await sock.sendPresenceUpdate('paused', replyJid);
 
         } catch (error: any) {
             if (composingInterval) clearInterval(composingInterval);
