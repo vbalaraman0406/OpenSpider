@@ -33,7 +33,7 @@ export function readMemoryContext(): string {
 
             // --- OpenClaw Cognitive Compaction ---
             // Prevent runaway token bloat by applying a strict sliding window on raw transcripts.
-            const MAX_MEMORY_CHARS = 12000;
+            const MAX_MEMORY_CHARS = 100000;
             if (todayLog.length > MAX_MEMORY_CHARS) {
                 console.log(`[Compaction] Daily transcript exceeds token limit. Pruning historical chatter...`);
                 const truncatedIndex = todayLog.indexOf('\n\n', todayLog.length - MAX_MEMORY_CHARS);
