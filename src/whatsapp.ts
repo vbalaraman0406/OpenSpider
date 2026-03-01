@@ -95,11 +95,8 @@ export async function startWhatsApp() {
         const msg = m.messages[0];
         if (!msg || typeof msg.key.id !== 'string') return;
 
-        // Message Deduplication
+        // Message Deduplication Check (Do not add to cache yet!)
         if (processedMessageIds.has(msg.key.id!)) return;
-        processedMessageIds.add(msg.key.id!);
-        // Keep memory footprint small
-        if (processedMessageIds.size > 5000) processedMessageIds.delete(Array.from(processedMessageIds)[0]!);
 
         // We ignore automated broadcasts/status updates
         if (!msg.message || msg.key.remoteJid === 'status@broadcast') return;
@@ -198,10 +195,27 @@ export async function startWhatsApp() {
             }
         }
         // --- END FIREWALL ---
-
         // We require either text or image
         const imageMessage = msg.message.imageMessage || msg.message.extendedTextMessage?.contextInfo?.quotedMessage?.imageMessage;
+
+        // 🔥 BAD MAC NUCLEAR GHOST TRAP 🔥
+        // 'Message Yourself' packets occasionally de-sync end-to-end encryption ratchets.
+        // Libsignal throws a "Bad MAC" error internally and completely strips the payload.
+        // If we get an empty message from the user natively, it's a ghost packet.
+        // We drop it here BEFORE adding its ID to the LRU deduplication cache!
+        // This allows Baileys' native `msgRetryCounterCache` to securely negotiate a fresh key with Meta,
+        // and Meta will instantly re-send the payload with the EXACT same msg ID safely seconds later!
+        if (msg.key.fromMe && !imageMessage && textMessage.trim() === '') {
+            console.warn(`\n☢️ [WhatsApp] Ghost Payload Detected! 'Message Yourself' string from ${msg.key.remoteJid} was stripped natively by libsignal (Bad MAC).`);
+            console.warn(`☢️ [WhatsApp] Awaiting Baileys native MSG retry orchestration from Meta servers...`);
+            return;
+        }
+
         if (!textMessage && !imageMessage) return;
+
+        // Now that we verified this is a real, decrypted payload, add it to the LRU cache so we never process it twice!
+        processedMessageIds.add(msg.key.id!);
+        if (processedMessageIds.size > 5000) processedMessageIds.delete(Array.from(processedMessageIds)[0]!);
 
         // --- MESSAGE LOGGING & FIREWALL ---
         console.log(`\n\n[You] 📱 (WhatsApp) ${textMessage}`);
