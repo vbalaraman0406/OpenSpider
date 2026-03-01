@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Shield, ShieldAlert, ShieldCheck, Save, Users, MessageSquare, AlertTriangle, Fingerprint } from 'lucide-react';
+import { Shield, ShieldAlert, ShieldCheck, Save, Users, MessageSquare, AlertTriangle, Fingerprint, CheckCircle } from 'lucide-react';
 
 export function WhatsAppSecurity({ isRunning }: { isRunning: boolean }) {
     const [config, setConfig] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
+    const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
 
     // Tag Input States
     const [dmInput, setDmInput] = useState('');
@@ -42,15 +43,18 @@ export function WhatsAppSecurity({ isRunning }: { isRunning: boolean }) {
 
     const handleSave = async () => {
         setIsSaving(true);
+        setSaveStatus('saving');
         try {
             await fetch('/api/whatsapp/config', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(config)
             });
-            // Show a success animation or toast here if global context allows
+            setSaveStatus('saved');
+            setTimeout(() => setSaveStatus('idle'), 2500);
         } catch (e) {
             alert('Failed to save configuration');
+            setSaveStatus('idle');
         } finally {
             setIsSaving(false);
         }
@@ -115,10 +119,15 @@ export function WhatsAppSecurity({ isRunning }: { isRunning: boolean }) {
                 <button
                     onClick={handleSave}
                     disabled={isSaving}
-                    className={`px-6 py-2.5 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 shadow-lg ${isSaving ? 'bg-indigo-800 text-indigo-300 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-900/20'}`}
+                    className={`px-6 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300 flex items-center gap-2 shadow-lg ${saveStatus === 'saved'
+                            ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/30 scale-105'
+                            : saveStatus === 'saving'
+                                ? 'bg-amber-800 text-amber-200 cursor-not-allowed animate-pulse'
+                                : 'bg-amber-600 hover:bg-amber-500 text-white shadow-amber-900/30'
+                        }`}
                 >
-                    <Save className="w-4 h-4" />
-                    {isSaving ? 'Saving...' : 'Apply Security Rules'}
+                    {saveStatus === 'saved' ? <CheckCircle className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+                    {saveStatus === 'saved' ? '✓ Rules Applied!' : isSaving ? 'Saving...' : 'Apply Security Rules'}
                 </button>
             </div>
 
