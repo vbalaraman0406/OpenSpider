@@ -142,14 +142,33 @@ const channelsMenu = program
 channelsMenu
     .command('login')
     .description('View the live WhatsApp QR Code for authentication')
-    .action(() => {
-        console.log('\n🕷️ Searching for active WhatsApp QR Code stream (Press Ctrl+C to exit)...');
-        // Use npx pm2 logs to stream the QR code to the user's terminal
-        const pm2Logs = spawn('npx', ['pm2', 'logs', 'openspider-gateway', '--lines', '100'], { stdio: 'inherit' });
+    .action(async () => {
+        const fs = await import('node:fs');
+        const path = await import('node:path');
+        const qrcode = await import('qrcode-terminal');
+        const rootDir = __dirname.endsWith('src') ? path.join(__dirname, '..') : path.join(__dirname, '..');
+        const qrPath = path.join(rootDir, '.latest_qr.txt');
 
-        pm2Logs.on('close', (code) => {
-            process.exit(code ?? 0);
-        });
+        console.log('\n🕷️ Watching for WhatsApp QR Code from background engine (Press Ctrl+C to exit)...');
+        let lastQr = '';
+
+        const checkQr = () => {
+            if (fs.existsSync(qrPath)) {
+                const qr = fs.readFileSync(qrPath, 'utf-8');
+                if (qr !== lastQr && qr.trim() !== '') {
+                    console.clear();
+                    console.log('\n🕷️ [WhatsApp] Scan this live QR code to connect OpenSpider:');
+                    qrcode.default.generate(qr, { small: true });
+                    lastQr = qr;
+                }
+            } else if (lastQr) {
+                console.log('\n✅ OpenSpider successfully connected to WhatsApp!');
+                process.exit(0);
+            }
+        };
+
+        checkQr();
+        setInterval(checkQr, 1000);
     });
 
 const toolsMenu = program
