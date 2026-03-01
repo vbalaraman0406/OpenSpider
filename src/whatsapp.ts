@@ -218,7 +218,7 @@ export async function startWhatsApp() {
         if (processedMessageIds.size > 5000) processedMessageIds.delete(Array.from(processedMessageIds)[0]!);
 
         // --- MESSAGE LOGGING & FIREWALL ---
-        console.log(`\n\n[You] 📱 (WhatsApp) ${textMessage}`);
+        console.log(`[You] 📱 (WhatsApp) ${textMessage}`);
 
         // Extract Media Payload
         let mediaBase64String: string | undefined = undefined;
@@ -243,17 +243,21 @@ export async function startWhatsApp() {
         }
 
         const botIdString = sock.user?.id ? sock.user.id.split(':')[0] : '';
-        const replyJid = (isNoteToSelf && msg.key.remoteJid?.includes('@lid')) ? `${botIdString}@s.whatsapp.net` : msg.key.remoteJid!;
+        const botJid = `${botIdString}@s.whatsapp.net`;
+        const replyJid = (isNoteToSelf && msg.key.remoteJid?.includes('@lid')) ? botJid : msg.key.remoteJid!;
 
         // Acknowledge receipt natively with a continuous typing indicator heartbeat
+        // We MUST NOT send presence updates to our own number, otherwise Meta throws a 503 stream error!
         let composingInterval: NodeJS.Timeout | null = null;
-        try {
-            await sock.sendPresenceUpdate('composing', replyJid);
-            composingInterval = setInterval(() => {
-                sock.sendPresenceUpdate('composing', replyJid).catch(() => { });
-            }, 8000);
-        } catch (e) {
-            console.error('[WhatsApp] Failed to send initial composing presence:', e);
+        if (replyJid !== botJid) {
+            try {
+                await sock.sendPresenceUpdate('composing', replyJid);
+                composingInterval = setInterval(() => {
+                    sock.sendPresenceUpdate('composing', replyJid).catch(() => { });
+                }, 8000);
+            } catch (e) {
+                console.error('[WhatsApp] Failed to send initial composing presence:', e);
+            }
         }
 
         try {
@@ -299,7 +303,7 @@ export async function startWhatsApp() {
 
             if (cleanResponse.length > 0) {
                 // Broadcast to Web Dashboard UI!
-                console.log(`\n[Agent] ${cleanResponse.trim()}`);
+                console.log(`[Agent] ${cleanResponse.trim()}`);
 
                 // Send result back to WhatsApp with sleek dynamic header
                 console.log(`[DEBUG] Attempting to send outbound message to jid: ${replyJid}`);
@@ -315,7 +319,9 @@ export async function startWhatsApp() {
             }
 
             // Clear typing indicator
-            await sock.sendPresenceUpdate('paused', replyJid);
+            if (replyJid !== botJid) {
+                await sock.sendPresenceUpdate('paused', replyJid);
+            }
 
         } catch (error: any) {
             if (composingInterval) clearInterval(composingInterval);
