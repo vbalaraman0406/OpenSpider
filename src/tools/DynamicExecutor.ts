@@ -60,8 +60,13 @@ export class DynamicExecutor {
         const blocklistedCmds = ['rm -rf', 'mkfs', 'dd if=', 'sudo ', 'chown ', 'chmod 777'];
         for (const bad of blocklistedCmds) {
             if (command.toLowerCase().includes(bad)) {
-                return { stdout: '', stderr: '', error: `Security Guard: Command blocked by Sandbox policy: ${bad}` };
+                return { stdout: '', stderr: '', error: `Security Guard: Command blocked by Sandbox policy: ${bad}.` };
             }
+        }
+
+        // Strict regex for filesystem scanning outside of project
+        if (/(find|grep|ls|tree)\s+[\/~]/.test(command.toLowerCase()) || command.toLowerCase().includes('find /')) {
+            return { stdout: '', stderr: '', error: `Security Guard: Command blocked. You are strictly forbidden from scanning the root or home filesystem using find/grep/ls on '/' or '~'. ONLY work within the current directory using './'` };
         }
         try {
             const { stdout, stderr } = await execAsync(command, { cwd: this.skillsDir, timeout: 30000 }); // strict 30s timeout

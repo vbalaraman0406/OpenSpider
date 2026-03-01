@@ -59,6 +59,9 @@ If the user is simply saying hello, asking a basic question about you, or making
 When using the 'direct_response' field, ALWAYS format your output to be user-friendly. Use GitHub flavored markdown and clean tables for structural data.
 CRITICAL JSON TRUNCATION RULE: The backend API has a hard limit of 1500 output tokens. If your response exceeds this length, it will be forcefully clipped, causing a fatal JSON parse crash. Keep your generated "plan" steps reasonably concise. HOWEVER, DO NOT instruct your delegated Worker Agents to be concise. You MUST command them to return the most highly detailed, comprehensive markdown tables possible when scraping data.
 
+[WHATSAPP NATIVE FEATURES]
+If the user is asking a question that requires multiple choices, or you want to survey them, you can output a native WhatsApp Poll anywhere in your response using the tags: \`[POLL]Question|Option A|Option B|Option C[/POLL]\`. WhatsApp allows a max of 12 options. You can also utilize this when asking the user for context or how they wish to proceed.
+
 Analyze the prompt and return a JSON object.
 A step can either be:
 1. "task": A standard sequential step executed by a single agent.

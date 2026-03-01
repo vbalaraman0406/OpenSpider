@@ -52,13 +52,15 @@ If you need a package, write a script that installs it or ask to run npm install
 Your goal is to complete the task autonomously and return the final result.
 CRITICAL TOKEN RULE: Do not print massive HTML dumps. Use Python to parse, summarize, and extract ONLY the exact data you need. Your tool output context is truncated to 3000 characters.
 CRITICAL JSON TRUNCATION RULE: The backend API has a hard limit of 1500 output tokens. If your response exceeds this length, it will be forcefully clipped, causing a fatal JSON parse crash. You MUST keep your 'thought' string under 500 words and be concise in your intermediate steps to prevent array string truncation!
+CRITICAL MACOS PRIVACY RULE: NEVER run commands to search, list, or read files in \`~/Desktop\`, \`~/Documents\`, or \`~/Downloads\` as this will trigger a strict macOS GUI permission dialog that blocks the backend. You must ONLY work within the current project directory \`${process.cwd()}\`.
 ${assignedSkillsContext}
 
 Available tools you can request in your JSON response:
-- run_command: { "command": "echo hello" }
-- write_script: { "filename": "test.py", "content": "print('hello')" }
-- execute_script: { "filename": "test.py", "args": "" }
-- message_agent: { "target": "Role Name", "message": "Text to send" }
+- run_command: { "command": "echo hello" } (Run a bash command within the project environment)
+- write_script: { "filename": "test.py", "content": "print('hello')" } (Write a code script to disk)
+- execute_script: { "filename": "test.py", "args": "" } (Execute a dynamically written script)
+- message_agent: { "target": "Role Name", "message": "Text to send" } (Delegate a sub-task to a specialized sub-agent)
+- send_email: { "to": "user@example.com", "subject": "Hello", "body": "My message here" } (Send an outbound email natively using OAuth. Use this automatically if asked to email someone.)
 - final_answer: { "result": "The final output" } (CRITICAL: You MUST include the 'result' key containing your answer)
 
 CRITICAL FORMATTING INSTRUCTION: 
@@ -91,20 +93,23 @@ ${context.join('\n')}
             let response;
             try {
                 response = await this.llm.generateStructuredOutputs<{
-                    action: 'run_command' | 'write_script' | 'execute_script' | 'message_agent' | 'final_answer';
+                    action: 'run_command' | 'write_script' | 'execute_script' | 'message_agent' | 'send_email' | 'final_answer';
                     command?: string;
                     filename?: string;
                     content?: string;
                     args?: string;
                     target?: string;
                     message?: string;
+                    to?: string;
+                    subject?: string;
+                    body?: string;
                     result?: string;
                     summary_of_findings: string;
                     thought: string;
                 }>(messages, {
                     type: "object",
                     properties: {
-                        action: { type: "string", enum: ["run_command", "write_script", "execute_script", "message_agent", "final_answer"] },
+                        action: { type: "string", enum: ["run_command", "write_script", "execute_script", "message_agent", "send_email", "final_answer"] },
                         thought: { type: "string" },
                         summary_of_findings: { type: "string", description: "A highly compressed, 1-2 sentence memory of what you learned in this step. Retained forever even if thoughts are pruned." },
                         command: { type: "string" },
@@ -113,9 +118,12 @@ ${context.join('\n')}
                         args: { type: "string" },
                         target: { type: "string" },
                         message: { type: "string" },
+                        to: { type: "string" },
+                        subject: { type: "string" },
+                        body: { type: "string" },
                         result: { type: "string", description: "The final answer or result string when action is final_answer" },
                     },
-                    required: ["action", "thought", "summary_of_findings", "result"]
+                    required: ["action", "thought", "summary_of_findings"]
                 }, this.role);
             } catch (e: any) {
                 console.warn(`\n⚠️ [Worker - ${this.role}] JSON Parse Error. Requesting LLM Self-Healing...`);
@@ -133,7 +141,10 @@ ${context.join('\n')}
             // Log the thought process (useful for the DB / Dashboard later)
             console.log(`[Worker - ${this.role}] Thought: ${response.thought}`);
             console.log(`[Worker - RAW RESPONSE]`, JSON.stringify(response));
-            messages.push({ role: 'assistant', content: JSON.stringify(response) });
+
+            // CRITICAL FIX: To prevent "This model does not support assistant message prefill" crashes on strict providers
+            // We append previous actions as 'user' system logs rather than 'assistant' message prefills.
+            messages.push({ role: 'user', content: `[PRIOR AGENT ACTION HISTORY]: \n${JSON.stringify(response)}` });
 
             if (response.action === 'final_answer') {
                 return response.result || response.summary_of_findings || "Task completed without explicit result.";
@@ -169,8 +180,26 @@ ${context.join('\n')}
                     const subResult = await subWorker.executeTask(response.message, subWorkerContext);
 
                     toolOutput = `Response from ${response.target}:\n${subResult}`;
+                } else if (response.action === 'send_email' && response.to && response.subject && response.body) {
+                    console.log(`[Worker - ${this.role}] Dispatching email to ${response.to}...`);
+                    try {
+                        const path = require('node:path');
+                        const { execSync } = require('node:child_process');
+                        const rootDir = __dirname.endsWith('src') ? path.join(__dirname, '..', '..') : path.join(__dirname, '..', '..');
+                        const pythonScript = path.join(rootDir, 'skills', 'send_email.py');
+
+                        // We safely escape quotes to prevent injection into the python args
+                        const safeTo = response.to.replace(/"/g, '\\"');
+                        const safeSubject = response.subject.replace(/"/g, '\\"');
+                        const safeBody = response.body.replace(/"/g, '\\"');
+
+                        const stdout = execSync(`python3 "${pythonScript}" --to "${safeTo}" --subject "${safeSubject}" --body "${safeBody}"`);
+                        toolOutput = `Email sent successfully:\n${stdout.toString()}`;
+                    } catch (e: any) {
+                        toolOutput = `Failed to send email. Ensure OAuth is configured via 'openspider tools email setup'. Error: ${e.message}\n${e.stdout?.toString() || ''}\n${e.stderr?.toString() || ''}`;
+                    }
                 } else {
-                    toolOutput = `Invalid action or missing parameters. You requested '${response.action}'. Check the schema. run_command needs 'command', write_script needs 'filename' and 'content', execute_script needs 'filename', message_agent needs 'target' and 'message'. You provided: ${JSON.stringify(response)}`;
+                    toolOutput = `Invalid action or missing parameters. You requested '${response.action}'. Check the schema. run_command needs 'command', write_script needs 'filename' and 'content', send_email needs 'to', 'subject', and 'body'. You provided: ${JSON.stringify(response)}`;
                 }
             } catch (e: any) {
                 toolOutput = `Tool execution failed: ${e.message}`;

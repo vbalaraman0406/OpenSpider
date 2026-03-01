@@ -6,4 +6,4 @@ dist/
 *.d.ts.map
 openclaw_examine/
 test-proxy-*
-.env
+workspace/

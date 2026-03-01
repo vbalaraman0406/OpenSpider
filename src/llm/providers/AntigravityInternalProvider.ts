@@ -353,7 +353,7 @@ export class AntigravityInternalProvider implements LLMProvider {
                     let jsonStr = cleanJSON.substring(firstBrace, lastBrace + 1);
 
                     // Regex to broadly capture standard agent keys
-                    const keys = ["thought", "action", "command", "target", "args", "filename", "content", "message", "summary_of_findings", "result"];
+                    const keys = ["thought", "action", "command", "target", "args", "filename", "content", "message", "to", "subject", "body", "summary_of_findings", "result"];
 
                     const extracted: Record<string, string> = {};
 
