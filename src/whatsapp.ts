@@ -204,9 +204,12 @@ export async function startWhatsApp() {
             }
         }
 
+        const botIdString = sock.user?.id ? sock.user.id.split(':')[0] : '';
+        const replyJid = (isNoteToSelf && msg.key.remoteJid?.includes('@lid')) ? `${botIdString}@s.whatsapp.net` : msg.key.remoteJid!;
+
         // Acknowledge receipt natively with a reaction
         try {
-            await sock.sendMessage(msg.key.remoteJid!, { react: { text: "⏳", key: msg.key } });
+            await sock.sendMessage(replyJid, { react: { text: "⏳", key: msg.key } });
         } catch (e) { }
 
         try {
@@ -246,16 +249,19 @@ export async function startWhatsApp() {
             }
 
             if (cleanResponse.length > 0) {
+                // Broadcast to Web Dashboard UI!
+                console.log(`\n[Agent] ${cleanResponse.trim()}`);
+
                 // Send result back to WhatsApp with sleek dynamic header
-                await sock.sendMessage(msg.key.remoteJid!, { text: `✨ *${agentName}*\n\n${cleanResponse.trim()}` });
+                await sock.sendMessage(replyJid, { text: `✨ *${agentName}*\n\n${cleanResponse.trim()}` });
             }
 
             // Remove the hour glass reaction once done
-            await sock.sendMessage(msg.key.remoteJid!, { react: { text: "✅", key: msg.key } });
+            await sock.sendMessage(replyJid, { react: { text: "✅", key: msg.key } });
 
         } catch (error: any) {
-            await sock.sendMessage(msg.key.remoteJid!, { react: { text: "❌", key: msg.key } });
-            await sock.sendMessage(msg.key.remoteJid!, { text: `❌ *Error processing request:*\n${error.message}` });
+            await sock.sendMessage(replyJid, { react: { text: "❌", key: msg.key } });
+            await sock.sendMessage(replyJid, { text: `❌ *Error processing request:*\n${error.message}` });
         }
     });
 }
