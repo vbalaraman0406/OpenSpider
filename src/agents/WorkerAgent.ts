@@ -83,12 +83,7 @@ ${context.join('\n')}
 
         // Autonomy Loop
         for (let i = 0; i < maxLoops; i++) {
-            // Inject human-like IDE typing delay to prevent bot/velocity detection ONLY for internal IDE (Optimized Stealth)
-            if (this.llm.providerName === 'antigravity-internal') {
-                const delayMs = Math.floor(Math.random() * (500 - 200 + 1)) + 200;
-                console.log(`[Worker - ${this.role}] Emulating human typing delay (${(delayMs / 1000).toFixed(1)}s)...`);
-                await new Promise(r => setTimeout(r, delayMs));
-            }
+
 
             let response;
             try {
