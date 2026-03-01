@@ -151,7 +151,8 @@ export async function startWhatsApp() {
         const imageMessage = msg.message.imageMessage || msg.message.extendedTextMessage?.contextInfo?.quotedMessage?.imageMessage;
         if (!textMessage && !imageMessage) return;
 
-        console.log(`\n\n[WhatsApp] Received message from ${msg.key.remoteJid}: ${textMessage}`);
+        // --- MESSAGE LOGGING & FIREWALL ---
+        console.log(`\n\n[You] 📱 (WhatsApp) ${textMessage}`);
 
         // Extract Media Payload
         let mediaBase64String: string | undefined = undefined;
