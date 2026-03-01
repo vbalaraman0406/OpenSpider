@@ -165,8 +165,18 @@ export async function startWhatsApp() {
             // Note: ManagerAgent expects images array in updated implementation
             const response = await manager.processUserRequest(textMessage, mediaBase64String ? [mediaBase64String] : []);
 
-            // Send result back to WhatsApp
-            await sock.sendMessage(msg.key.remoteJid!, { text: `✅ *Task Complete*\n\n${response}` });
+            // Convert GitHub markdown to WhatsApp proprietary formatting
+            let cleanResponse = response.replace(/\[Agent\] Plan execution finished successfully\. Final Output:?[\s\n]*/g, '');
+
+            // 1. Convert **bold** to *bold*
+            cleanResponse = cleanResponse.replace(/\*\*(.*?)\*\*/g, '*$1*');
+            // 2. Convert # Headers to *Headers*
+            cleanResponse = cleanResponse.replace(/^#+\s+(.*)$/gm, '*$1*');
+            // 3. Convert [Link](url) to Link: url
+            cleanResponse = cleanResponse.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1: $2');
+
+            // Send result back to WhatsApp with sleek dynamic header
+            await sock.sendMessage(msg.key.remoteJid!, { text: `✨ *${agentName}*\n\n${cleanResponse.trim()}` });
         } catch (error: any) {
             await sock.sendMessage(msg.key.remoteJid!, { text: `❌ *Error processing request:*\n${error.message}` });
         }

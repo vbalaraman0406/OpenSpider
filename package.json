@@ -27,6 +27,7 @@
     "express": "^4.22.1",
     "gemini-ai": "^2.2.1",
     "google-auth-library": "^10.6.1",
+    "jsonrepair": "^3.13.2",
     "keytar": "^7.9.0",
     "ollama": "^0.5.12",
     "open": "^11.0.0",

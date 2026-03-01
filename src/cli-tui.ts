@@ -2,7 +2,7 @@ import WebSocket from 'ws';
 import * as readline from 'readline';
 import chalk from 'chalk';
 
-const GATEWAY_URL = process.env.GATEWAY_URL || 'ws://localhost:4000';
+const GATEWAY_URL = process.env.GATEWAY_URL || 'ws://localhost:4001';
 
 const OPENSPIDER_ASCII = `
    ____                   ____        _     __         

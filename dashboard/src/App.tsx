@@ -1,8 +1,32 @@
 import { useState, useEffect, useRef } from 'react';
 import { Activity, Terminal, CheckCircle2, Server, Key, Bot, Send, MessageSquare, Radio, Smartphone, MessagesSquare, Users, Globe, Play, Square, Settings, RefreshCw, LayoutDashboard, ListTree, FolderGit2, Wrench, FileText, Search, Download, X, Trash, GitMerge, Timer, Plus, Clock, AlertTriangle } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import AgentFlowGraph, { AgentFlowEvent } from './components/AgentFlowGraph';
 import { UsageView } from './components/UsageView';
 import { WhatsAppSecurity } from './components/WhatsAppSecurity';
+
+const safeFormatTime = (ts: any) => {
+    if (!ts) return '--:--:--';
+    try {
+        const d = new Date(ts);
+        if (isNaN(d.getTime())) return '--:--:--';
+        return d.toISOString().split('T')[1].replace('Z', '');
+    } catch {
+        return '--:--:--';
+    }
+};
+
+const safeFormatTimestamp = (ts: any) => {
+    if (!ts) return '--:--:--';
+    try {
+        const d = new Date(ts);
+        if (isNaN(d.getTime())) return '--:--:--';
+        return d.toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    } catch {
+        return '--:--:--';
+    }
+};
 
 interface ChannelConfig {
     id: string;
@@ -92,6 +116,8 @@ interface LogMessage {
     data: string;
     timestamp: string;
 }
+
+
 
 function OverviewView() {
     return (
@@ -971,6 +997,12 @@ function SkillsView({ skills, onRefresh, isGenerating, setIsGenerating }: Skills
 }
 
 function LogsView({ logs }: { logs: LogMessage[] }) {
+    const endOfLogsRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        endOfLogsRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [logs]);
+
     return (
         <div className="flex-1 p-10 overflow-y-auto fade-in flex flex-col max-h-screen">
             <div className="flex-1 flex flex-col min-h-0 bg-slate-900/40 backdrop-blur-xl rounded-2xl border border-white/5 shadow-xl relative overflow-hidden group">
@@ -1012,7 +1044,7 @@ function LogsView({ logs }: { logs: LogMessage[] }) {
                         <div className="text-slate-500 opacity-60 text-center mt-20">Awaiting stream...</div>
                     ) : logs.map((l, i) => (
                         <div key={i} className="mb-1.5 break-all hover:bg-slate-800/50 px-2 py-0.5 rounded transition-colors">
-                            <span className="text-slate-500 mr-4 select-none">{new Date(l.timestamp).toISOString().split('T')[1].replace('Z', '')}</span>
+                            <span className="text-slate-500 mr-4 select-none">{safeFormatTime(l.timestamp)}</span>
                             <span className={
                                 l.data.includes('Error') || l.data.includes('Failed') ? 'text-red-400' :
                                     l.data.includes('Usage') ? 'text-blue-400' :
@@ -1022,6 +1054,7 @@ function LogsView({ logs }: { logs: LogMessage[] }) {
                             </span>
                         </div>
                     ))}
+                    <div ref={endOfLogsRef} />
                 </div>
             </div>
         </div>
@@ -1241,6 +1274,18 @@ function CronView({ agents }: { agents: any[] }) {
     );
 }
 
+const funnyStatuses = [
+    "Searching the web for answers...",
+    "Talking to a friend...",
+    "Consulting the ancient scrolls...",
+    "Doing highly complex math...",
+    "Asking a rubber duck...",
+    "Reticulating splines...",
+    "Herding cats...",
+    "Downloading more RAM...",
+    "Brewing digital coffee..."
+];
+
 export default function App() {
     type TabName = 'overview' | 'channels' | 'sessions' | 'usage' | 'chat' | 'agents' | 'skills' | 'logs' | 'flow' | 'cron';
     const [activeTab, setActiveTab] = useState<TabName>('chat');
@@ -1255,7 +1300,29 @@ export default function App() {
     const [isTyping, setIsTyping] = useState(false);
     const [isVerbose, setIsVerbose] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
+    const chatEndRef = useRef<HTMLDivElement>(null);
     const wsRef = useRef<WebSocket | null>(null);
+
+    const [loadingStatus, setLoadingStatus] = useState(funnyStatuses[0]);
+
+    // Randomize checking status every 2 seconds if generating
+    useEffect(() => {
+        let interval: any;
+        if (isTyping) {
+            interval = setInterval(() => {
+                setLoadingStatus(funnyStatuses[Math.floor(Math.random() * funnyStatuses.length)]);
+            }, 2000);
+        } else {
+            setLoadingStatus(funnyStatuses[0]);
+        }
+        return () => clearInterval(interval);
+    }, [isTyping]);
+
+    useEffect(() => {
+        if (activeTab === 'chat') {
+            chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }
+    }, [logs, activeTab, isVerbose]);
 
     useEffect(() => {
         // Fetch initial config
@@ -1269,10 +1336,24 @@ export default function App() {
             .then(data => setSkills(data.skills))
             .catch(e => console.error("Could not fetch skills API", e));
 
+        fetch('/api/chat/history')
+            .then(r => r.json())
+            .then(data => {
+                if (Array.isArray(data) && data.length > 0) {
+                    // Prepend history safely to avoid wiping out websocket events that arrived during the fetch
+                    setLogs(prev => {
+                        const existingIds = new Set(prev.map(p => p.timestamp + p.data));
+                        const uniqueHistory = data.filter(d => !existingIds.has(d.timestamp + d.data));
+                        return [...uniqueHistory, ...prev].slice(-5000); // Allow preserving up to 5000 history items
+                    });
+                }
+            })
+            .catch(e => console.error("Could not fetch chat history", e));
+
         fetchAgents();
 
         // Connect WebSocket for live logs
-        const host = window.location.port === '5173' ? 'localhost:4000' : window.location.host;
+        const host = window.location.port === '5173' ? 'localhost:4001' : window.location.host;
         const wsUrl = window.location.protocol === 'https:'
             ? `wss://${host}`
             : `ws://${host}`;
@@ -1282,13 +1363,14 @@ export default function App() {
             try {
                 const msg = JSON.parse(event.data);
                 if (msg.type === 'log') {
-                    setLogs(prev => [...prev.slice(-499), msg]); // Keep last 500 logs
+                    if (msg.data.includes('Emulating human typing delay') || msg.data.includes('Sending structured request')) return;
+                    setLogs(prev => [...prev.slice(-49999), msg]); // Keep last 50000 logs to prevent chat eviction
                 } else if (msg.type === 'chat_response') {
-                    setLogs(prev => [...prev.slice(-499), { type: 'chat', data: `[Agent] ${msg.data}`, timestamp: msg.timestamp }]);
+                    setLogs(prev => [...prev.slice(-49999), { type: 'chat', data: `[Agent] ${msg.data}`, timestamp: msg.timestamp }]);
                     setIsTyping(false);
                 } else if (msg.type === 'usage') {
                     const u = msg.data.usage;
-                    setLogs(prev => [...prev.slice(-499), { type: 'usage', data: `[API Token Usage] Model: ${msg.data.model} | In: ${u.promptTokens} | Out: ${u.completionTokens} | Total: ${u.totalTokens}`, timestamp: msg.timestamp }]);
+                    setLogs(prev => [...prev.slice(-49999), { type: 'usage', data: `[API Token Usage] Model: ${msg.data.model} | In: ${u.promptTokens} | Out: ${u.completionTokens} | Total: ${u.totalTokens}`, timestamp: msg.timestamp }]);
                 } else if (msg.type === 'agent_flow') {
                     if (msg.data.event === 'plan_generated') setFlowEvents([]); // Reset on new plan
                     setFlowEvents(prev => [...prev, msg.data]);
@@ -1509,39 +1591,90 @@ export default function App() {
 
                                     // Hide absolutely everything else (raw JSON, [Server], [Web Chat], [Manager], [Worker])
                                     return false;
-                                }).map((log, i) => (
-                                    <div key={i} className="flex gap-3 hover:bg-slate-800/30 p-1.5 rounded transition-colors group">
-                                        <span className="text-slate-500 shrink-0 select-none text-xs mt-0.5">
-                                            {new Date(log.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                                        </span>
-                                        <span className={`break-all leading-relaxed ${log.data.includes('[You]') ? 'text-white font-semibold' :
-                                            log.data.includes('[Agent]') ? 'text-indigo-300 font-semibold' :
-                                                log.data.includes('[Manager]') ? 'text-amber-300' :
-                                                    log.data.includes('[Worker') ? 'text-emerald-300' :
-                                                        log.data.includes('[WhatsApp]') ? 'text-blue-300' :
-                                                            log.data.includes('[API Token Usage]') ? 'text-fuchsia-400 font-medium' :
-                                                                log.data.includes('Error') ? 'text-red-400 font-semibold' : 'text-slate-300'
-                                            }`}>
-                                            {log.data.replace(/\[Agent\] Plan execution finished successfully\. Final Output:?[\s\n]*/g, '[Agent] ')}
-                                        </span>
-                                    </div>
-                                ))}
+                                }).map((log, i) => {
+                                    const isUser = log.data.startsWith('[You]');
+                                    const isAgent = log.data.startsWith('[Agent]');
+                                    const isSystem = !isUser && !isAgent;
+
+                                    // Strip the prefixes
+                                    let content = log.data;
+                                    if (isUser) content = content.replace('[You] ', '');
+                                    else if (isAgent) {
+                                        content = content.replace(/\[Agent\] Plan execution finished successfully\. Final Output:?[\s\n]*/g, '');
+                                        content = content.replace('[Agent] ', '');
+                                    }
+
+                                    return (
+                                        <div key={i} className={`flex w-full mb-6 ${isUser ? 'justify-end' : 'justify-start'}`}>
+                                            <div className={`max-w-[85%] sm:max-w-[75%] rounded-2xl px-5 py-3.5 shadow-md relative group ${isUser
+                                                ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-br-sm shadow-blue-900/20'
+                                                : isAgent
+                                                    ? 'bg-slate-800/90 backdrop-blur-md border border-slate-700/50 text-slate-200 rounded-bl-sm shadow-slate-900/50'
+                                                    : 'bg-slate-900/50 border border-slate-800 text-slate-400 rounded-xl font-mono text-[11px] p-2'
+                                                }`}>
+                                                <span className={`absolute -bottom-5 text-[10px] text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap ${isUser ? 'right-2' : 'left-2'}`}>
+                                                    {safeFormatTimestamp(log.timestamp)}
+                                                </span>
+
+                                                {isSystem ? (
+                                                    <span className="whitespace-pre-wrap opacity-80">{content}</span>
+                                                ) : isUser ? (
+                                                    <span className="whitespace-pre-wrap font-medium text-[15px] leading-relaxed">{content}</span>
+                                                ) : (
+                                                    <div className="flex flex-col gap-1">
+                                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 pt-1 ml-1 opacity-70">
+                                                            {agents.length > 0 ? agents[0].name : 'OpenSpider'}
+                                                        </span>
+                                                        <div className="prose prose-invert prose-sm max-w-none prose-p:leading-relaxed prose-pre:bg-slate-950/80 prose-pre:border prose-pre:border-slate-800 prose-pre:shadow-inner text-[14.5px]">
+                                                            <ReactMarkdown
+                                                                remarkPlugins={[remarkGfm]}
+                                                                components={{
+                                                                    table: ({ node, ...props }) => (
+                                                                        <div className="overflow-x-auto my-4 rounded-xl border border-slate-700/50 bg-slate-900/50 shadow-lg">
+                                                                            <table className="min-w-full divide-y divide-slate-700/50 text-sm" {...props} />
+                                                                        </div>
+                                                                    ),
+                                                                    thead: ({ node, ...props }) => <thead className="bg-slate-800/90" {...props} />,
+                                                                    th: ({ node, ...props }) => <th className="px-4 py-3 text-left font-semibold text-slate-200 tracking-wide bg-slate-800/80 first:rounded-tl-lg last:rounded-tr-lg" {...props} />,
+                                                                    td: ({ node, ...props }) => <td className="px-4 py-3 border-t border-slate-700/50 text-slate-300 group-hover/row:bg-slate-800/50 transition-colors" {...props} />,
+                                                                    tr: ({ node, ...props }) => <tr className="group/row" {...props} />,
+                                                                    p: ({ node, ...props }) => <p className="mb-2.5 last:mb-0" {...props} />,
+                                                                    code: ({ node, inline, ...props }: any) => inline
+                                                                        ? <code className="bg-slate-900/60 text-indigo-300 px-1.5 py-0.5 rounded text-[13px] border border-slate-700/40" {...props} />
+                                                                        : <code {...props} />,
+                                                                    a: ({ node, ...props }) => <a className="text-blue-400 hover:text-blue-300 underline underline-offset-2 decoration-blue-500/30 hover:decoration-blue-400 transition-all font-medium" {...props} />
+                                                                }}
+                                                            >
+                                                                {content}
+                                                            </ReactMarkdown>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
 
                                 {isTyping && !isVerbose && (
-                                    <div className="flex gap-3 p-1.5 rounded transition-colors group animate-pulse">
-                                        <span className="text-slate-500 shrink-0 select-none text-xs mt-0.5">
-                                            {new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                                        </span>
-                                        <span className="text-indigo-400 font-semibold flex items-center gap-1.5">
-                                            [Agent]
-                                            <div className="flex gap-1 ml-1 items-center h-full pt-1">
-                                                <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                                                <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                                                <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                                    <div className="flex w-full mb-6 justify-start">
+                                        <div className="bg-slate-800/90 backdrop-blur-md border border-slate-700/50 rounded-2xl rounded-bl-sm px-5 py-3.5 shadow-md flex flex-col gap-1.5">
+                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pt-0.5 ml-1 opacity-70">
+                                                {agents.length > 0 ? agents[0].name : 'OpenSpider'}
+                                            </span>
+                                            <div className="flex items-center gap-3 ml-1 mb-1">
+                                                <div className="flex gap-1.5 items-center justify-center">
+                                                    <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                                                    <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                                                    <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                                                </div>
+                                                <span className="text-sm text-indigo-300/80 font-medium italic animate-pulse">
+                                                    {loadingStatus}
+                                                </span>
                                             </div>
-                                        </span>
+                                        </div>
                                     </div>
                                 )}
+                                <div ref={chatEndRef} />
                             </div>
 
                             {/* Chat Input */}

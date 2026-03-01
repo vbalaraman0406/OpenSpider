@@ -56,6 +56,9 @@ Each sub-task should be assigned to a specialized Worker Agent role. Utilize the
 ${agentCapabilities}
 
 If the user is simply saying hello, asking a basic question about you, or making small talk, DO NOT generate a plan. Instead, use the 'direct_response' field to reply strictly in character as your Persona without delegating any subtasks.
+When using the 'direct_response' field, ALWAYS format your output to be user-friendly. Use GitHub flavored markdown and clean tables for structural data.
+CRITICAL JSON TRUNCATION RULE: The backend API has a hard limit of 1500 output tokens. If your response exceeds this length, it will be forcefully clipped, causing a fatal JSON parse crash. Keep your generated "plan" steps reasonably concise. HOWEVER, DO NOT instruct your delegated Worker Agents to be concise. You MUST command them to return the most highly detailed, comprehensive markdown tables possible when scraping data.
+
 Analyze the prompt and return a JSON object.
 A step can either be:
 1. "task": A standard sequential step executed by a single agent.
@@ -102,14 +105,7 @@ Example output:
         ];
 
         try {
-            // Emulate human typing/thinking delay to avoid velocity detection ONLY for internal IDE
-            if (this.llm.providerName === 'antigravity-internal') {
-                const delayMs = Math.floor(Math.random() * (6000 - 2000 + 1)) + 2000;
-                console.log(`[Manager] Emulating human typing delay (${Math.round(delayMs / 1000)}s)...`);
-                await new Promise(r => setTimeout(r, delayMs));
-            }
-
-            const planResult = await this.llm.generateStructuredOutputs<{
+            let planResult: {
                 direct_response?: string;
                 plan?: Array<{
                     type: "task" | "parallel";
@@ -118,36 +114,68 @@ Example output:
                     instruction?: string;
                     subtasks?: Array<{ role: string; instruction: string }>;
                 }>
-            }>(messages, {
-                type: "object",
-                properties: {
-                    direct_response: { type: "string", description: "Use this ONLY for direct conversational replies without creating a plan." },
-                    plan: {
-                        type: "array",
-                        items: {
-                            type: "object",
-                            properties: {
-                                type: { type: "string" },
-                                name: { type: "string" },
-                                role: { type: "string" },
-                                instruction: { type: "string" },
-                                subtasks: {
-                                    type: "array",
-                                    items: {
-                                        type: "object",
-                                        properties: {
-                                            role: { type: "string" },
-                                            instruction: { type: "string" }
-                                        },
-                                        required: ["role", "instruction"]
-                                    }
-                                }
-                            },
-                            required: ["type"]
-                        }
-                    }
+            } | null = null;
+            const maxLoops = 5;
+
+            for (let i = 0; i < maxLoops; i++) {
+                // Emulate human typing/thinking delay to avoid velocity detection ONLY for internal IDE (Optimized Stealth)
+                if (this.llm.providerName === 'antigravity-internal') {
+                    const delayMs = Math.floor(Math.random() * (500 - 200 + 1)) + 200;
+                    console.log(`[Manager] Emulating human typing delay (${(delayMs / 1000).toFixed(1)}s)...`);
+                    await new Promise(r => setTimeout(r, delayMs));
                 }
-            });
+
+                try {
+                    planResult = await this.llm.generateStructuredOutputs<{
+                        direct_response?: string;
+                        plan?: Array<{
+                            type: "task" | "parallel";
+                            name?: string;
+                            role?: string;
+                            instruction?: string;
+                            subtasks?: Array<{ role: string; instruction: string }>;
+                        }>
+                    }>(messages, {
+                        type: "object",
+                        properties: {
+                            direct_response: { type: "string", description: "Use this ONLY for direct conversational replies without creating a plan." },
+                            plan: {
+                                type: "array",
+                                items: {
+                                    type: "object",
+                                    properties: {
+                                        type: { type: "string" },
+                                        name: { type: "string" },
+                                        role: { type: "string" },
+                                        instruction: { type: "string" },
+                                        subtasks: {
+                                            type: "array",
+                                            items: {
+                                                type: "object",
+                                                properties: {
+                                                    role: { type: "string" },
+                                                    instruction: { type: "string" }
+                                                },
+                                                required: ["role", "instruction"]
+                                            }
+                                        }
+                                    },
+                                    required: ["type"]
+                                }
+                            }
+                        }
+                    }, 'manager');
+                    break; // Success!
+                } catch (e: any) {
+                    console.warn(`\n⚠️ [Manager] JSON Parse Error. Requesting LLM Self-Healing...`);
+                    messages.push({ role: 'user', content: `SYSTEM EXCEPTION: You generated an invalid JSON payload that crashed the parser (${e.message}). Please strictly evaluate your JSON syntax, ensure all internal quotes are escaped, and try again.` });
+                    if (i === maxLoops - 1) throw e;
+                }
+            }
+
+            if (!planResult) {
+                return "Error: Failed to generate a valid plan after maximum retries.";
+            }
 
             if (planResult.direct_response) {
                 console.log(`[Manager] Direct Response generated.`);

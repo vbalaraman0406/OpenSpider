@@ -11,6 +11,17 @@ export interface UsageSummary {
     recentSessions: any[];
 }
 
+const safeFormatDateTime = (ts: any) => {
+    if (!ts) return 'Unknown Date';
+    try {
+        const d = new Date(ts);
+        if (isNaN(d.getTime())) return 'Invalid Date';
+        return d.toLocaleString();
+    } catch {
+        return 'Invalid Date';
+    }
+};
+
 export function UsageView() {
     const [summary, setSummary] = useState<UsageSummary | null>(null);
     const [loading, setLoading] = useState(true);
@@ -240,7 +251,7 @@ export function UsageView() {
                                     const isSpike = session.usage?.totalTokens > 5000;
                                     return (
                                         <tr key={session.timestamp + i} className={`transition-colors ${isSpike ? 'bg-red-500/5 hover:bg-red-500/10' : 'hover:bg-slate-800/30'}`}>
-                                            <td className="px-6 py-4 text-xs text-slate-400">{new Date(session.timestamp).toLocaleString()}</td>
+                                            <td className="px-6 py-4 text-xs text-slate-400">{safeFormatDateTime(session.timestamp)}</td>
                                             <td className="px-6 py-4 font-mono text-xs font-semibold text-indigo-300">
                                                 {session.agentId || 'gateway'}
                                             </td>

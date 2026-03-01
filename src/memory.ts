@@ -29,7 +29,18 @@ export function readMemoryContext(): string {
         const todayPath = path.join(MEMORY_DIR, `${todayStr}.md`);
 
         if (fs.existsSync(todayPath)) {
-            const todayLog = fs.readFileSync(todayPath, 'utf-8');
+            let todayLog = fs.readFileSync(todayPath, 'utf-8');
+
+            // --- OpenClaw Cognitive Compaction ---
+            // Prevent runaway token bloat by applying a strict sliding window on raw transcripts.
+            const MAX_MEMORY_CHARS = 12000;
+            if (todayLog.length > MAX_MEMORY_CHARS) {
+                console.log(`[Compaction] Daily transcript exceeds token limit. Pruning historical chatter...`);
+                const truncatedIndex = todayLog.indexOf('\n\n', todayLog.length - MAX_MEMORY_CHARS);
+                todayLog = `...[EARLIER CONTEXT PRUNED BY OPENCLAW COMPACTION TO SAVE TOKENS]...\n` +
+                    (truncatedIndex !== -1 ? todayLog.substring(truncatedIndex) : todayLog.substring(todayLog.length - MAX_MEMORY_CHARS));
+            }
+
             context += `## Today's Conversation Log (${todayStr})\n${todayLog}\n\n`;
         } else {
             context += `## Today's Conversation Log (${todayStr})\n(No prior interactions today.)\n\n`;

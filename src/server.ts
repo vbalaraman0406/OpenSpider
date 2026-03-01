@@ -7,7 +7,7 @@ import path from 'node:path';
 import { ManagerAgent } from './agents/ManagerAgent';
 import { getProvider } from './llm';
 import { ChatMessage } from './llm/BaseProvider';
-import { logMemory } from './memory';
+import { logMemory, readMemoryContext } from './memory';
 import { initScheduler, runJobForcefully } from './scheduler';
 import { logUsage, getUsageSummary } from './usage';
 
@@ -40,7 +40,9 @@ export function startServer() {
 
 
                     // Process request
-                    const response = await manager.processUserRequest(parsed.text);
+                    const memoryStr = readMemoryContext();
+                    const fullPrompt = `Below is your historic Memory Context and Transcript.\n${memoryStr}\n\n[NEW USER REQUEST]\n${parsed.text}`;
+                    const response = await manager.processUserRequest(fullPrompt);
 
                     // Log agent response to session memory
                     logMemory('Agent', response);
@@ -144,6 +146,111 @@ export function startServer() {
             const groups = await getParticipatingGroups();
             res.json({ groups });
         } catch (e: any) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    // API Route to fetch chat persistence history
+    app.get('/api/chat/history', (req, res) => {
+        try {
+            const now = new Date();
+            // Uses the same MEMORY_DIR logic as src/memory.ts
+            const memoryDir = path.join(process.cwd(), 'workspace', 'memory');
+
+            if (!fs.existsSync(memoryDir)) {
+                return res.json([]);
+            }
+
+            // Aggregate all chronologically sorted daily logs to prevent timezone midnight amnesia
+            const files = fs.readdirSync(memoryDir)
+                .filter(f => /^\d{4}-\d{2}-\d{2}\.md$/.test(f))
+                .sort();
+
+            let logContent = "";
+            for (const file of files) {
+                logContent += fs.readFileSync(path.join(memoryDir, file), 'utf-8') + "\n\n";
+            }
+
+            // Split strictly by the exact prefix, capturing timestamp and sender reliably
+            const logLines = logContent.split('\n');
+            const history: any[] = [];
+
+            let currentTimestamp = "";
+            let currentSender = "";
+            let currentText: string[] = [];
+
+            for (const line of logLines) {
+                const match = line.match(/^\[(.*?)\] \*\*(.*?)\*\*: (.*)/);
+
+                if (match) {
+                    // Save previous block if exists
+                    if (currentTimestamp) {
+                        let validIsoDate = "";
+                        try {
+                            const [timePart, modifier] = currentTimestamp.split(' ');
+                            let [hoursStr, minutesStr, secondsStr] = (timePart || "").split(':');
+
+                            let hours = parseInt(hoursStr || "0", 10);
+                            const minutes = parseInt(minutesStr || "0", 10);
+                            const seconds = parseInt(secondsStr || "0", 10);
+
+                            if (modifier === 'PM' && hours < 12) hours += 12;
+                            if (modifier === 'AM' && hours === 12) hours = 0;
+
+                            const d = new Date(now);
+                            d.setHours(hours, minutes, seconds, 0);
+                            validIsoDate = d.toISOString();
+                        } catch {
+                            validIsoDate = new Date().toISOString();
+                        }
+
+                        history.push({
+                            type: 'chat',
+                            data: `[${currentSender === 'User' ? 'You' : 'Agent'}] ${currentText.join('\n').trim()}`,
+                            timestamp: validIsoDate
+                        });
+                    }
+
+                    // Start new block
+                    currentTimestamp = match[1] || "";
+                    currentSender = match[2] || "";
+                    currentText = [match[3] || ""];
+                } else if (currentTimestamp) {
+                    // Continuation of previous block (e.g. multi-line tables)
+                    currentText.push(line);
+                }
+            }
+
+            // Push the final dangling block
+            if (currentTimestamp) {
+                let validIsoDate = "";
+                try {
+                    const [timePart, modifier] = currentTimestamp.split(' ');
+                    let [hoursStr, minutesStr, secondsStr] = (timePart || "").split(':');
+
+                    let hours = parseInt(hoursStr || "0", 10);
+                    const minutes = parseInt(minutesStr || "0", 10);
+                    const seconds = parseInt(secondsStr || "0", 10);
+
+                    if (modifier === 'PM' && hours < 12) hours += 12;
+                    if (modifier === 'AM' && hours === 12) hours = 0;
+
+                    const d = new Date(now);
+                    d.setHours(hours, minutes, seconds, 0);
+                    validIsoDate = d.toISOString();
+                } catch {
+                    validIsoDate = new Date().toISOString();
+                }
+
+                history.push({
+                    type: 'chat',
+                    data: `[${currentSender === 'User' ? 'You' : 'Agent'}] ${currentText.join('\n').trim()}`,
+                    timestamp: validIsoDate
+                });
+            }
+            res.json(history);
+        } catch (e: any) {
+            console.error("Chat History Error:", e);
             res.status(500).json({ error: e.message });
         }
     });
@@ -556,7 +663,7 @@ Return ONLY the raw Python code.`;
     });
 
 
-    const PORT = process.env.PORT || 4000;
+    const PORT = process.env.PORT || 4001;
 
     // Serve static dashboard files if they exist (allows single-command full-stack testing)
     const dashboardDist = path.join(__dirname, '..', 'dashboard', 'dist');

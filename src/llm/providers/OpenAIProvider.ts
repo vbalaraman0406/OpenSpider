@@ -11,7 +11,7 @@ export class OpenAIProvider implements LLMProvider {
         this.baseUrl = baseUrl || 'https://api.openai.com/v1';
     }
 
-    async generateResponse(messages: ChatMessage[]): Promise<{ text: string, usage?: TokenUsage }> {
+    async generateResponse(messages: ChatMessage[], agentId?: string): Promise<{ text: string, usage?: TokenUsage }> {
         console.log(`[Agent] [OpenAI] Generating response using ${this.model}...`);
         const response = await fetch(`${this.baseUrl}/chat/completions`, {
             method: 'POST',
@@ -39,7 +39,7 @@ export class OpenAIProvider implements LLMProvider {
                 completionTokens: data.usage.completion_tokens || 0,
                 totalTokens: data.usage.total_tokens || 0
             };
-            console.log(JSON.stringify({ type: 'usage', model: this.model, usage }));
+            console.log(JSON.stringify({ type: 'usage', model: this.model, usage, agentId: agentId || 'gateway' }));
             return { text, usage };
         }
 
@@ -48,7 +48,8 @@ export class OpenAIProvider implements LLMProvider {
 
     async generateStructuredOutputs<T>(
         messages: ChatMessage[],
-        schema: Record<string, any>
+        schema: Record<string, any>,
+        agentId?: string
     ): Promise<T> {
         console.log(`[Agent] [OpenAI] Sending structured generation to ${this.model}...`);
         const response = await fetch(`${this.baseUrl}/chat/completions`, {
@@ -75,7 +76,7 @@ export class OpenAIProvider implements LLMProvider {
                 completionTokens: data.usage.completion_tokens || 0,
                 totalTokens: data.usage.total_tokens || 0
             };
-            console.log(JSON.stringify({ type: 'usage', model: this.model, usage }));
+            console.log(JSON.stringify({ type: 'usage', model: this.model, usage, agentId: agentId || 'gateway' }));
         }
 
         try {

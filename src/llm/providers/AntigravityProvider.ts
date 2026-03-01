@@ -78,7 +78,7 @@ export class AntigravityProvider implements LLMProvider {
         return { contents, systemInstruction };
     }
 
-    async generateResponse(messages: ChatMessage[]): Promise<{ text: string, usage?: TokenUsage }> {
+    async generateResponse(messages: ChatMessage[], agentId?: string): Promise<{ text: string, usage?: TokenUsage }> {
         console.log(`[Agent] [Antigravity] Generating response using ${this.model}...`);
 
         const { contents, systemInstruction } = this.formatMessages(messages);
@@ -99,7 +99,7 @@ export class AntigravityProvider implements LLMProvider {
                 completionTokens: response.usageMetadata.candidatesTokenCount || 0,
                 totalTokens: response.usageMetadata.totalTokenCount || 0,
             };
-            console.log(JSON.stringify({ type: 'usage', model: this.model, usage }));
+            console.log(JSON.stringify({ type: 'usage', model: this.model, usage, agentId: agentId || 'gateway' }));
             return { text, usage };
         }
 
@@ -108,7 +108,8 @@ export class AntigravityProvider implements LLMProvider {
 
     async generateStructuredOutputs<T>(
         messages: ChatMessage[],
-        schema: Record<string, any>
+        schema: Record<string, any>,
+        agentId?: string
     ): Promise<T> {
 
         const { contents, systemInstruction } = this.formatMessages(messages);
@@ -130,13 +131,21 @@ export class AntigravityProvider implements LLMProvider {
                 completionTokens: response.usageMetadata.candidatesTokenCount || 0,
                 totalTokens: response.usageMetadata.totalTokenCount || 0,
             };
-            console.log(JSON.stringify({ type: 'usage', model: this.model, usage }));
+            console.log(JSON.stringify({ type: 'usage', model: this.model, usage, agentId: agentId || 'gateway' }));
         }
 
         try {
             if (!response.text) throw new Error("Empty response from Antigravity");
-            return JSON.parse(response.text) as T;
+
+            let cleanJSON = response.text.trim();
+            // Intelligent Regex extraction to isolate the first JSON object or array from ambient text
+            const jsonMatch = cleanJSON.match(/[\{\[][\s\S]*[\}\]]/);
+            if (jsonMatch) {
+                cleanJSON = jsonMatch[0];
+            }
+            return JSON.parse(cleanJSON) as T;
         } catch (e) {
+            console.error("Failed JSON parse:", response.text);
             throw new Error(`Failed to parse Antigravity JSON: ${e}`);
         }
     }
