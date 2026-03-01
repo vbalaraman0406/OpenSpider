@@ -198,6 +198,12 @@ export async function startWhatsApp() {
         // We require either text or image
         const imageMessage = msg.message.imageMessage || msg.message.extendedTextMessage?.contextInfo?.quotedMessage?.imageMessage;
 
+        // Fast-path composing trigger: Fire instantly before the Ghost Trap so self-messages show a typing
+        // bubble instantaneously while Baileys negotiates the 2-second Bad MAC retry in the background.
+        if (msg.key.fromMe && msg.key.remoteJid) {
+            sock.sendPresenceUpdate('composing', msg.key.remoteJid).catch(() => { });
+        }
+
         // 🔥 BAD MAC NUCLEAR GHOST TRAP 🔥
         // 'Message Yourself' packets occasionally de-sync end-to-end encryption ratchets.
         // Libsignal throws a "Bad MAC" error internally and completely strips the payload.
