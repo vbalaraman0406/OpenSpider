@@ -113,6 +113,18 @@ export async function startWhatsApp() {
         console.log(`\n[DEBUG - RAW WA MSG] fromMe: ${msg.key.fromMe}, remoteJid: ${msg.key.remoteJid}, text: ${textMessage}`);
         const isGroup = msg.key.remoteJid?.endsWith('@g.us');
 
+        // 🔥 BAD MAC NUCLEAR TRAP 🔥
+        // 'Message Yourself' packets from companion devices frequently de-sync end-to-end encryption ratchets.
+        // Libsignal throws a "Bad MAC" error internally and completely strips the payload, delivering a ghost message.
+        if (msg.key.fromMe && !msg.message?.imageMessage && textMessage.trim() === '') {
+            console.warn(`\n☢️ [WhatsApp] BAD MAC DETECTED! 'Message Yourself' payload from ${msg.key.remoteJid} was stripped natively by libsignal.`);
+            console.warn(`☢️ [WhatsApp] Nuking corrupted cryptographic session to force Meta key-exchange...`);
+            if (msg.key.remoteJid) {
+                await state.keys.set({ 'session': { [msg.key.remoteJid]: null } });
+            }
+            return; // Drop the ghost message so it doesn't crash the Manager Agent
+        }
+
         let isNoteToSelf = false;
         // Prevent Infinite Loops without hardcoded signatures:
         // By tracking the exact ID of messages sent by OpenSpider, we can drop echoed bot replies but allow 'Message Yourself' inputs from the human.
