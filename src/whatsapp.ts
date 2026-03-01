@@ -226,7 +226,7 @@ export async function startWhatsApp() {
             await sock.sendPresenceUpdate('composing', replyJid);
             composingInterval = setInterval(() => {
                 sock.sendPresenceUpdate('composing', replyJid).catch(() => { });
-            }, 12000);
+            }, 8000);
         } catch (e) {
             console.error('[WhatsApp] Failed to send initial composing presence:', e);
         }
