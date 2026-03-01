@@ -22,6 +22,11 @@ export async function getParticipatingGroups(): Promise<Array<{ id: string, subj
     }
 }
 
+export async function sendWhatsAppMessage(jid: string, text: string) {
+    if (!globalSocket) throw new Error("WhatsApp socket not connected");
+    await globalSocket.sendMessage(jid, { text });
+}
+
 export async function startWhatsApp() {
     const { state, saveCreds } = await useMultiFileAuthState('baileys_auth_info');
     const manager = new ManagerAgent();
@@ -77,8 +82,11 @@ export async function startWhatsApp() {
 
         // Ensure we extract text from standard chat, extended chat, or media captions
         const textMessage = msg.message.conversation || msg.message.extendedTextMessage?.text || msg.message.imageMessage?.caption || msg.message.pollCreationMessage?.name || '';
+
+        console.log(`\n[DEBUG - RAW WA MSG] fromMe: ${msg.key.fromMe}, remoteJid: ${msg.key.remoteJid}, text: ${textMessage}`);
         const isGroup = msg.key.remoteJid?.endsWith('@g.us');
 
+        let isNoteToSelf = false;
         // Prevent Infinite Loops: If the message is from us AND starts with a known bot prefix or includes a bot signature, ignore it.
         // This allows the user to use the 'Message Yourself' feature to talk to the bot!
         if (msg.key.fromMe) {
@@ -88,6 +96,12 @@ export async function startWhatsApp() {
             // Strict heuristic: If the text message contains our Agent prefix or signature, drop it to avoid infinite loop
             if (textMessage.includes('[Agent]') || textMessage.startsWith('🤖') || textMessage.includes('OpenSpider')) {
                 return;
+            }
+
+            const botNumber = sock.user?.id ? sock.user.id.split(':')[0] : '';
+            isNoteToSelf = !!(msg.key.remoteJid?.includes('@lid') || msg.key.remoteJid?.startsWith(botNumber || ''));
+            if (!isNoteToSelf) {
+                return; // Ignore outbound messages sent to other people
             }
         }
 
@@ -116,44 +130,46 @@ export async function startWhatsApp() {
         } catch (e) { console.error("[WhatsApp] Failed to load Security Config. Defaulting to strict."); }
 
         // --- SECURITY FIREWALL ---
-        if (isGroup) {
-            // Group Policy Check
-            if (config.groupPolicy === 'disabled') {
-                return; // Block all group messages entirely
-            } else if (config.groupPolicy === 'allowlist') {
-                if (!config.allowedGroups.includes(msg.key.remoteJid!)) {
-                    return; // Block, this group is not on the whitelist
+        if (!isNoteToSelf) {
+            if (isGroup) {
+                // Group Policy Check
+                if (config.groupPolicy === 'disabled') {
+                    return; // Block all group messages entirely
+                } else if (config.groupPolicy === 'allowlist') {
+                    if (!config.allowedGroups.includes(msg.key.remoteJid!)) {
+                        return; // Block, this group is not on the whitelist
+                    }
                 }
-            }
-            // If 'open', fall through and allow.
+                // If 'open', fall through and allow.
 
-            // Group Chat Mentions logic
-            if (config.botMode === 'mention') {
-                const botNumber = sock.user?.id ? sock.user.id.split(':')[0] : '';
-                const botJid = `${botNumber}@s.whatsapp.net`;
+                // Group Chat Mentions logic
+                if (config.botMode === 'mention') {
+                    const botNumber = sock.user?.id ? sock.user.id.split(':')[0] : '';
+                    const botJid = `${botNumber}@s.whatsapp.net`;
 
-                const mentionedJidList = msg.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
-                const isTaggedViaJid = mentionedJidList.includes(botJid);
-                const isMentionedViaText = textMessage.toLowerCase().includes(`@${agentName.toLowerCase()}`);
+                    const mentionedJidList = msg.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
+                    const isTaggedViaJid = mentionedJidList.includes(botJid);
+                    const isMentionedViaText = textMessage.toLowerCase().includes(`@${agentName.toLowerCase()}`);
 
-                // If not tagged via WhatsApp mention system AND not mentioned by plain text, ignore
-                if (!isTaggedViaJid && !isMentionedViaText) {
-                    return;
+                    // If not tagged via WhatsApp mention system AND not mentioned by plain text, ignore
+                    if (!isTaggedViaJid && !isMentionedViaText) {
+                        return;
+                    }
                 }
-            }
-        } else {
-            // DM Policy Check (Direct Messages)
-            if (config.dmPolicy === 'disabled') {
-                return; // Block all DMs
-            } else if (config.dmPolicy === 'allowlist') {
-                // Sender JID looks like '1234567890@s.whatsapp.net'
-                const senderNumber = msg.key.remoteJid?.split('@')[0] || '';
-                // Ensure the number is allowed, either exact literal '1234567890' or standard '+' format
-                const hasMatch = config.allowedDMs.some(allowed =>
-                    allowed.replace(/\D/g, '') === senderNumber.replace(/\D/g, '')
-                );
-                if (!hasMatch) {
-                    return; // Block, sender not whitelisted
+            } else {
+                // DM Policy Check (Direct Messages)
+                if (config.dmPolicy === 'disabled') {
+                    return; // Block all DMs
+                } else if (config.dmPolicy === 'allowlist') {
+                    // Sender JID looks like '1234567890@s.whatsapp.net'
+                    const senderNumber = msg.key.remoteJid?.split('@')[0] || '';
+                    // Ensure the number is allowed, either exact literal '1234567890' or standard '+' format
+                    const hasMatch = config.allowedDMs.some(allowed =>
+                        allowed.replace(/\D/g, '') === senderNumber.replace(/\D/g, '')
+                    );
+                    if (!hasMatch) {
+                        return; // Block, sender not whitelisted
+                    }
                 }
             }
         }

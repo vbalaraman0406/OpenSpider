@@ -151,6 +151,17 @@ export function startServer() {
         }
     });
 
+    app.post('/api/whatsapp/send', async (req, res) => {
+        try {
+            const { sendWhatsAppMessage } = require('./whatsapp');
+            const { to, text } = req.body;
+            await sendWhatsAppMessage(`${to}@s.whatsapp.net`, text);
+            res.json({ success: true, message: `Dispatched to ${to}` });
+        } catch (e: any) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
     // Mount Gmail Webhook Routes
     app.use('/hooks', gmailWebhookRouter);
 
