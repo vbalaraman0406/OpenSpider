@@ -99,6 +99,10 @@ export class AntigravityInternalProvider implements LLMProvider {
         let attempt = 0;
         const maxAttempts = 5;
 
+        // Highly Optimized Stealth Mode: Add a proactive micro-jitter delay before hitting the internal IDE API
+        // This prevents Google from fingerprinting the traffic velocity as a bot script, while keeping latency ultra-low.
+        const microJitterMs = Math.floor(Math.random() * (400 - 150 + 1)) + 150;
+        await new Promise(r => setTimeout(r, microJitterMs));
 
         while (attempt < maxAttempts) {
             response = await fetch(url, {
