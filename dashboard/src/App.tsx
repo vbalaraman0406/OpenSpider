@@ -1364,7 +1364,15 @@ export default function App() {
             try {
                 const msg = JSON.parse(event.data);
                 if (msg.type === 'log') {
-                    if (msg.data.includes('Emulating human typing delay') || msg.data.includes('Sending structured request')) return;
+                    if (msg.data.includes('Emulating human typing delay') || msg.data.includes('Sending structured request')) {
+                        // We can also trigger typing state here for internal logs if we want
+                        if (msg.data.includes('Sending structured request')) setIsTyping(true);
+                        return;
+                    }
+
+                    if (msg.data.startsWith('[You]')) setIsTyping(true);
+                    if (msg.data.startsWith('[Agent]')) setIsTyping(false);
+
                     setLogs(prev => [...prev.slice(-49999), msg]); // Keep last 50000 logs to prevent chat eviction
                 } else if (msg.type === 'chat_response') {
                     setLogs(prev => [...prev.slice(-49999), { type: 'chat', data: `[Agent] ${msg.data}`, timestamp: msg.timestamp }]);
