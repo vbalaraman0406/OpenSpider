@@ -99,10 +99,6 @@ export class AntigravityInternalProvider implements LLMProvider {
         let attempt = 0;
         const maxAttempts = 5;
 
-        // Stealth Mode: Add a proactive human-like delay before hitting the internal IDE API
-        // to prevent Google from fingerprinting the traffic as an automated bot script.
-        const stealthDelayMs = Math.floor(Math.random() * (1500 - 500 + 1)) + 500;
-        await new Promise(r => setTimeout(r, stealthDelayMs));
 
         while (attempt < maxAttempts) {
             response = await fetch(url, {

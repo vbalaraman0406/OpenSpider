@@ -50,7 +50,7 @@ export class ManagerAgent {
         const persona = new PersonaShell('manager');
         const compiledPersonaPrompt = persona.compileSystemPrompt();
 
-        const systemPrompt = `${compiledPersonaPrompt}\n\n[MEMORY CONTEXT]\n${readMemoryContext()}\n\n[TASK INSTRUCTIONS]
+        const systemPrompt = `${compiledPersonaPrompt}\n\n[SYSTEM CONTEXT]\nCurrent Local Time: ${new Date().toLocaleString()}\nTimezone Name: ${Intl.DateTimeFormat().resolvedOptions().timeZone}\n\n[MEMORY CONTEXT]\n${readMemoryContext()}\n\n[TASK INSTRUCTIONS]
 Your job is to break down the user's complex request into a sequential plan of sub-tasks.
 Each sub-task should be assigned to a specialized Worker Agent role. Utilize the existing agents below or define generic roles if none match exactly.
 ${agentCapabilities}
@@ -127,13 +127,6 @@ Example output:
             const maxLoops = 5;
 
             for (let i = 0; i < maxLoops; i++) {
-                // Emulate human typing/thinking delay to avoid velocity detection ONLY for internal IDE (Optimized Stealth)
-                if (this.llm.providerName === 'antigravity-internal') {
-                    const delayMs = Math.floor(Math.random() * (500 - 200 + 1)) + 200;
-                    console.log(`[Manager] Emulating human typing delay (${(delayMs / 1000).toFixed(1)}s)...`);
-                    await new Promise(r => setTimeout(r, delayMs));
-                }
-
                 try {
                     planResult = await this.llm.generateStructuredOutputs<{
                         direct_response?: string;
