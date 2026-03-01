@@ -220,15 +220,21 @@ export async function startWhatsApp() {
         const botIdString = sock.user?.id ? sock.user.id.split(':')[0] : '';
         const replyJid = (isNoteToSelf && msg.key.remoteJid?.includes('@lid')) ? `${botIdString}@s.whatsapp.net` : msg.key.remoteJid!;
 
-        // Acknowledge receipt natively with a typing indicator instead of a reaction
+        // Acknowledge receipt natively with a continuous typing indicator heartbeat
+        let composingInterval: NodeJS.Timeout | null = null;
         try {
             await sock.sendPresenceUpdate('composing', replyJid);
+            composingInterval = setInterval(() => {
+                sock.sendPresenceUpdate('composing', replyJid).catch(() => { });
+            }, 5000);
         } catch (e) { }
 
         try {
             // Send to the Manager Agent
             // Note: ManagerAgent expects images array in updated implementation
             const response = await manager.processUserRequest(textMessage, mediaBase64String ? [mediaBase64String] : []);
+
+            if (composingInterval) clearInterval(composingInterval);
 
             // Convert GitHub markdown to WhatsApp proprietary formatting
             let cleanResponse = response.replace(/\[Agent\] Plan execution finished successfully\. Final Output:?[\s\n]*/ig, '').trim();
@@ -269,8 +275,13 @@ export async function startWhatsApp() {
                 console.log(`\n[Agent] ${cleanResponse.trim()}`);
 
                 // Send result back to WhatsApp with sleek dynamic header
-                const sentMsg = await sock.sendMessage(replyJid, { text: `✨ *${agentName}*\n\n${cleanResponse.trim()}` });
-                if (sentMsg?.key?.id) {
+                console.log(`[DEBUG] Attempting to send outbound message to jid: ${replyJid}`);
+                const sentMsg = await sock.sendMessage(replyJid, { text: `✨ *${agentName}*\n\n${cleanResponse.trim()}` }).catch(e => {
+                    console.error('[DEBUG - WA SEND ERROR]', e);
+                    return null;
+                });
+
+                if (sentMsg && sentMsg.key?.id) {
                     sentMessageIds.add(sentMsg.key.id!);
                     if (sentMessageIds.size > 1000) sentMessageIds.delete(Array.from(sentMessageIds)[0]!);
                 }
@@ -280,6 +291,7 @@ export async function startWhatsApp() {
             await sock.sendPresenceUpdate('paused', replyJid);
 
         } catch (error: any) {
+            if (composingInterval) clearInterval(composingInterval);
             await sock.sendPresenceUpdate('paused', replyJid);
             await sock.sendMessage(replyJid, { text: `❌ *Error processing request:*\n${error.message}` });
         }
