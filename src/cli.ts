@@ -139,6 +139,19 @@ const channelsMenu = program
     .command('channels')
     .description('Manage communication channels');
 
+channelsMenu
+    .command('login')
+    .description('View the live WhatsApp QR Code for authentication')
+    .action(() => {
+        console.log('\n🕷️ Searching for active WhatsApp QR Code stream (Press Ctrl+C to exit)...');
+        // Use npx pm2 logs to stream the QR code to the user's terminal
+        const pm2Logs = spawn('npx', ['pm2', 'logs', 'openspider-gateway', '--lines', '100'], { stdio: 'inherit' });
+
+        pm2Logs.on('close', (code) => {
+            process.exit(code ?? 0);
+        });
+    });
+
 const toolsMenu = program
     .command('tools')
     .description('Manage Agent Tools and Skills');
