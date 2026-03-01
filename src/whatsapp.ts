@@ -242,7 +242,7 @@ export async function startWhatsApp() {
 
         const botIdString = sock.user?.id ? sock.user.id.split(':')[0] : '';
         const botJid = `${botIdString}@s.whatsapp.net`;
-        const replyJid = msg.key.remoteJid!;
+        const replyJid = (isNoteToSelf && (msg.key.remoteJid?.includes('@lid') || !msg.key.remoteJid)) ? botJid : msg.key.remoteJid!;
 
         // Acknowledge receipt natively with a continuous typing indicator heartbeat
         // We MUST NOT send presence updates to our own number, otherwise Meta throws a 503 stream error!
@@ -256,6 +256,11 @@ export async function startWhatsApp() {
             } catch (e) {
                 console.error('[WhatsApp] Failed to send initial composing presence:', e);
             }
+        } else {
+            // For 'Message Yourself', we cannot use typing indicators. Use a subtle reaction instead!
+            try {
+                await sock.sendMessage(replyJid, { react: { text: "⏳", key: msg.key } }).catch(e => console.error(e));
+            } catch (e) { }
         }
 
         try {
@@ -316,9 +321,11 @@ export async function startWhatsApp() {
                 }
             }
 
-            // Clear typing indicator
+            // Clear typing indicator or processing reaction
             if (!isNoteToSelf) {
                 await sock.sendPresenceUpdate('paused', replyJid);
+            } else {
+                await sock.sendMessage(replyJid, { react: { text: "", key: msg.key } }).catch(e => { });
             }
 
         } catch (error: any) {
