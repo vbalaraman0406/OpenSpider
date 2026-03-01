@@ -242,12 +242,12 @@ export async function startWhatsApp() {
 
         const botIdString = sock.user?.id ? sock.user.id.split(':')[0] : '';
         const botJid = `${botIdString}@s.whatsapp.net`;
-        const replyJid = (isNoteToSelf && msg.key.remoteJid?.includes('@lid')) ? botJid : msg.key.remoteJid!;
+        const replyJid = msg.key.remoteJid!;
 
         // Acknowledge receipt natively with a continuous typing indicator heartbeat
         // We MUST NOT send presence updates to our own number, otherwise Meta throws a 503 stream error!
         let composingInterval: NodeJS.Timeout | null = null;
-        if (replyJid !== botJid) {
+        if (!isNoteToSelf) {
             try {
                 await sock.sendPresenceUpdate('composing', replyJid);
                 composingInterval = setInterval(() => {
@@ -317,7 +317,7 @@ export async function startWhatsApp() {
             }
 
             // Clear typing indicator
-            if (replyJid !== botJid) {
+            if (!isNoteToSelf) {
                 await sock.sendPresenceUpdate('paused', replyJid);
             }
 
