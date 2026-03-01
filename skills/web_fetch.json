@@ -1,0 +1,5 @@
+{
+    "name": "web_fetch",
+    "description": "Downloads the HTML structure of a public URL, removes the clutter, and returns clean Markdown for easy LLM reading.",
+    "instructions": "Call execute_script with web_fetch.py and pass the `<url>` as the first argument, and optionally the `[max_chars]` limit (defaults to 50000) as the second argument."
+}

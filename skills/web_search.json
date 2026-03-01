@@ -1,0 +1,5 @@
+{
+    "name": "web_search",
+    "description": "Performs a web search using DuckDuckGo to find URLs related to a query.",
+    "instructions": "Call execute_script with web_search.py and pass the `<query>` as the first argument, and optionally the `[count]` of results (defaults to 5) as the second argument."
+}

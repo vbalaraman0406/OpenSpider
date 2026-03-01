@@ -10,6 +10,7 @@ import { ChatMessage } from './llm/BaseProvider';
 import { logMemory, readMemoryContext } from './memory';
 import { initScheduler, runJobForcefully } from './scheduler';
 import { logUsage, getUsageSummary } from './usage';
+import gmailWebhookRouter from './webhooks/gmail';
 
 export function startServer() {
     const app = express();
@@ -149,6 +150,9 @@ export function startServer() {
             res.status(500).json({ error: e.message });
         }
     });
+
+    // Mount Gmail Webhook Routes
+    app.use('/hooks', gmailWebhookRouter);
 
     // API Route to fetch chat persistence history
     app.get('/api/chat/history', (req, res) => {
@@ -585,6 +589,45 @@ Return ONLY the raw Python code.`;
 
     // --- CRON JOBS REST ENDPOINTS ---
     const cronJobsPath = path.join(process.cwd(), 'workspace', 'cron_jobs.json');
+
+    // --- SYSTEM PROCESS ENDPOINTS ---
+    app.get('/api/processes', (req, res) => {
+        try {
+            const { execSync } = require('child_process');
+            // Fetch running node strings, and optionally PM2 or Python if we wanted to filter.
+            // For now, let's grab all node/python processes to see what OpenSpider agents or webhooks are running.
+            const stdout = execSync('ps -ef | grep -E "node|python|playwright" | grep -v grep').toString();
+
+            const processes = stdout.split('\n').filter((l: string) => l.trim().length > 0).map((line: string) => {
+                // Typical ps -ef output: UID PID PPID C STIME TTY TIME CMD
+                const parts = line.trim().split(/\s+/);
+                return {
+                    uid: parts[0],
+                    pid: parts[1],
+                    ppid: parts[2],
+                    stime: parts[4],
+                    time: parts[6],
+                    cmd: parts.slice(7).join(' ')
+                };
+            });
+            res.json(processes);
+        } catch (e: any) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    app.delete('/api/processes/:pid', (req, res) => {
+        try {
+            const pid = parseInt(req.params.pid, 10);
+            if (isNaN(pid)) return res.status(400).json({ error: 'Invalid PID' });
+
+            const { execSync } = require('child_process');
+            execSync(`kill -9 ${pid}`);
+            res.json({ success: true, message: `Terminated process ${pid}` });
+        } catch (e: any) {
+            res.status(500).json({ error: e.message });
+        }
+    });
 
     app.get('/api/cron', (req, res) => {
         try {

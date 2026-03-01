@@ -64,8 +64,14 @@ export async function startWhatsApp() {
         if (!msg.message || msg.key.fromMe) return;
 
         // Ensure we extract text from standard chat, extended chat, or media captions
-        const textMessage = msg.message.conversation || msg.message.extendedTextMessage?.text || msg.message.imageMessage?.caption || '';
+        const textMessage = msg.message.conversation || msg.message.extendedTextMessage?.text || msg.message.imageMessage?.caption || msg.message.pollCreationMessage?.name || '';
         const isGroup = msg.key.remoteJid?.endsWith('@g.us');
+
+        // Handle incoming reactions (just log them for context)
+        if (msg.message.reactionMessage) {
+            console.log(`[WhatsApp] Received Reaction: ${msg.message.reactionMessage.text} on message ${msg.message.reactionMessage.key?.id}`);
+            return;
+        }
 
         // Dynamically ascertain the Manager's Persona Name
         let agentName = 'OpenSpider';
@@ -157,8 +163,10 @@ export async function startWhatsApp() {
             }
         }
 
-        // Acknowledge receipt
-        await sock.sendMessage(msg.key.remoteJid!, { text: '🕷️ Processing your request...' });
+        // Acknowledge receipt natively with a reaction
+        try {
+            await sock.sendMessage(msg.key.remoteJid!, { react: { text: "⏳", key: msg.key } });
+        } catch (e) { }
 
         try {
             // Send to the Manager Agent
@@ -175,9 +183,37 @@ export async function startWhatsApp() {
             // 3. Convert [Link](url) to Link: url
             cleanResponse = cleanResponse.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1: $2');
 
-            // Send result back to WhatsApp with sleek dynamic header
-            await sock.sendMessage(msg.key.remoteJid!, { text: `✨ *${agentName}*\n\n${cleanResponse.trim()}` });
+            // Check if the LLM decided to send a Poll
+            if (cleanResponse.includes('[POLL]')) {
+                const pollMatch = cleanResponse.match(/\[POLL\](.*?)\[\/POLL\]/s);
+                if (pollMatch && pollMatch[1]) {
+                    const params = pollMatch[1].split('|').map(p => p.trim());
+                    const pollName = params[0];
+                    const options = params.slice(1).filter(Boolean);
+
+                    if (pollName && options.length > 1) {
+                        await sock.sendMessage(msg.key.remoteJid!, {
+                            poll: {
+                                name: pollName,
+                                values: options.slice(0, 12), // WA allows max 12 options
+                                selectableCount: 1
+                            }
+                        });
+                        cleanResponse = cleanResponse.replace(pollMatch[0], '').trim();
+                    }
+                }
+            }
+
+            if (cleanResponse.length > 0) {
+                // Send result back to WhatsApp with sleek dynamic header
+                await sock.sendMessage(msg.key.remoteJid!, { text: `✨ *${agentName}*\n\n${cleanResponse.trim()}` });
+            }
+
+            // Remove the hour glass reaction once done
+            await sock.sendMessage(msg.key.remoteJid!, { react: { text: "✅", key: msg.key } });
+
         } catch (error: any) {
+            await sock.sendMessage(msg.key.remoteJid!, { react: { text: "❌", key: msg.key } });
             await sock.sendMessage(msg.key.remoteJid!, { text: `❌ *Error processing request:*\n${error.message}` });
         }
     });

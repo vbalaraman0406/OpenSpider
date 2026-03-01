@@ -5,6 +5,7 @@ import remarkGfm from 'remark-gfm';
 import AgentFlowGraph, { AgentFlowEvent } from './components/AgentFlowGraph';
 import { UsageView } from './components/UsageView';
 import { WhatsAppSecurity } from './components/WhatsAppSecurity';
+import { ProcessMonitor } from './components/ProcessMonitor';
 
 const safeFormatTime = (ts: any) => {
     if (!ts) return '--:--:--';
@@ -1287,7 +1288,7 @@ const funnyStatuses = [
 ];
 
 export default function App() {
-    type TabName = 'overview' | 'channels' | 'sessions' | 'usage' | 'chat' | 'agents' | 'skills' | 'logs' | 'flow' | 'cron';
+    type TabName = 'overview' | 'channels' | 'sessions' | 'usage' | 'chat' | 'agents' | 'skills' | 'logs' | 'flow' | 'cron' | 'processes';
     const [activeTab, setActiveTab] = useState<TabName>('chat');
     const [configuredChannel, setConfiguredChannel] = useState<string | null>(null);
     const [logs, setLogs] = useState<LogMessage[]>([]);
@@ -1519,6 +1520,13 @@ export default function App() {
                     {/* Settings Group */}
                     <div className="space-y-1">
                         <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 px-2">Settings</div>
+                        <button
+                            onClick={() => setActiveTab('processes')}
+                            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${activeTab === 'processes' ? 'bg-indigo-600/20 text-indigo-400 ring-1 ring-indigo-500/30 shadow-[0_4px_20px_-4px_rgba(99,102,241,0.2)]' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'}`}
+                        >
+                            <Activity className="w-4 h-4" />
+                            Process Monitor
+                        </button>
                         <button
                             onClick={() => setActiveTab('logs')}
                             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${activeTab === 'logs' ? 'bg-slate-600/20 text-white ring-1 ring-slate-500/30 shadow-[0_4px_20px_-4px_rgba(100,116,139,0.2)]' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'}`}
@@ -1816,6 +1824,7 @@ export default function App() {
                 {activeTab === 'usage' && <UsageView />}
                 {activeTab === 'logs' && <LogsView logs={logs} />}
                 {activeTab === 'cron' && <CronView agents={agents} />}
+                {activeTab === 'processes' && <ProcessMonitor />}
             </main >
 
             {/* Toasts / Alerts Overlay */}

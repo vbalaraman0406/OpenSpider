@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { width: 300px; padding: 15px; font-family: sans-serif; }
+        h3 { margin-top: 0; color: #333; }
+        .row { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; font-size: 12px;}
+        input { width: 100%; padding: 6px; box-sizing: border-box; }
+        button { 
+            width: 100%; padding: 10px; background: #FF4500; 
+            color: white; border: none; border-radius: 4px; 
+            cursor: pointer; font-weight: bold;
+        }
+        button.detach { background: #666; }
+        .status { margin-top: 10px; font-size: 12px; color: #666; text-align: center; }
+    </style>
+</head>
+<body>
+    <h3>OpenSpider Browser Relay</h3>
+    <div class="row">
+        <label>Gateway Token</label>
+        <input type="password" id="token" placeholder="Optional if no auth" />
+    </div>
+    <div class="row">
+        <label>Relay Port</label>
+        <input type="number" id="port" value="18792" />
+    </div>
+    <button id="toggleBtn">Attach to Current Tab</button>
+    <div class="status" id="statusText">Not connected</div>
+    <script src="popup.js"></script>
+</body>
+</html>
