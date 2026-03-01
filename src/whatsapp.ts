@@ -256,11 +256,6 @@ export async function startWhatsApp() {
             } catch (e) {
                 console.error('[WhatsApp] Failed to send initial composing presence:', e);
             }
-        } else {
-            // For 'Message Yourself', we cannot use typing indicators. Use a subtle reaction instead!
-            try {
-                await sock.sendMessage(replyJid, { react: { text: "⏳", key: msg.key } }).catch(e => console.error(e));
-            } catch (e) { }
         }
 
         try {
@@ -321,11 +316,9 @@ export async function startWhatsApp() {
                 }
             }
 
-            // Clear typing indicator or processing reaction
+            // Clear typing indicator
             if (!isNoteToSelf) {
                 await sock.sendPresenceUpdate('paused', replyJid);
-            } else {
-                await sock.sendMessage(replyJid, { react: { text: "", key: msg.key } }).catch(e => { });
             }
 
         } catch (error: any) {
