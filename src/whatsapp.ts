@@ -73,9 +73,22 @@ export async function startWhatsApp() {
         }
     });
 
+    // Local LRU Caches to prevent Double-Messages and Infinite Loops
+    const processedMessageIds = new Set<string>();
+    const sentMessageIds = new Set<string>();
+
     sock.ev.on('messages.upsert', async (m) => {
+        // Only process real-time incoming messages, avoid historical sync appends which cause Double-Messages
+        if (m.type !== 'notify') return;
+
         const msg = m.messages[0];
-        if (!msg) return;
+        if (!msg || typeof msg.key.id !== 'string') return;
+
+        // Message Deduplication
+        if (processedMessageIds.has(msg.key.id!)) return;
+        processedMessageIds.add(msg.key.id!);
+        // Keep memory footprint small
+        if (processedMessageIds.size > 5000) processedMessageIds.delete(Array.from(processedMessageIds)[0]!);
 
         // We ignore automated broadcasts/status updates
         if (!msg.message || msg.key.remoteJid === 'status@broadcast') return;
@@ -87,15 +100,15 @@ export async function startWhatsApp() {
         const isGroup = msg.key.remoteJid?.endsWith('@g.us');
 
         let isNoteToSelf = false;
-        // Prevent Infinite Loops: If the message is from us AND starts with a known bot prefix or includes a bot signature, ignore it.
-        // This allows the user to use the 'Message Yourself' feature to talk to the bot!
+        // Prevent Infinite Loops without hardcoded signatures:
+        // By tracking the exact ID of messages sent by OpenSpider, we can drop echoed bot replies but allow 'Message Yourself' inputs from the human.
         if (msg.key.fromMe) {
-            // Check if this was a message sent BY the Baileys socket (bot reply) vs a message typed by the human on their phone
+            // Check if this was a forwarded message etc
             if (msg.message?.extendedTextMessage?.contextInfo?.isForwarded) return;
 
-            // Strict heuristic: If the text message contains our Agent prefix or signature, drop it to avoid infinite loop
-            if (textMessage.includes('[Agent]') || textMessage.startsWith('🤖') || textMessage.includes('OpenSpider') || textMessage.startsWith('✨ *')) {
-                return;
+            // Strict heuristic perfectly mirroring OpenClaw's design pattern:
+            if (sentMessageIds.has(msg.key.id!)) {
+                return; // OpenSpider sent this! Drop it to prevent the infinite loop echo!
             }
 
             const botNumber = sock.user?.id ? sock.user.id.split(':')[0] : '';
@@ -256,7 +269,11 @@ export async function startWhatsApp() {
                 console.log(`\n[Agent] ${cleanResponse.trim()}`);
 
                 // Send result back to WhatsApp with sleek dynamic header
-                await sock.sendMessage(replyJid, { text: `✨ *${agentName}*\n\n${cleanResponse.trim()}` });
+                const sentMsg = await sock.sendMessage(replyJid, { text: `✨ *${agentName}*\n\n${cleanResponse.trim()}` });
+                if (sentMsg?.key?.id) {
+                    sentMessageIds.add(sentMsg.key.id!);
+                    if (sentMessageIds.size > 1000) sentMessageIds.delete(Array.from(sentMessageIds)[0]!);
+                }
             }
 
             // Clear typing indicator
