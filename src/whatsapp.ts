@@ -94,7 +94,7 @@ export async function startWhatsApp() {
             if (msg.message?.extendedTextMessage?.contextInfo?.isForwarded) return;
 
             // Strict heuristic: If the text message contains our Agent prefix or signature, drop it to avoid infinite loop
-            if (textMessage.includes('[Agent]') || textMessage.startsWith('🤖') || textMessage.includes('OpenSpider')) {
+            if (textMessage.includes('[Agent]') || textMessage.startsWith('🤖') || textMessage.includes('OpenSpider') || textMessage.startsWith('✨ *')) {
                 return;
             }
 
@@ -207,9 +207,9 @@ export async function startWhatsApp() {
         const botIdString = sock.user?.id ? sock.user.id.split(':')[0] : '';
         const replyJid = (isNoteToSelf && msg.key.remoteJid?.includes('@lid')) ? `${botIdString}@s.whatsapp.net` : msg.key.remoteJid!;
 
-        // Acknowledge receipt natively with a reaction
+        // Acknowledge receipt natively with a typing indicator instead of a reaction
         try {
-            await sock.sendMessage(replyJid, { react: { text: "⏳", key: msg.key } });
+            await sock.sendPresenceUpdate('composing', replyJid);
         } catch (e) { }
 
         try {
@@ -256,11 +256,11 @@ export async function startWhatsApp() {
                 await sock.sendMessage(replyJid, { text: `✨ *${agentName}*\n\n${cleanResponse.trim()}` });
             }
 
-            // Remove the hour glass reaction once done
-            await sock.sendMessage(replyJid, { react: { text: "✅", key: msg.key } });
+            // Clear typing indicator
+            await sock.sendPresenceUpdate('paused', replyJid);
 
         } catch (error: any) {
-            await sock.sendMessage(replyJid, { react: { text: "❌", key: msg.key } });
+            await sock.sendPresenceUpdate('paused', replyJid);
             await sock.sendMessage(replyJid, { text: `❌ *Error processing request:*\n${error.message}` });
         }
     });
