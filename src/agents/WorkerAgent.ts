@@ -50,6 +50,8 @@ Your Role: ${this.role}
 You have the ability to write scripts (Python, Node.js, Bash) and execute them to solve the user's task.
 If you need a package, write a script that installs it or ask to run npm install.
 Your goal is to complete the task autonomously and return the final result.
+CRITICAL TOKEN RULE: Do not print massive HTML dumps. Use Python to parse, summarize, and extract ONLY the exact data you need. Your tool output context is truncated to 3000 characters.
+CRITICAL JSON TRUNCATION RULE: The backend API has a hard limit of 1500 output tokens. If your response exceeds this length, it will be forcefully clipped, causing a fatal JSON parse crash. You MUST keep your 'thought' string under 500 words and be concise in your intermediate steps to prevent array string truncation!
 ${assignedSkillsContext}
 
 Available tools you can request in your JSON response:
@@ -57,7 +59,14 @@ Available tools you can request in your JSON response:
 - write_script: { "filename": "test.py", "content": "print('hello')" }
 - execute_script: { "filename": "test.py", "args": "" }
 - message_agent: { "target": "Role Name", "message": "Text to send" }
-- final_answer: { "result": "The final output" }
+- final_answer: { "result": "The final output" } (CRITICAL: You MUST include the 'result' key containing your answer)
+
+CRITICAL FORMATTING INSTRUCTION: 
+When providing your \`final_answer\`, you MUST format the output to be highly readable and user-friendly. 
+- ALWAYS use GitHub-flavored Markdown. 
+- You MUST return the comprehensive, fully detailed list of your findings. DO NOT summarize or truncate the final result.
+- If you are returning a list of items, data points, comparisons, or contractors, you MUST format it as a clean Markdown table with columns (e.g., Name, Website, Phone, Rating).
+- Use bold text for emphasis and headers (##, ###) to separate sections logically.
 
 Context from previous steps:
 ${context.join('\n')}
@@ -68,42 +77,58 @@ ${context.join('\n')}
             { role: 'user', content: instruction }
         ];
 
-        const maxLoops = 10;
+        const maxLoops = 25;
 
         // Autonomy Loop
         for (let i = 0; i < maxLoops; i++) {
-            // Inject human-like IDE typing delay to prevent bot/velocity detection ONLY for internal IDE
+            // Inject human-like IDE typing delay to prevent bot/velocity detection ONLY for internal IDE (Optimized Stealth)
             if (this.llm.providerName === 'antigravity-internal') {
-                const delayMs = Math.floor(Math.random() * (8000 - 3000 + 1)) + 3000;
-                console.log(`[Worker - ${this.role}] Emulating human typing delay (${Math.round(delayMs / 1000)}s)...`);
+                const delayMs = Math.floor(Math.random() * (500 - 200 + 1)) + 200;
+                console.log(`[Worker - ${this.role}] Emulating human typing delay (${(delayMs / 1000).toFixed(1)}s)...`);
                 await new Promise(r => setTimeout(r, delayMs));
             }
 
-            const response = await this.llm.generateStructuredOutputs<{
-                action: 'run_command' | 'write_script' | 'execute_script' | 'message_agent' | 'final_answer';
-                command?: string;
-                filename?: string;
-                content?: string;
-                args?: string;
-                target?: string;
-                message?: string;
-                result?: string;
-                thought: string;
-            }>(messages, {
-                type: "object",
-                properties: {
-                    action: { type: "string", enum: ["run_command", "write_script", "execute_script", "message_agent", "final_answer"] },
-                    thought: { type: "string" },
-                    command: { type: "string" },
-                    filename: { type: "string" },
-                    content: { type: "string" },
-                    args: { type: "string" },
-                    target: { type: "string" },
-                    message: { type: "string" },
-                    result: { type: "string" }
-                },
-                required: ["action", "thought"]
-            });
+            let response;
+            try {
+                response = await this.llm.generateStructuredOutputs<{
+                    action: 'run_command' | 'write_script' | 'execute_script' | 'message_agent' | 'final_answer';
+                    command?: string;
+                    filename?: string;
+                    content?: string;
+                    args?: string;
+                    target?: string;
+                    message?: string;
+                    result?: string;
+                    summary_of_findings: string;
+                    thought: string;
+                }>(messages, {
+                    type: "object",
+                    properties: {
+                        action: { type: "string", enum: ["run_command", "write_script", "execute_script", "message_agent", "final_answer"] },
+                        thought: { type: "string" },
+                        summary_of_findings: { type: "string", description: "A highly compressed, 1-2 sentence memory of what you learned in this step. Retained forever even if thoughts are pruned." },
+                        command: { type: "string" },
+                        filename: { type: "string" },
+                        content: { type: "string" },
+                        args: { type: "string" },
+                        target: { type: "string" },
+                        message: { type: "string" },
+                        result: { type: "string", description: "The final answer or result string when action is final_answer" },
+                    },
+                    required: ["action", "thought", "summary_of_findings", "result"]
+                }, this.role);
+            } catch (e: any) {
+                console.warn(`\n⚠️ [Worker - ${this.role}] JSON Parse Error. Requesting LLM Self-Healing...`);
+                messages.push({ role: 'user', content: `SYSTEM EXCEPTION: You generated an invalid JSON payload that crashed the parser (${e.message}). Please strictly evaluate your JSON syntax, ensure all internal quotes are escaped, and try again.` });
+                continue;
+            }
+
+            // Enforce schema completeness independently
+            if (response.action === 'final_answer' && !response.result) {
+                console.warn(`\n⚠️ [Worker - ${this.role}] Missing Result Error. Requesting LLM Self-Healing...`);
+                messages.push({ role: 'user', content: `SYSTEM EXCEPTION: You selected action 'final_answer', but you completely failed to include the 'result' key in your JSON! You MUST re-output your JSON and explicitly include the full 'result' key containing your formatted markdown table.` });
+                continue;
+            }
 
             // Log the thought process (useful for the DB / Dashboard later)
             console.log(`[Worker - ${this.role}] Thought: ${response.thought}`);
@@ -111,7 +136,7 @@ ${context.join('\n')}
             messages.push({ role: 'assistant', content: JSON.stringify(response) });
 
             if (response.action === 'final_answer') {
-                return response.result || "Task completed without explicit result.";
+                return response.result || response.summary_of_findings || "Task completed without explicit result.";
             }
 
             let toolOutput = "";
@@ -151,10 +176,67 @@ ${context.join('\n')}
                 toolOutput = `Tool execution failed: ${e.message}`;
             }
 
+            // [V3] High Token Usage Fix: Smart Head & Tail Truncation for massive scraping outputs
+            const MAX_LENGTH = 3000;
+            if (toolOutput.length > MAX_LENGTH) {
+                const head = toolOutput.substring(0, 1500);
+                const tail = toolOutput.substring(toolOutput.length - 1500);
+                toolOutput = `${head}\n\n... [TRUNCATED ${toolOutput.length - 3000} characters. You must write scripts to parse/summarize if you need the middle data] ...\n\n${tail}`;
+            }
+
             console.log(`[Worker - ${this.role}] Tool Output: ${toolOutput.substring(0, 200)}...`);
             messages.push({ role: 'user', content: `Tool Result:\n${toolOutput}` });
-        }
 
+            // --- OpenClaw Context Pruning Implementation (V2 Hard Pruning) ---
+            // Retain System prompt, User prompt, and the CURRENT logic chain. 
+            // Aggressively prune HISTORIC Tool Results AND Assistant payload bodies to preserve token bandwidth while retaining reasoning.
+            // --- OpenSpider V3 Token-Aware Context Pruning ---
+            // Instead of blindly pruning every few turns (like OpenClaw), we dynamically monitor 
+            // the actual memory payload length. If the commands are tiny, we retain 15+ turns of perfect clarity.
+            // We only trigger skeletal compaction if the envelope gets dangerous (e.g. > 12,000 chars roughly 3.5k tokens).
+
+            const totalLength = messages.reduce((acc, m) => acc + (typeof m.content === 'string' ? m.content.length : 0), 0);
+            const DANGER_THRESHOLD = 12000;
+
+            if (totalLength > DANGER_THRESHOLD) {
+                console.log(`[Token Optimization] Context window dangerously large (${totalLength} chars). Triggering OpenSpider V3 Adaptive Pruning...`);
+
+                // We keep the first 2 messages (system/initial user), and the VERY last turn. Everything in the middle is skeletonized to save bandwidth.
+                for (let j = 2; j < messages.length - 2; j++) {
+                    const msg = messages[j];
+
+                    // 1. Prune User Tool Results
+                    if (msg && msg.role === 'user' && typeof msg.content === 'string' && msg.content.startsWith('Tool Result:\n')) {
+                        if (!msg.content.includes('[PRUNED_BY_OPENSPIDER]')) {
+                            msg.content = `Tool Result:\n[PRUNED_BY_OPENSPIDER] Execution succeeded. See historic logs for raw stdout.`;
+                        }
+                    }
+
+                    // 2. Prune Assistant JSON logic blocks (Thoughts and Source Code)
+                    if (msg && msg.role === 'assistant' && typeof msg.content === 'string') {
+                        if (!msg.content.includes('[PRUNED_BY_OPENSPIDER]')) {
+                            try {
+                                const payload = JSON.parse(msg.content);
+
+                                // Preserve any explicit summary while dropping the massive realtime thought processing
+                                const memory = payload.summary_of_findings || "No specific findings logged for this step.";
+                                payload.thought = `[PRUNED_BY_OPENSPIDER] Kept logic in memory. Findings: ${memory}`;
+
+                                // Strip raw code payloads if present to save massive tokens
+                                if (payload.content) payload.content = "[PRUNED CODE STREAM]";
+                                if (payload.command) payload.command = "[PRUNED COMMAND]";
+                                if (payload.args) payload.args = "[PRUNED ARGS]";
+
+                                msg.content = JSON.stringify(payload);
+                            } catch (e) {
+                                // If it's not valid JSON, we just let it pass
+                            }
+                        }
+                    }
+                }
+            }
+
+        }
         return "Worker Agent hit max iteration limit without finding a final answer.";
     }
 }

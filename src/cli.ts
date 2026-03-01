@@ -123,8 +123,8 @@ program
         try {
             // dynamic import because 'open' is often an ESM module
             const open = (await import('open')).default;
-            console.log('\n🕷️ Opening OpenSpider Dashboard at http://localhost:4000...');
-            await open('http://localhost:4000');
+            console.log('\n🕷️ Opening OpenSpider Dashboard at http://localhost:4001...');
+            await open('http://localhost:4001');
             process.exit(0);
         } catch (error: any) {
             console.error('Failed to open dashboard:', error.message);

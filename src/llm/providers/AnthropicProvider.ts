@@ -43,7 +43,7 @@ export class AnthropicProvider implements LLMProvider {
         return { formattedMessages, systemInstruction };
     }
 
-    async generateResponse(messages: ChatMessage[]): Promise<{ text: string, usage?: TokenUsage }> {
+    async generateResponse(messages: ChatMessage[], agentId?: string): Promise<{ text: string, usage?: TokenUsage }> {
         console.log(`[Agent] [Anthropic] Generating response using ${this.model}...`);
         const { formattedMessages, systemInstruction } = this.formatMessages(messages);
 
@@ -65,7 +65,7 @@ export class AnthropicProvider implements LLMProvider {
                 completionTokens: response.usage.output_tokens,
                 totalTokens: response.usage.input_tokens + response.usage.output_tokens,
             };
-            console.log(JSON.stringify({ type: 'usage', model: this.model, usage }));
+            console.log(JSON.stringify({ type: 'usage', model: this.model, usage, agentId: agentId || 'gateway' }));
             return { text, usage };
         }
 
@@ -74,7 +74,8 @@ export class AnthropicProvider implements LLMProvider {
 
     async generateStructuredOutputs<T>(
         messages: ChatMessage[],
-        schema: Record<string, any>
+        schema: Record<string, any>,
+        agentId?: string
     ): Promise<T> {
         console.log(`[Agent] [Anthropic] Sending structured generation to ${this.model}...`);
         const { formattedMessages, systemInstruction } = this.formatMessages(messages);
@@ -100,7 +101,7 @@ export class AnthropicProvider implements LLMProvider {
                 completionTokens: response.usage.output_tokens,
                 totalTokens: response.usage.input_tokens + response.usage.output_tokens,
             };
-            console.log(JSON.stringify({ type: 'usage', model: this.model, usage }));
+            console.log(JSON.stringify({ type: 'usage', model: this.model, usage, agentId: agentId || 'gateway' }));
         }
 
         const toolCall = response.content.find(block => block.type === 'tool_use');
