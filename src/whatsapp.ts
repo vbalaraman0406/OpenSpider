@@ -1,4 +1,4 @@
-import makeWASocket, { DisconnectReason, useMultiFileAuthState, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
+import makeWASocket, { DisconnectReason, useMultiFileAuthState, fetchLatestBaileysVersion, WAMessageStubType } from '@whiskeysockets/baileys';
 import * as qrcode from 'qrcode-terminal';
 import { Boom } from '@hapi/boom';
 import { ManagerAgent } from './agents/ManagerAgent';
@@ -34,10 +34,14 @@ export async function startWhatsApp() {
     const { version, isLatest } = await fetchLatestBaileysVersion();
     console.log(`[WhatsApp] Using WA v${version.join('.')}, isLatest: ${isLatest}`);
 
+    const pino = require('pino');
     const sock = makeWASocket({
         version,
         printQRInTerminal: true,
         auth: state,
+        logger: pino({ level: 'error' }),
+        markOnlineOnConnect: true,
+        syncFullHistory: false
     });
 
     globalSocket = sock;
@@ -89,6 +93,16 @@ export async function startWhatsApp() {
         processedMessageIds.add(msg.key.id!);
         // Keep memory footprint small
         if (processedMessageIds.size > 5000) processedMessageIds.delete(Array.from(processedMessageIds)[0]!);
+
+        // Handle Decryption Failures natively (WAMessageStubType.CIPHERTEXT === 2)
+        if (msg.messageStubType === WAMessageStubType.CIPHERTEXT || msg.messageStubType === 24) {
+            console.warn(`\n⚠️ [WhatsApp] Decryption Failure for ${msg.key.remoteJid}. Force-flushing libsignal session to trigger retry...`);
+            if (msg.key.remoteJid) {
+                // Force drop the broken session so Meta servers issue a fresh pre-key bundle on the automatic retry
+                await state.keys.set({ 'session': { [msg.key.remoteJid]: null } });
+            }
+            return;
+        }
 
         // We ignore automated broadcasts/status updates
         if (!msg.message || msg.key.remoteJid === 'status@broadcast') return;
