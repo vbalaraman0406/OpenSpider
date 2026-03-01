@@ -72,12 +72,24 @@ export async function startWhatsApp() {
         const msg = m.messages[0];
         if (!msg) return;
 
-        // Ignore own messages or automated broadcasts
-        if (!msg.message || msg.key.fromMe) return;
+        // We ignore automated broadcasts/status updates
+        if (!msg.message || msg.key.remoteJid === 'status@broadcast') return;
 
         // Ensure we extract text from standard chat, extended chat, or media captions
         const textMessage = msg.message.conversation || msg.message.extendedTextMessage?.text || msg.message.imageMessage?.caption || msg.message.pollCreationMessage?.name || '';
         const isGroup = msg.key.remoteJid?.endsWith('@g.us');
+
+        // Prevent Infinite Loops: If the message is from us AND starts with a known bot prefix or includes a bot signature, ignore it.
+        // This allows the user to use the 'Message Yourself' feature to talk to the bot!
+        if (msg.key.fromMe) {
+            // Check if this was a message sent BY the Baileys socket (bot reply) vs a message typed by the human on their phone
+            if (msg.message?.extendedTextMessage?.contextInfo?.isForwarded) return;
+
+            // Strict heuristic: If the text message contains our Agent prefix or signature, drop it to avoid infinite loop
+            if (textMessage.includes('[Agent]') || textMessage.startsWith('🤖') || textMessage.includes('OpenSpider')) {
+                return;
+            }
+        }
 
         // Handle incoming reactions (just log them for context)
         if (msg.message.reactionMessage) {

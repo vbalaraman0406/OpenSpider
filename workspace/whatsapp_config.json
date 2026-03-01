@@ -2,7 +2,8 @@
   "dmPolicy": "allowlist",
   "allowedDMs": [
     "1234567890",
-    "9876543210"
+    "9876543210",
+    "14156249639"
   ],
   "groupPolicy": "allowlist",
   "allowedGroups": [
