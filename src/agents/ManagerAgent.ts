@@ -95,7 +95,12 @@ Example output:
 }
 `;
 
-        let userContent: string | any[] = Object.keys(prompt).length ? JSON.stringify(prompt) : prompt;
+        let userContent: string | any[] = Object.keys(prompt).length ? prompt : prompt;
+        // Wrap the payload in an attention-grabbing header so the LLM knows what to focus on instead of hallucinating based on the Memory Log
+        if (typeof userContent === 'string') {
+            userContent = `[ACTIVE LIVE USER REQUEST]\n${userContent}`;
+        }
+
         if (imagesBase64.length > 0) {
             userContent = [{ type: 'text', text: typeof userContent === 'string' ? userContent : JSON.stringify(userContent) }];
             for (const img of imagesBase64) {

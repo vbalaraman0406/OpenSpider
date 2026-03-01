@@ -218,7 +218,10 @@ export async function startWhatsApp() {
             const response = await manager.processUserRequest(textMessage, mediaBase64String ? [mediaBase64String] : []);
 
             // Convert GitHub markdown to WhatsApp proprietary formatting
-            let cleanResponse = response.replace(/\[Agent\] Plan execution finished successfully\. Final Output:?[\s\n]*/g, '');
+            let cleanResponse = response.replace(/\[Agent\] Plan execution finished successfully\. Final Output:?[\s\n]*/ig, '').trim();
+
+            // Strip any remaining artifacts
+            if (cleanResponse.startsWith('Final Output:')) cleanResponse = cleanResponse.replace('Final Output:', '').trim();
 
             // 1. Convert **bold** to *bold*
             cleanResponse = cleanResponse.replace(/\*\*(.*?)\*\*/g, '*$1*');
