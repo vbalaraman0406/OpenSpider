@@ -206,8 +206,6 @@ export async function startWhatsApp() {
         // This allows Baileys' native `msgRetryCounterCache` to securely negotiate a fresh key with Meta,
         // and Meta will instantly re-send the payload with the EXACT same msg ID safely seconds later!
         if (msg.key.fromMe && !imageMessage && textMessage.trim() === '') {
-            console.warn(`\n☢️ [WhatsApp] Ghost Payload Detected! 'Message Yourself' string from ${msg.key.remoteJid} was stripped natively by libsignal (Bad MAC).`);
-            console.warn(`☢️ [WhatsApp] Awaiting Baileys native MSG retry orchestration from Meta servers...`);
             return;
         }
 
