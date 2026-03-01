@@ -3,6 +3,8 @@ import * as qrcode from 'qrcode-terminal';
 import { Boom } from '@hapi/boom';
 import { ManagerAgent } from './agents/ManagerAgent';
 import { PersonaShell } from './agents/PersonaShell';
+import fs from 'node:fs';
+import path from 'node:path';
 
 let globalSocket: any = null;
 
@@ -43,6 +45,10 @@ export async function startWhatsApp() {
         if (qr) {
             console.log("\n🕷️ [WhatsApp] Scan this QR code to connect OpenSpider:");
             qrcode.generate(qr, { small: true });
+            try {
+                const qrPath = path.join(__dirname, '..', '.latest_qr.txt');
+                fs.writeFileSync(qrPath, qr, 'utf-8');
+            } catch (e) { }
         }
 
         if (connection === 'close') {
@@ -53,6 +59,12 @@ export async function startWhatsApp() {
             }
         } else if (connection === 'open') {
             console.log('🕷️ OpenSpider connected to WhatsApp!');
+            try {
+                const qrPath = path.join(__dirname, '..', '.latest_qr.txt');
+                if (fs.existsSync(qrPath)) {
+                    fs.unlinkSync(qrPath);
+                }
+            } catch (e) { }
         }
     });
 
