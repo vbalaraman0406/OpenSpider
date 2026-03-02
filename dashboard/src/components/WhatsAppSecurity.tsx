@@ -33,6 +33,13 @@ export function WhatsAppSecurity({ isRunning }: { isRunning: boolean }) {
         try {
             const res = await fetch('/api/whatsapp/config');
             const data = await res.json();
+            // Migrate legacy: convert plain string allowedGroups to objects
+            if (data.allowedGroups && data.allowedGroups.length > 0 && typeof data.allowedGroups[0] === 'string') {
+                data.allowedGroups = data.allowedGroups.map((jid: string) => ({
+                    jid,
+                    mode: data.botMode || 'mention'
+                }));
+            }
             setConfig(data);
         } catch (e) {
             console.error("Failed to fetch WhatsApp config", e);
@@ -88,16 +95,24 @@ export function WhatsAppSecurity({ isRunning }: { isRunning: boolean }) {
         const targetValue = val || (e ? groupInput.trim() : '');
         if ((!e || e.key === 'Enter') && targetValue !== '') {
             if (e) e.preventDefault();
-            // Basic sanity check, WhatsApp group JIDs end in @g.us
-            if (!config.allowedGroups.includes(targetValue)) {
-                setConfig({ ...config, allowedGroups: [...config.allowedGroups, targetValue.includes('@') ? targetValue : `${targetValue}@g.us`] });
+            const jid = targetValue.includes('@') ? targetValue : `${targetValue}@g.us`;
+            const alreadyExists = config.allowedGroups.some((g: any) => g.jid === jid);
+            if (!alreadyExists) {
+                setConfig({ ...config, allowedGroups: [...config.allowedGroups, { jid, mode: 'mention' }] });
             }
             if (!val) setGroupInput('');
         }
     };
 
-    const removeGroupTag = (tag: string) => {
-        setConfig({ ...config, allowedGroups: config.allowedGroups.filter((t: string) => t !== tag) });
+    const removeGroupTag = (jid: string) => {
+        setConfig({ ...config, allowedGroups: config.allowedGroups.filter((g: any) => g.jid !== jid) });
+    };
+
+    const setGroupMode = (jid: string, mode: string) => {
+        setConfig({
+            ...config,
+            allowedGroups: config.allowedGroups.map((g: any) => g.jid === jid ? { ...g, mode } : g)
+        });
     };
 
     if (isLoading || !config) {
@@ -120,10 +135,10 @@ export function WhatsAppSecurity({ isRunning }: { isRunning: boolean }) {
                     onClick={handleSave}
                     disabled={isSaving}
                     className={`px-6 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300 flex items-center gap-2 shadow-lg ${saveStatus === 'saved'
-                            ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/30 scale-105'
-                            : saveStatus === 'saving'
-                                ? 'bg-amber-800 text-amber-200 cursor-not-allowed animate-pulse'
-                                : 'bg-amber-600 hover:bg-amber-500 text-white shadow-amber-900/30'
+                        ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/30 scale-105'
+                        : saveStatus === 'saving'
+                            ? 'bg-amber-800 text-amber-200 cursor-not-allowed animate-pulse'
+                            : 'bg-amber-600 hover:bg-amber-500 text-white shadow-amber-900/30'
                         }`}
                 >
                     {saveStatus === 'saved' ? <CheckCircle className="w-4 h-4" /> : <Save className="w-4 h-4" />}
@@ -217,33 +232,72 @@ export function WhatsAppSecurity({ isRunning }: { isRunning: boolean }) {
                         </div>
 
                         {config.groupPolicy === 'allowlist' && (
-                            <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-top-2">
-                                <label className="text-[10px] uppercase tracking-widest text-slate-500 font-bold">Allowed Group JIDs</label>
-                                <div className="bg-slate-900 border border-slate-800 rounded-lg p-3 min-h-[100px] flex flex-wrap content-start gap-2 focus-within:border-rose-500/50 focus-within:ring-1 focus-within:ring-rose-500/50 transition-all cursor-text" onClick={() => document.getElementById('group-input')?.focus()}>
-                                    {config.allowedGroups.map((jid: string) => {
-                                        const knownGroup = availableGroups.find(g => g.id === jid);
-                                        const displayName = knownGroup ? knownGroup.subject : jid;
-                                        return (
-                                            <div key={jid} title={jid} className="flex items-center gap-1.5 bg-rose-500/10 border border-rose-500/20 text-rose-300 px-2.5 py-1 rounded-md text-[11px] font-mono font-medium group max-w-full">
-                                                <span className="truncate">{displayName}</span>
-                                                <button onClick={(e) => { e.stopPropagation(); removeGroupTag(jid); }} className="opacity-50 hover:opacity-100 hover:text-red-400 transition-colors shrink-0">
-                                                    &times;
-                                                </button>
-                                            </div>
-                                        );
-                                    })}
+                            <div className="flex flex-col gap-3 animate-in fade-in slide-in-from-top-2">
+                                <label className="text-[10px] uppercase tracking-widest text-slate-500 font-bold">Allowed Groups</label>
+
+                                {/* Per-group list with individual mode toggles */}
+                                {config.allowedGroups.length > 0 && (
+                                    <div className="flex flex-col gap-2">
+                                        {config.allowedGroups.map((group: any) => {
+                                            const knownGroup = availableGroups.find(g => g.id === group.jid);
+                                            const displayName = knownGroup ? knownGroup.subject : group.jid;
+                                            const isListen = group.mode === 'listen';
+                                            return (
+                                                <div key={group.jid} title={group.jid} className="bg-slate-900/80 border border-slate-800 rounded-xl p-3 flex items-center justify-between gap-3 group hover:border-slate-700 transition-colors">
+                                                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                                        <Users className="w-4 h-4 text-slate-500 shrink-0" />
+                                                        <div className="min-w-0">
+                                                            <div className="text-sm font-medium text-white truncate">{displayName}</div>
+                                                            {knownGroup && <div className="text-[10px] font-mono text-slate-500 truncate">{group.jid}</div>}
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 shrink-0">
+                                                        <div className="flex bg-slate-950 rounded-lg p-0.5 border border-slate-800">
+                                                            <button
+                                                                onClick={() => setGroupMode(group.jid, 'mention')}
+                                                                className={`px-3 py-1 text-[10px] uppercase tracking-wider font-bold rounded-md transition-all ${!isListen ? 'bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 shadow-sm' : 'text-slate-500 hover:text-slate-300'
+                                                                    }`}
+                                                            >
+                                                                Mention
+                                                            </button>
+                                                            <button
+                                                                onClick={() => setGroupMode(group.jid, 'listen')}
+                                                                className={`px-3 py-1 text-[10px] uppercase tracking-wider font-bold rounded-md transition-all ${isListen ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 shadow-sm' : 'text-slate-500 hover:text-slate-300'
+                                                                    }`}
+                                                            >
+                                                                Listen
+                                                            </button>
+                                                        </div>
+                                                        <button
+                                                            onClick={() => removeGroupTag(group.jid)}
+                                                            className="p-1 text-slate-600 hover:text-red-400 transition-colors"
+                                                            title="Remove group"
+                                                        >
+                                                            &times;
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+
+                                {/* Add group input */}
+                                <div className="bg-slate-900 border border-slate-800 rounded-lg p-3 focus-within:border-rose-500/50 focus-within:ring-1 focus-within:ring-rose-500/50 transition-all cursor-text" onClick={() => document.getElementById('group-input')?.focus()}>
                                     <input
                                         id="group-input"
                                         type="text"
-                                        placeholder={config.allowedGroups.length === 0 ? "Paste JID & press Enter..." : (availableGroups.length > 0 ? "Or type JID manually..." : "Paste JID & press Enter...")}
+                                        placeholder={config.allowedGroups.length === 0 ? "Paste Group JID & press Enter..." : "Add another group JID..."}
                                         value={groupInput}
                                         onChange={(e) => setGroupInput(e.target.value)}
                                         onKeyDown={(e) => addGroupTag(e)}
-                                        className="bg-transparent border-none outline-none text-sm text-slate-300 min-w-[120px] flex-1 font-mono placeholder:font-sans placeholder:text-slate-600"
+                                        className="w-full bg-transparent border-none outline-none text-sm text-slate-300 font-mono placeholder:font-sans placeholder:text-slate-600"
                                     />
                                 </div>
+
+                                {/* Known groups dropdown */}
                                 {availableGroups.length > 0 && (
-                                    <div className="mt-2 flex flex-col gap-1.5">
+                                    <div className="flex flex-col gap-1.5">
                                         <label className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">Recently Seen Groups</label>
                                         <select
                                             onChange={(e) => {
@@ -255,15 +309,16 @@ export function WhatsAppSecurity({ isRunning }: { isRunning: boolean }) {
                                             className="w-full bg-slate-950/80 border border-slate-800 text-slate-300 text-sm rounded-lg p-2 focus:ring-1 focus:ring-rose-500 outline-none appearance-none"
                                         >
                                             <option value="">Select a group to allow...</option>
-                                            {availableGroups.filter(g => !config.allowedGroups.includes(g.id)).map(g => (
+                                            {availableGroups.filter(g => !config.allowedGroups.some((ag: any) => ag.jid === g.id)).map(g => (
                                                 <option key={g.id} value={g.id}>{g.subject} ({g.id})</option>
                                             ))}
                                         </select>
                                     </div>
                                 )}
-                                <div className="text-[10px] text-slate-600 leading-snug flex items-start gap-1.5 mt-2">
+
+                                <div className="text-[10px] text-slate-500 leading-snug flex items-start gap-1.5 mt-1 bg-slate-950/50 p-3 rounded-lg border border-slate-800">
                                     <Fingerprint className="w-3 h-3 shrink-0 mt-0.5" />
-                                    <span>WhatsApp Groups use internal JIDs (e.g. 12036315xxxx@g.us). Check the System Logs tab when someone messages the group to find its ID.</span>
+                                    <span><strong className="text-indigo-400">Mention:</strong> Agent responds only when @tagged. <strong className="text-emerald-400">Listen:</strong> Agent reads and responds to every message (⚠️ burns tokens).</span>
                                 </div>
                             </div>
                         )}
@@ -271,25 +326,7 @@ export function WhatsAppSecurity({ isRunning }: { isRunning: boolean }) {
                 </div>
             </div>
 
-            {(config.groupPolicy !== 'disabled') && (
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-inner animate-in fade-in">
-                    <div className="flex justify-between items-center mb-4">
-                        <div>
-                            <h4 className="text-sm font-bold text-white mb-1">Bot Attention Span</h4>
-                            <p className="text-xs text-slate-500">How the LLM decides to respond in authorized groups.</p>
-                        </div>
-                        <div className="flex bg-slate-950 rounded-lg p-1 border border-slate-800 max-w-[300px]">
-                            <button onClick={() => setConfig({ ...config, botMode: 'mention' })} className={`flex-1 px-4 py-2 text-xs font-semibold rounded-md transition-colors ${config.botMode === 'mention' ? 'bg-indigo-600/20 text-indigo-400 font-bold border border-indigo-500/30 shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}>Mention Only</button>
-                            <button onClick={() => setConfig({ ...config, botMode: 'listen' })} className={`flex-1 px-4 py-2 text-xs font-semibold rounded-md transition-colors ${config.botMode === 'listen' ? 'bg-emerald-600/20 text-emerald-400 font-bold border border-emerald-500/30 shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}>Full Listen</button>
-                        </div>
-                    </div>
-                    <p className="text-xs text-slate-400 bg-slate-950/50 p-3 rounded-lg border border-slate-800">
-                        {config.botMode === 'mention'
-                            ? "Agent will ONLY process messages where it is explicitly tagged (@Agent) or mentioned by name. This prevents spamming."
-                            : "Agent reads and responds contextually to every message sent in the group. Use with extreme caution as this burns API tokens rapidly!"}
-                    </p>
-                </div>
-            )}
+            {/* Global Bot Attention Span removed — now per-group via individual toggles above */}
         </div>
     );
 }

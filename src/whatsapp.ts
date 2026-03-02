@@ -140,7 +140,7 @@ export async function startWhatsApp() {
             if (caps && caps.name) agentName = caps.name;
         } catch (e) { }
 
-        let config = { dmPolicy: 'allowlist', allowedDMs: [] as string[], groupPolicy: 'disabled', allowedGroups: [] as string[], botMode: 'mention' };
+        let config = { dmPolicy: 'allowlist', allowedDMs: [] as string[], groupPolicy: 'disabled', allowedGroups: [] as any[], botMode: 'mention' };
 
         try {
             const configPath = './workspace/whatsapp_config.json';
@@ -157,24 +157,47 @@ export async function startWhatsApp() {
                 if (config.groupPolicy === 'disabled') {
                     return; // Block all group messages entirely
                 } else if (config.groupPolicy === 'allowlist') {
-                    if (!config.allowedGroups.includes(msg.key.remoteJid!)) {
+                    // allowedGroups can be: string[] or { jid: string, mode: string }[]
+                    const matchedGroup = config.allowedGroups.find((g: any) => {
+                        const jid = typeof g === 'string' ? g : g.jid;
+                        return jid === msg.key.remoteJid;
+                    });
+                    if (!matchedGroup) {
                         return; // Block, this group is not on the whitelist
                     }
-                }
-                // If 'open', fall through and allow.
+                    // Determine per-group mode (default to global botMode for backward compat)
+                    const groupMode = typeof matchedGroup === 'string'
+                        ? (config.botMode || 'mention')
+                        : (matchedGroup.mode || config.botMode || 'mention');
 
-                // Group Chat Mentions logic
-                if (config.botMode === 'mention') {
-                    const botNumber = sock.user?.id ? sock.user.id.split(':')[0] : '';
-                    const botJid = `${botNumber}@s.whatsapp.net`;
+                    // Group Chat Mentions logic (per-group)
+                    if (groupMode === 'mention') {
+                        const botNumber = sock.user?.id ? sock.user.id.split(':')[0] : '';
+                        const botJid = `${botNumber}@s.whatsapp.net`;
 
-                    const mentionedJidList = msg.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
-                    const isTaggedViaJid = mentionedJidList.includes(botJid);
-                    const isMentionedViaText = textMessage.toLowerCase().includes(`@${agentName.toLowerCase()}`);
+                        const mentionedJidList = msg.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
+                        const isTaggedViaJid = mentionedJidList.includes(botJid);
+                        const isMentionedViaText = textMessage.toLowerCase().includes(`@${agentName.toLowerCase()}`);
 
-                    // If not tagged via WhatsApp mention system AND not mentioned by plain text, ignore
-                    if (!isTaggedViaJid && !isMentionedViaText) {
-                        return;
+                        // If not tagged via WhatsApp mention system AND not mentioned by plain text, ignore
+                        if (!isTaggedViaJid && !isMentionedViaText) {
+                            return;
+                        }
+                    }
+                    // If groupMode === 'listen', fall through and process every message
+                } else if (config.groupPolicy === 'open') {
+                    // For open policy, use global botMode for mention check
+                    if (config.botMode === 'mention') {
+                        const botNumber = sock.user?.id ? sock.user.id.split(':')[0] : '';
+                        const botJid = `${botNumber}@s.whatsapp.net`;
+
+                        const mentionedJidList = msg.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
+                        const isTaggedViaJid = mentionedJidList.includes(botJid);
+                        const isMentionedViaText = textMessage.toLowerCase().includes(`@${agentName.toLowerCase()}`);
+
+                        if (!isTaggedViaJid && !isMentionedViaText) {
+                            return;
+                        }
                     }
                 }
             } else {
