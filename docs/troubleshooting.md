@@ -294,5 +294,5 @@ openspider start
 ```
 
 ::: tip Need Help?
-Check the [GitHub Issues](https://github.com/vbalaraman/OpenSpider/issues) page or file a new issue with your error logs.
+Check the [GitHub Issues](https://github.com/vbalaraman0406/OpenSpider/issues) page or file a new issue with your error logs.
 :::

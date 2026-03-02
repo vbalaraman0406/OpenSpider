@@ -37,7 +37,7 @@ export default defineConfig({
                     { text: 'Troubleshooting', link: '/troubleshooting' },
                 ]
             },
-            { text: 'GitHub', link: 'https://github.com/vbalaraman/OpenSpider' },
+            { text: 'GitHub', link: 'https://github.com/vbalaraman0406/OpenSpider' },
         ],
         sidebar: [
             {
@@ -67,7 +67,7 @@ export default defineConfig({
             },
         ],
         socialLinks: [
-            { icon: 'github', link: 'https://github.com/vbalaraman/OpenSpider' },
+            { icon: 'github', link: 'https://github.com/vbalaraman0406/OpenSpider' },
         ],
         footer: {
             message: 'Built with 🕷️ by the OpenSpider team',
