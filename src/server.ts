@@ -24,10 +24,31 @@ export function startServer() {
     // Store connected clients
     const clients: Set<WebSocket> = new Set();
 
+    // In-memory event buffer for chat persistence across page refreshes
+    // Stores the last 500 chat-relevant events so new dashboard connections
+    // instantly receive the full conversation context.
+    const eventBuffer: Array<{ type: string; data: string; timestamp: string }> = [];
+    const MAX_BUFFER_SIZE = 500;
+
+    const bufferEvent = (event: { type: string; data: string; timestamp: string }) => {
+        eventBuffer.push(event);
+        if (eventBuffer.length > MAX_BUFFER_SIZE) {
+            eventBuffer.shift(); // Remove oldest event
+        }
+    };
+
     const manager = new ManagerAgent();
 
     wss.on('connection', (ws) => {
         clients.add(ws);
+
+        // Replay buffered events to new client so they see the full conversation
+        for (const event of eventBuffer) {
+            try {
+                ws.send(JSON.stringify(event));
+            } catch (e) { }
+        }
+
         console.log('[Server] Dashboard client connected');
 
         ws.on('message', async (messageData) => {
@@ -50,11 +71,13 @@ export function startServer() {
                     logMemory('Agent', response);
 
                     // Send final result
-                    ws.send(JSON.stringify({
+                    const chatResponseEvent = {
                         type: 'chat_response',
                         data: response,
                         timestamp: new Date().toISOString()
-                    }));
+                    };
+                    bufferEvent({ type: 'chat', data: `[Agent] ${response}`, timestamp: chatResponseEvent.timestamp });
+                    ws.send(JSON.stringify(chatResponseEvent));
                 }
             } catch (err: any) {
                 console.error('[Web Chat] Error processing message:', err.message);
@@ -131,9 +154,16 @@ export function startServer() {
 
             if (!isSpecialEvent) {
                 // Broadcast standard log to all dashboard clients
+                const logEvent = { type: 'log', data: message, timestamp: new Date().toISOString() };
+
+                // Buffer chat-relevant events for page refresh persistence
+                if (message.includes('[You]') || message.includes('[Agent]') || message.includes('[Web Chat]')) {
+                    bufferEvent(logEvent);
+                }
+
                 clients.forEach(client => {
                     if (client.readyState === WebSocket.OPEN) {
-                        client.send(JSON.stringify({ type: 'log', data: message, timestamp: new Date().toISOString() }));
+                        client.send(JSON.stringify(logEvent));
                     }
                 });
             }
