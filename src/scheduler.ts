@@ -4,6 +4,9 @@ import { ManagerAgent } from './agents/ManagerAgent';
 
 const JOBS_FILE = path.join(process.cwd(), 'workspace', 'cron_jobs.json');
 
+// Track active cron jobs so the WebSocket broadcast can suppress agent_flow events during cron runs
+export let activeCronJobs = 0;
+
 interface CronJob {
     id: string;
     description: string;
@@ -61,9 +64,12 @@ async function checkAndExecuteJobs() {
                 const manager = new ManagerAgent();
                 const cronPrompt = `[SYSTEM CRON TRIGGER] Wake up and execute your scheduled background task. Do not ask me for permission. Just do it and summarize the results.\n\nTask: ${job.prompt}`;
 
+                activeCronJobs++;
                 manager.processUserRequest(cronPrompt).then(result => {
+                    activeCronJobs--;
                     console.log(`[Scheduler] Job "${job.description}" completed. Result:\n${result}`);
                 }).catch(err => {
+                    activeCronJobs--;
                     console.error(`[Scheduler] Job "${job.description}" failed:`, err);
                 });
             }
@@ -97,9 +103,12 @@ export async function runJobForcefully(jobId: string) {
     const cronPrompt = `[SYSTEM MANUAL TRIGGER] Wake up and execute your background task manually requested by the user. Do not ask me for permission. Just do it and summarize the results.\n\nTask: ${job.prompt}`;
 
     // Fire and forget
+    activeCronJobs++;
     manager.processUserRequest(cronPrompt).then(result => {
+        activeCronJobs--;
         console.log(`[Scheduler] Manual Job "${job.description}" completed. Result:\n${result}`);
     }).catch(err => {
+        activeCronJobs--;
         console.error(`[Scheduler] Manual Job "${job.description}" failed:`, err);
     });
 
