@@ -124,6 +124,13 @@ async function checkAndExecuteJobs() {
                 manager.processUserRequest(cronPrompt).then(result => {
                     activeCronJobs--;
                     console.log(`[Scheduler] Job "${job.description}" completed. Result:\n${result}`);
+                    // Broadcast cron result to dashboard chat window
+                    console.log(JSON.stringify({
+                        type: 'cron_result',
+                        jobName: job.description,
+                        result: result,
+                        timestamp: new Date().toISOString()
+                    }));
                 }).catch(err => {
                     activeCronJobs--;
                     console.error(`[Scheduler] Job "${job.description}" failed:`, err);
@@ -163,6 +170,13 @@ export async function runJobForcefully(jobId: string) {
     manager.processUserRequest(cronPrompt).then(result => {
         activeCronJobs--;
         console.log(`[Scheduler] Manual Job "${job.description}" completed. Result:\n${result}`);
+        // Broadcast cron result to dashboard chat window
+        console.log(JSON.stringify({
+            type: 'cron_result',
+            jobName: job.description,
+            result: result,
+            timestamp: new Date().toISOString()
+        }));
     }).catch(err => {
         activeCronJobs--;
         console.error(`[Scheduler] Manual Job "${job.description}" failed:`, err);
