@@ -145,7 +145,22 @@ The scheduler (`src/scheduler.ts`) provides autonomous task execution:
 3. **Execution**: Creates a fresh `ManagerAgent` instance and sends the job's prompt as a system cron trigger
 4. **Safety**: Updates `lastRunTimestamp` before execution to prevent rapid-fire on crash
 
+### Scheduling Modes
+
+| Mode | Trigger Condition | Use Case |
+|---|---|---|
+| **Interval-based** | `timeSinceLastRun >= intervalHours * 3600000` | Recurring tasks (every 1h, 2h, etc.) |
+| **Time-of-day** | Current time within 5 min of `preferredTime` AND hasn't run today | Daily reports at specific times (7:00 AM weather) |
+
+When `preferredTime` is set on a job (e.g. `"07:00"`), the scheduler ignores `intervalHours` and instead checks if the current local time matches the preferred time window and the job hasn't already run today.
+
 Jobs can also be triggered manually via the dashboard or API using `runJobForcefully()`.
+
+## Workspace Defaults & First Run
+
+On first run, `initWorkspace()` detects that no `workspace/` directory exists and automatically copies the shipped `workspace-defaults/` template into `workspace/`. This ensures all 3 default agents (Manager, Coder, Researcher) with their full SOUL.md, IDENTITY.md, and CAPABILITIES.json are ready out of the box.
+
+The copy operation **never overwrites** existing files, so user customizations are preserved across upgrades.
 
 ## Technology Stack
 
