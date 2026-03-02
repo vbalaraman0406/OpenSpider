@@ -5,7 +5,14 @@
   ],
   "groupPolicy": "allowlist",
   "allowedGroups": [
-    "120363423460684848@g.us"
+    {
+      "jid": "120363423460684848@g.us",
+      "mode": "mention"
+    },
+    {
+      "jid": "14156249639-1373117853@g.us",
+      "mode": "mention"
+    }
   ],
   "botMode": "mention"
 }
