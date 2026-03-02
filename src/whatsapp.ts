@@ -356,10 +356,10 @@ export async function startWhatsApp() {
             if (composingInterval) clearInterval(composingInterval);
 
             // Convert GitHub markdown to WhatsApp proprietary formatting
-            let cleanResponse = response.replace(/\[Agent\] Plan execution finished successfully\. Final Output:?[\s\n]*/ig, '').trim();
-
-            // Strip any remaining artifacts
-            if (cleanResponse.startsWith('Final Output:')) cleanResponse = cleanResponse.replace('Final Output:', '').trim();
+            let cleanResponse = response
+                .replace(/(\[Agent\]\s*)?Plan execution finished successfully\.?\s*Final Output:?\s*/ig, '')
+                .replace(/^Final Output:?\s*/im, '')
+                .trim();
 
             // 1. Convert **bold** to *bold*
             cleanResponse = cleanResponse.replace(/\*\*(.*?)\*\*/g, '*$1*');
