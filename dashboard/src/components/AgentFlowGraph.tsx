@@ -1,6 +1,6 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import mermaid from 'mermaid';
-import { Activity } from 'lucide-react';
+import { Activity, ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
 
 export type AgentFlowEvent = {
     type: 'agent_flow';
@@ -38,8 +38,47 @@ function sanitizeLabel(text: string, maxLen: number = 80): string {
     return safe;
 }
 
+const ZOOM_STEP = 0.15;
+const ZOOM_MIN = 0.2;
+const ZOOM_MAX = 2.0;
+const ZOOM_DEFAULT = 0.7;
+
 export default function AgentFlowGraph({ events }: AgentFlowGraphProps) {
     const containerRef = useRef<HTMLDivElement>(null);
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const [zoom, setZoom] = useState(ZOOM_DEFAULT);
+
+    const handleZoomIn = useCallback(() => {
+        setZoom(prev => Math.min(prev + ZOOM_STEP, ZOOM_MAX));
+    }, []);
+
+    const handleZoomOut = useCallback(() => {
+        setZoom(prev => Math.max(prev - ZOOM_STEP, ZOOM_MIN));
+    }, []);
+
+    const handleZoomReset = useCallback(() => {
+        setZoom(ZOOM_DEFAULT);
+    }, []);
+
+    // Support Ctrl/Cmd + scroll wheel for zoom
+    useEffect(() => {
+        const el = scrollRef.current;
+        if (!el) return;
+
+        const handleWheel = (e: WheelEvent) => {
+            if (e.ctrlKey || e.metaKey) {
+                e.preventDefault();
+                if (e.deltaY < 0) {
+                    setZoom(prev => Math.min(prev + ZOOM_STEP * 0.5, ZOOM_MAX));
+                } else {
+                    setZoom(prev => Math.max(prev - ZOOM_STEP * 0.5, ZOOM_MIN));
+                }
+            }
+        };
+
+        el.addEventListener('wheel', handleWheel, { passive: false });
+        return () => el.removeEventListener('wheel', handleWheel);
+    }, []);
 
     useEffect(() => {
         mermaid.initialize({
@@ -210,6 +249,41 @@ export default function AgentFlowGraph({ events }: AgentFlowGraphProps) {
                     Agent Execution Flow
                 </h3>
                 <div className="flex items-center gap-3">
+                    {/* Zoom Controls */}
+                    <div className="flex items-center gap-1 bg-slate-800/80 rounded-lg border border-slate-700/50 px-1 py-0.5">
+                        <button
+                            onClick={handleZoomOut}
+                            disabled={zoom <= ZOOM_MIN}
+                            title="Zoom Out"
+                            className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-700 rounded-md transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                            <ZoomOut className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                            onClick={handleZoomReset}
+                            title="Reset Zoom"
+                            className="px-2 py-1 text-[10px] font-mono font-bold text-slate-300 hover:text-white hover:bg-slate-700 rounded-md transition-colors min-w-[3.5rem] text-center"
+                        >
+                            {Math.round(zoom * 100)}%
+                        </button>
+                        <button
+                            onClick={handleZoomIn}
+                            disabled={zoom >= ZOOM_MAX}
+                            title="Zoom In"
+                            className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-700 rounded-md transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                            <ZoomIn className="w-3.5 h-3.5" />
+                        </button>
+                        <div className="w-px h-4 bg-slate-700 mx-0.5"></div>
+                        <button
+                            onClick={handleZoomReset}
+                            title="Fit to Screen"
+                            className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-700 rounded-md transition-colors"
+                        >
+                            <Maximize2 className="w-3.5 h-3.5" />
+                        </button>
+                    </div>
+
                     <span className="text-xs font-mono font-medium text-emerald-400 bg-emerald-950/60 px-3 py-1 rounded-full border border-emerald-700/40 flex items-center gap-1.5">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
                         {events.filter(e => e.event === 'task_complete').length} / {events.filter(e => e.event === 'task_start').length} Tasks Done
@@ -220,9 +294,18 @@ export default function AgentFlowGraph({ events }: AgentFlowGraphProps) {
                 </div>
             </header>
 
-            <div className="flex-1 w-full h-full overflow-auto relative p-8 fade-in flex items-center justify-center bg-transparent">
-                <div ref={containerRef} className="w-full flex justify-center custom-mermaid-container transition-all"></div>
+            <div ref={scrollRef} className="flex-1 w-full h-full overflow-auto relative p-8 fade-in bg-transparent" style={{ cursor: 'grab' }}>
+                <div
+                    ref={containerRef}
+                    className="w-full flex justify-center custom-mermaid-container"
+                    style={{
+                        transform: `scale(${zoom})`,
+                        transformOrigin: 'top center',
+                        transition: 'transform 0.2s ease-out'
+                    }}
+                ></div>
             </div>
         </div>
     );
 }
+

@@ -156,6 +156,11 @@ export function startServer() {
                 // Broadcast standard log to all dashboard clients
                 const logEvent = { type: 'log', data: message, timestamp: new Date().toISOString() };
 
+                // Tag cron-originated logs so the dashboard can ignore them for typing state
+                if (activeCronJobs > 0) {
+                    logEvent.data = `[CRON] ${logEvent.data}`;
+                }
+
                 // Buffer chat-relevant events for page refresh persistence
                 if (message.includes('[You]') || message.includes('[Agent]') || message.includes('[Web Chat]')) {
                     bufferEvent(logEvent);

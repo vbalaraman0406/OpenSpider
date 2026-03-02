@@ -53,7 +53,12 @@ export class ManagerAgent {
         const persona = new PersonaShell('manager');
         const compiledPersonaPrompt = persona.compileSystemPrompt();
 
-        const systemPrompt = `${compiledPersonaPrompt}\n\n[SYSTEM CONTEXT]\nCurrent Local Time: ${new Date().toLocaleString()}\nTimezone Name: ${Intl.DateTimeFormat().resolvedOptions().timeZone}\n\n[MEMORY CONTEXT]\n${readMemoryContext()}\n\n[TASK INSTRUCTIONS]
+        // Skip memory context for cron-triggered requests to prevent cross-contamination
+        // between concurrent cron jobs (e.g. baseball agent seeing Iran conflict context)
+        const isCronTriggered = prompt.includes('[SYSTEM CRON TRIGGER]') || prompt.includes('[SYSTEM MANUAL TRIGGER]');
+        const memorySection = isCronTriggered ? '' : `\n\n[MEMORY CONTEXT]\n${readMemoryContext()}`;
+
+        const systemPrompt = `${compiledPersonaPrompt}\n\n[SYSTEM CONTEXT]\nCurrent Local Time: ${new Date().toLocaleString()}\nTimezone Name: ${Intl.DateTimeFormat().resolvedOptions().timeZone}${memorySection}\n\n[TASK INSTRUCTIONS]
 Your job is to break down the user's complex request into a sequential plan of sub-tasks.
 Each sub-task MUST be assigned to one of the EXISTING Worker Agents listed above. Use their exact Role name (e.g. "${existingRoles[0] || 'Researcher'}", "${existingRoles[1] || 'Coder'}").
 CRITICAL: DO NOT invent new agent roles! If a task doesn't perfectly match any agent, assign it to the closest matching existing agent. The Coder agent is your general-purpose workhorse for any file/script/implementation work.
