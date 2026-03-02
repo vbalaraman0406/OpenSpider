@@ -75,6 +75,28 @@ export async function startWhatsApp() {
             }
         } else if (connection === 'open') {
             console.log('🕷️ OpenSpider connected to WhatsApp!');
+            // Discover the bot's own Linked Identity JID for self-message detection
+            const userInfo = sock.user as any;
+            if (userInfo?.lid) {
+                // Strip device suffix (e.g. "150457066512456:32@lid" → "150457066512456@lid")
+                myLid = userInfo.lid.replace(/:\d+@/, '@');
+                console.log(`[WhatsApp] Bot LID discovered: ${myLid}`);
+            } else if (userInfo?.id) {
+                console.log(`[WhatsApp] Bot ID: ${userInfo.id}, LID not available in sock.user — will try creds`);
+            }
+            // Try reading LID from auth state creds
+            if (!myLid) {
+                try {
+                    const credsPath = path.join(process.cwd(), 'baileys_auth_info', 'creds.json');
+                    if (fs.existsSync(credsPath)) {
+                        const creds = JSON.parse(fs.readFileSync(credsPath, 'utf-8'));
+                        if (creds.me?.lid) {
+                            myLid = creds.me.lid.replace(/:\d+@/, '@');
+                            console.log(`[WhatsApp] Bot LID discovered from creds: ${myLid}`);
+                        }
+                    }
+                } catch (e) { }
+            }
             try {
                 const qrPath = path.join(__dirname, '..', '.latest_qr.txt');
                 if (fs.existsSync(qrPath)) {
@@ -83,6 +105,9 @@ export async function startWhatsApp() {
             } catch (e) { }
         }
     });
+
+    // Bot's own Linked Identity JID — discovered on connection
+    let myLid = '';
 
     // Local LRU Caches to prevent Double-Messages and Infinite Loops
     const processedMessageIds = new Set<string>();
@@ -122,14 +147,10 @@ export async function startWhatsApp() {
             const botNumber = sock.user?.id ? sock.user.id.split(':')[0] : '';
             // Self-message detection:
             // 1. remoteJid starts with the bot's own phone number (standard @s.whatsapp.net)
-            // 2. remoteJid matches the bot's own Linked Identity JID (sock.user.lid)
-            //    This covers "Message Yourself" in multi-device mode where @lid is used.
-            //    We compare against the SPECIFIC bot LID, not any @lid JID, to avoid
-            //    catching outbound messages to other people routed through @lid.
-            const botLid = (sock.user as any)?.lid || '';
+            // 2. remoteJid matches the bot's own cached LID (discovered on connection from creds)
             isNoteToSelf = !!(
                 (botNumber && msg.key.remoteJid?.startsWith(botNumber)) ||
-                (botLid && msg.key.remoteJid === botLid)
+                (myLid && msg.key.remoteJid === myLid)
             );
             if (!isNoteToSelf) {
                 return; // Ignore outbound messages sent to other people
