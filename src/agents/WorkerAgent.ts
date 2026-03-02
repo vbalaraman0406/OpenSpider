@@ -234,7 +234,7 @@ ${context.join('\n')}
                                 description: jobName,
                                 prompt: taskPrompt,
                                 intervalHours: intervalHours,
-                                lastRunTimestamp: 0,
+                                lastRunTimestamp: Date.now(), // Start counting from now, don't fire immediately
                                 agentId: 'manager',
                                 status: 'enabled'
                             };

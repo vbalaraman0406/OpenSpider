@@ -8,7 +8,7 @@ import { ManagerAgent } from './agents/ManagerAgent';
 import { getProvider } from './llm';
 import { ChatMessage } from './llm/BaseProvider';
 import { logMemory, readMemoryContext } from './memory';
-import { initScheduler, runJobForcefully } from './scheduler';
+import { initScheduler, runJobForcefully, activeCronJobs } from './scheduler';
 import { logUsage, getUsageSummary } from './usage';
 import { PersonaShell } from './agents/PersonaShell';
 import gmailWebhookRouter from './webhooks/gmail';
@@ -84,6 +84,12 @@ export function startServer() {
                     const parsed = JSON.parse(message);
                     if (parsed.type === 'usage' || parsed.type === 'agent_flow') {
                         isSpecialEvent = true;
+
+                        // Skip broadcasting agent_flow events to dashboard during cron runs
+                        // This prevents the UI from locking up when background cron jobs are executing
+                        if (activeCronJobs > 0 && parsed.type === 'agent_flow') {
+                            return; // Silently skip — don't send to WebSocket clients
+                        }
 
                         // Specifically intercept usage to durable log and check for alerts
                         if (parsed.type === 'usage') {

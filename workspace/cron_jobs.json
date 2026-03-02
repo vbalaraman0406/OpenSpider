@@ -7,5 +7,14 @@
     "lastRunTimestamp": 1772215508721,
     "agentId": "gateway",
     "status": "disabled"
+  },
+  {
+    "id": "cron-7lgepztwo",
+    "description": "Daily Vancouver WA Weather Forecast",
+    "prompt": "Search the web for today's 5-day weather forecast for Vancouver, WA. Return a detailed markdown table with Day/Date, High/Low Temp (°F), Conditions, Precipitation %, Wind, Humidity, and any alerts. Send the results directly to the user on WhatsApp.",
+    "intervalHours": 24,
+    "lastRunTimestamp": 1772414552748,
+    "agentId": "manager",
+    "status": "enabled"
   }
 ]
