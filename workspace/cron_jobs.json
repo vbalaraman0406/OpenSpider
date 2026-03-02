@@ -7,5 +7,14 @@
     "lastRunTimestamp": 1772415066855,
     "agentId": "manager",
     "status": "enabled"
+  },
+  {
+    "id": "cron-tilekzruu",
+    "description": "Iran War & Market Update",
+    "prompt": "Search for the latest Iran war/conflict activity and military developments from the past 2 hours. Also search for stock market reactions to Iran tensions including S&P 500, Dow Jones, oil prices, gold, and defense stocks (LMT, RTX, NOC). Compile a short WhatsApp-friendly summary (max 300 words) with emojis, bold headers (*bold*), and bullet points. Send the summary to the user via WhatsApp.",
+    "intervalHours": 2,
+    "lastRunTimestamp": 1772429905384,
+    "agentId": "manager",
+    "status": "enabled"
   }
 ]
