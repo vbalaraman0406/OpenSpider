@@ -2074,7 +2074,7 @@ export default function App() {
                                         ref={fileInputRef}
                                         type="file"
                                         multiple
-                                        accept="image/*,.pdf,.txt,.csv,.json,.md,.py,.js,.ts,.tsx,.jsx,.html,.css"
+                                        accept="*/*"
                                         className="hidden"
                                         onChange={handleFileSelect}
                                     />
