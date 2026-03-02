@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Activity, Terminal, CheckCircle2, Server, Key, Bot, Send, MessageSquare, Radio, Smartphone, MessagesSquare, Users, Globe, Play, Square, Settings, RefreshCw, LayoutDashboard, ListTree, FolderGit2, Wrench, FileText, Search, Download, X, Trash, GitMerge, Timer, Plus, Clock, AlertTriangle } from 'lucide-react';
+import { Activity, Terminal, CheckCircle2, Server, Key, Bot, Send, MessageSquare, Radio, Smartphone, MessagesSquare, Users, Globe, Play, Square, Settings, RefreshCw, LayoutDashboard, ListTree, FolderGit2, Wrench, FileText, Search, Download, X, Trash, GitMerge, Timer, Plus, Clock, AlertTriangle, Paperclip, Image as ImageIcon } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import AgentFlowGraph, { AgentFlowEvent } from './components/AgentFlowGraph';
@@ -1635,10 +1635,51 @@ export default function App() {
         }
     };
 
-    const sendChatMessage = () => {
-        if (!chatInput.trim() || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    const [attachments, setAttachments] = useState<Array<{ name: string; type: string; dataUrl: string; preview?: string }>>([]);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
-        const payload = { type: 'chat', text: chatInput };
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = e.target.files;
+        if (!files) return;
+
+        Array.from(files).forEach(file => {
+            const reader = new FileReader();
+            reader.onload = () => {
+                const dataUrl = reader.result as string;
+                setAttachments(prev => [...prev, {
+                    name: file.name,
+                    type: file.type,
+                    dataUrl,
+                    preview: file.type.startsWith('image/') ? dataUrl : undefined
+                }]);
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // Reset input so same file can be re-selected
+        e.target.value = '';
+    };
+
+    const removeAttachment = (index: number) => {
+        setAttachments(prev => prev.filter((_, i) => i !== index));
+    };
+
+    const sendChatMessage = () => {
+        if ((!chatInput.trim() && attachments.length === 0) || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+
+        const imageAttachments = attachments.filter(a => a.type.startsWith('image/'));
+        const fileAttachments = attachments.filter(a => !a.type.startsWith('image/'));
+
+        // Build message text, appending non-image file contents info
+        let messageText = chatInput;
+        if (fileAttachments.length > 0) {
+            messageText += '\n\n[Attached Files: ' + fileAttachments.map(f => f.name).join(', ') + ']';
+        }
+
+        const payload: any = { type: 'chat', text: messageText || 'Analyze the attached image(s).' };
+        if (imageAttachments.length > 0) {
+            payload.images = imageAttachments.map(a => a.dataUrl);
+        }
         wsRef.current.send(JSON.stringify(payload));
 
         // Save to history
@@ -1648,8 +1689,10 @@ export default function App() {
         });
         setHistoryIndex(-1);
 
-        setLogs(prev => [...prev, { type: 'chat', data: `[You] ${chatInput}`, timestamp: new Date().toISOString() }]);
+        const attachmentLabel = attachments.length > 0 ? ` [📎 ${attachments.map(a => a.name).join(', ')}]` : '';
+        setLogs(prev => [...prev, { type: 'chat', data: `[You] ${chatInput || 'Analyze attached image(s)'}${attachmentLabel}`, timestamp: new Date().toISOString() }]);
         setChatInput('');
+        setAttachments([]);
         setIsTyping(true);
 
         // Safety timeout: unlock input if agent never responds (e.g. crash, network issue)
@@ -2002,26 +2045,68 @@ export default function App() {
                             </div>
 
                             {/* Chat Input */}
-                            <div className="p-4 border-t border-slate-800/60 bg-slate-900 flex items-center gap-3">
-                                <input
-                                    title="Chat Input"
-                                    type="text"
-                                    value={chatInput}
-                                    onChange={(e) => setChatInput(e.target.value)}
-                                    onKeyDown={handleKeyDown}
-                                    placeholder="Assign a task to OpenSpider..."
-                                    className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-4 py-2.5 text-sm font-medium text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
-                                    disabled={config.status !== 'connected' || isTyping}
-                                />
-                                <button
-                                    title="Send Message"
-                                    type="button"
-                                    onClick={sendChatMessage}
-                                    disabled={!chatInput.trim() || config.status !== 'connected' || isTyping}
-                                    className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white p-2.5 rounded-lg transition-colors flex items-center justify-center shrink-0"
-                                >
-                                    <Send className="w-5 h-5" />
-                                </button>
+                            <div className="border-t border-slate-800/60 bg-slate-900">
+                                {/* Attachment Preview Strip */}
+                                {attachments.length > 0 && (
+                                    <div className="px-4 pt-3 pb-1 flex flex-wrap gap-2">
+                                        {attachments.map((att, idx) => (
+                                            <div key={idx} className="relative group/att flex items-center gap-2 bg-slate-800/80 border border-slate-700/60 rounded-lg px-3 py-2 text-xs text-slate-300">
+                                                {att.preview ? (
+                                                    <img src={att.preview} alt={att.name} className="w-8 h-8 rounded object-cover border border-slate-600/50" />
+                                                ) : (
+                                                    <FileText className="w-4 h-4 text-slate-400 shrink-0" />
+                                                )}
+                                                <span className="max-w-[120px] truncate font-medium">{att.name}</span>
+                                                <button
+                                                    onClick={() => removeAttachment(idx)}
+                                                    className="ml-1 p-0.5 rounded-full hover:bg-red-900/60 text-slate-500 hover:text-red-400 transition-colors"
+                                                    title="Remove"
+                                                >
+                                                    <X className="w-3 h-3" />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                <div className="p-4 flex items-center gap-3">
+                                    <input
+                                        ref={fileInputRef}
+                                        type="file"
+                                        multiple
+                                        accept="image/*,.pdf,.txt,.csv,.json,.md,.py,.js,.ts,.tsx,.jsx,.html,.css"
+                                        className="hidden"
+                                        onChange={handleFileSelect}
+                                    />
+                                    <button
+                                        title="Attach File"
+                                        type="button"
+                                        onClick={() => fileInputRef.current?.click()}
+                                        disabled={config.status !== 'connected' || isTyping}
+                                        className="p-2.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors shrink-0"
+                                    >
+                                        <Paperclip className="w-5 h-5" />
+                                    </button>
+                                    <input
+                                        title="Chat Input"
+                                        type="text"
+                                        value={chatInput}
+                                        onChange={(e) => setChatInput(e.target.value)}
+                                        onKeyDown={handleKeyDown}
+                                        placeholder="Assign a task to OpenSpider..."
+                                        className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-4 py-2.5 text-sm font-medium text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
+                                        disabled={config.status !== 'connected' || isTyping}
+                                    />
+                                    <button
+                                        title="Send Message"
+                                        type="button"
+                                        onClick={sendChatMessage}
+                                        disabled={(!chatInput.trim() && attachments.length === 0) || config.status !== 'connected' || isTyping}
+                                        className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white p-2.5 rounded-lg transition-colors flex items-center justify-center shrink-0"
+                                    >
+                                        <Send className="w-5 h-5" />
+                                    </button>
+                                </div>
                             </div>
                         </section >
                     </div>
