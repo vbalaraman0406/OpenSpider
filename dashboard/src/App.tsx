@@ -1397,6 +1397,8 @@ export default function App() {
     const [agents, setAgents] = useState<any[]>([]);
     const [alerts, setAlerts] = useState<{ id: number, message: string }[]>([]);
     const [chatInput, setChatInput] = useState('');
+    const [chatHistory, setChatHistory] = useState<string[]>([]);
+    const [historyIndex, setHistoryIndex] = useState(-1);
     const [isTyping, setIsTyping] = useState(false);
     const [isVerbose, setIsVerbose] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -1518,13 +1520,39 @@ export default function App() {
         const payload = { type: 'chat', text: chatInput };
         wsRef.current.send(JSON.stringify(payload));
 
+        // Save to history
+        setChatHistory(prev => {
+            const updated = [chatInput, ...prev.filter(h => h !== chatInput)];
+            return updated.slice(0, 50); // Keep max 50 entries
+        });
+        setHistoryIndex(-1);
+
         setLogs(prev => [...prev, { type: 'chat', data: `[You] ${chatInput}`, timestamp: new Date().toISOString() }]);
         setChatInput('');
         setIsTyping(true);
     };
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === 'Enter') sendChatMessage();
+        if (e.key === 'Enter') {
+            sendChatMessage();
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (chatHistory.length > 0) {
+                const nextIndex = Math.min(historyIndex + 1, chatHistory.length - 1);
+                setHistoryIndex(nextIndex);
+                setChatInput(chatHistory[nextIndex]);
+            }
+        } else if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (historyIndex > 0) {
+                const nextIndex = historyIndex - 1;
+                setHistoryIndex(nextIndex);
+                setChatInput(chatHistory[nextIndex]);
+            } else if (historyIndex === 0) {
+                setHistoryIndex(-1);
+                setChatInput('');
+            }
+        }
     };
 
     const [isGenerating, setIsGenerating] = useState(false);
