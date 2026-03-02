@@ -1670,15 +1670,16 @@ export default function App() {
         const imageAttachments = attachments.filter(a => a.type.startsWith('image/'));
         const fileAttachments = attachments.filter(a => !a.type.startsWith('image/'));
 
-        // Build message text, appending non-image file contents info
+        // Build message text
         let messageText = chatInput;
-        if (fileAttachments.length > 0) {
-            messageText += '\n\n[Attached Files: ' + fileAttachments.map(f => f.name).join(', ') + ']';
-        }
 
-        const payload: any = { type: 'chat', text: messageText || 'Analyze the attached image(s).' };
+        const payload: any = { type: 'chat', text: messageText || 'Analyze the attached file(s).' };
         if (imageAttachments.length > 0) {
             payload.images = imageAttachments.map(a => a.dataUrl);
+        }
+        // Send non-image files so server can save them to disk for Worker access
+        if (fileAttachments.length > 0) {
+            payload.files = fileAttachments.map(a => ({ name: a.name, dataUrl: a.dataUrl }));
         }
         wsRef.current.send(JSON.stringify(payload));
 

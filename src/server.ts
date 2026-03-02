@@ -66,9 +66,38 @@ export function startServer() {
                         console.log(`[Web Chat] ${images.length} image(s) attached`);
                     }
 
+                    // Save uploaded non-image files to workspace/uploads/ so Workers can access them
+                    const uploadedFilePaths: string[] = [];
+                    if (parsed.files && Array.isArray(parsed.files)) {
+                        const uploadsDir = path.join(process.cwd(), 'workspace', 'uploads');
+                        if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+
+                        for (const file of parsed.files) {
+                            try {
+                                const { name, dataUrl } = file;
+                                // Extract base64 data from data URL (format: data:mimetype;base64,XXXXX)
+                                const base64Match = dataUrl.match(/^data:[^;]+;base64,(.+)$/);
+                                if (base64Match) {
+                                    const buffer = Buffer.from(base64Match[1], 'base64');
+                                    const safeName = name.replace(/[^a-zA-Z0-9._-]/g, '_');
+                                    const filePath = path.join(uploadsDir, safeName);
+                                    fs.writeFileSync(filePath, buffer);
+                                    uploadedFilePaths.push(filePath);
+                                    console.log(`[Web Chat] Saved uploaded file: ${filePath} (${buffer.length} bytes)`);
+                                }
+                            } catch (fileErr: any) {
+                                console.error(`[Web Chat] Failed to save file:`, fileErr.message);
+                            }
+                        }
+                    }
+
                     // Process request
                     const memoryStr = readMemoryContext();
-                    const fullPrompt = `Below is your historic Memory Context and Transcript.\n${memoryStr}\n\n[NEW USER REQUEST]\n${parsed.text}`;
+                    let userText = parsed.text;
+                    if (uploadedFilePaths.length > 0) {
+                        userText += `\n\n[UPLOADED FILES - saved to disk, Workers can read these paths directly]\n${uploadedFilePaths.map(p => `- ${p}`).join('\n')}`;
+                    }
+                    const fullPrompt = `Below is your historic Memory Context and Transcript.\n${memoryStr}\n\n[NEW USER REQUEST]\n${userText}`;
                     const response = await manager.processUserRequest(fullPrompt, images);
 
                     // Log agent response to session memory
