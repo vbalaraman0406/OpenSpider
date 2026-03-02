@@ -135,8 +135,23 @@ def md_to_html(md_text: str) -> str:
     return '\n'.join(html_lines)
 
 
+def get_agent_name() -> str:
+    """Read the Manager agent's persona name from IDENTITY.md."""
+    try:
+        identity_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'workspace', 'agents', 'manager', 'IDENTITY.md')
+        if os.path.exists(identity_path):
+            with open(identity_path, 'r') as f:
+                for line in f:
+                    if line.strip().startswith('Name:'):
+                        return line.split(':', 1)[1].strip()
+    except Exception:
+        pass
+    return 'OpenSpider'
+
+
 def wrap_in_email_template(html_body: str, subject: str = '') -> str:
     """Wrap HTML content in a professional dark-themed email template."""
+    agent_name = get_agent_name()
     return f'''<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -154,7 +169,7 @@ def wrap_in_email_template(html_body: str, subject: str = '') -> str:
 <table width="100%" cellspacing="0" cellpadding="0">
 <tr>
 <td>
-  <span style="font-size:24px;font-weight:700;color:#fff;letter-spacing:-0.5px;">🕷️ OpenSpider</span>
+  <span style="font-size:24px;font-weight:700;color:#fff;letter-spacing:-0.5px;">🐍 {agent_name}</span>
   <br/>
   <span style="font-size:12px;color:#a5b4fc;letter-spacing:1px;text-transform:uppercase;">Autonomous Agent Report</span>
 </td>
@@ -179,7 +194,7 @@ def wrap_in_email_template(html_body: str, subject: str = '') -> str:
 <table width="100%" cellspacing="0" cellpadding="0">
 <tr>
 <td style="font-size:11px;color:#64648a;line-height:1.5;">
-  Powered by <strong style="color:#818cf8;">OpenSpider</strong> Autonomous Agent System<br/>
+  Powered by <strong style="color:#818cf8;">{agent_name}</strong> — OpenSpider Agent System<br/>
   This is an automated message. Do not reply directly.
 </td>
 <td align="right" style="font-size:11px;color:#64648a;">
