@@ -1,0 +1,6 @@
+{
+    "name": "wait_for_user",
+    "description": "Pauses the agent and shows a banner in the browser asking the user to perform an action (like logging in). The agent waits up to 120 seconds for the user to click 'Done'.",
+    "instructions": "This is a BUILT-IN agent action. Use action 'wait_for_user' with message='Please log in to your account'. A purple banner appears in the browser with a Done button. The agent resumes automatically after the user clicks Done or after 120 seconds.",
+    "type": "built-in"
+}

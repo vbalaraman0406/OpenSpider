@@ -1,0 +1,6 @@
+{
+    "name": "schedule_task",
+    "description": "Creates a recurring cron job that the scheduler auto-executes at a specified interval. Use for daily weather alerts, hourly email checks, weekly reminders, etc.",
+    "instructions": "This is a BUILT-IN agent action. Use action 'schedule_task' with command=interval_in_hours (e.g. '24'), content=task_prompt, filename=job_name. The scheduler heartbeat runs every 60 seconds and will auto-trigger the job via the Manager Agent.",
+    "type": "built-in"
+}
