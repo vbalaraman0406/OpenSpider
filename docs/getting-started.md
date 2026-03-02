@@ -43,7 +43,7 @@ This script will:
 
 ```bash
 # Clone the repository
-git clone https://github.com/vbalaraman/OpenSpider.git
+git clone https://github.com/vbalaraman0406/OpenSpider.git
 cd OpenSpider
 
 # Install dependencies

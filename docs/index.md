@@ -11,7 +11,7 @@ hero:
       link: /getting-started
     - theme: alt
       text: View on GitHub
-      link: https://github.com/vbalaraman/OpenSpider
+      link: https://github.com/vbalaraman0406/OpenSpider
 
 features:
   - icon: 🤖
