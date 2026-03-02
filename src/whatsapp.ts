@@ -120,13 +120,19 @@ export async function startWhatsApp() {
             }
 
             const botNumber = sock.user?.id ? sock.user.id.split(':')[0] : '';
-            // Only treat as note-to-self if the remoteJid is the bot's OWN number.
-            // Previously, ANY @lid JID was treated as self-message, but @lid is used
-            // for ALL linked-device messages (outbound to anyone). This caused every
-            // outbound message to trigger the AI and waste tokens.
-            isNoteToSelf = !!(botNumber && msg.key.remoteJid?.startsWith(botNumber));
+            // Self-message detection:
+            // 1. remoteJid starts with the bot's own phone number (standard @s.whatsapp.net)
+            // 2. remoteJid matches the bot's own Linked Identity JID (sock.user.lid)
+            //    This covers "Message Yourself" in multi-device mode where @lid is used.
+            //    We compare against the SPECIFIC bot LID, not any @lid JID, to avoid
+            //    catching outbound messages to other people routed through @lid.
+            const botLid = (sock.user as any)?.lid || '';
+            isNoteToSelf = !!(
+                (botNumber && msg.key.remoteJid?.startsWith(botNumber)) ||
+                (botLid && msg.key.remoteJid === botLid)
+            );
             if (!isNoteToSelf) {
-                return; // Ignore outbound messages sent to other people (including @lid device proxies)
+                return; // Ignore outbound messages sent to other people
             }
         }
 
