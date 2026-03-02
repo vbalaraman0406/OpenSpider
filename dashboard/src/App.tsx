@@ -377,6 +377,26 @@ function AgentsView({ agents, onRefresh, provider, skills }: { agents: any[], on
 
     const [isAddSkillModalOpen, setIsAddSkillModalOpen] = useState(false);
     const [skillToAdd, setSkillToAdd] = useState(skills.length > 0 ? skills[0] : '');
+    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
+
+    const handleDeleteAgent = async () => {
+        setIsDeleting(true);
+        try {
+            const res = await fetch(`/api/agents/${selectedAgent.id}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (data.success) {
+                setIsDeleteModalOpen(false);
+                // Select first available agent after deletion
+                const remaining = agents.filter(a => a.id !== selectedAgent.id);
+                if (remaining.length > 0) setSelectedAgentId(remaining[0].id);
+                onRefresh();
+            } else {
+                alert(`Error: ${data.error}`);
+            }
+        } catch (e: any) { alert(e.message); }
+        finally { setIsDeleting(false); }
+    };
 
     return (
         <div className="flex-1 p-10 overflow-y-auto fade-in h-full flex flex-col">
@@ -488,7 +508,7 @@ function AgentsView({ agents, onRefresh, provider, skills }: { agents: any[], on
                     </div>
 
                     <div className="mt-auto pt-8 flex items-center justify-between">
-                        <div>
+                        <div className="flex items-center gap-3">
                             {selectedAgent.id !== 'manager' && (
                                 <button
                                     onClick={() => {
@@ -501,6 +521,14 @@ function AgentsView({ agents, onRefresh, provider, skills }: { agents: any[], on
                                         }`}
                                 >
                                     {activeCaps.status === 'stopped' ? '▶ Start Agent' : '⏹ Stop Agent'}
+                                </button>
+                            )}
+                            {selectedAgent.id !== 'manager' && (
+                                <button
+                                    onClick={() => setIsDeleteModalOpen(true)}
+                                    className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-colors border bg-slate-800/50 text-red-400 hover:bg-red-500/10 border-slate-700 hover:border-red-500/30"
+                                >
+                                    🗑 Delete Agent
                                 </button>
                             )}
                         </div>
@@ -672,6 +700,77 @@ function AgentsView({ agents, onRefresh, provider, skills }: { agents: any[], on
                                         }
                                     } catch (e: any) { alert(e.message); }
                                 }} className="px-5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-sm font-medium transition-colors">Assign</button>
+                            </footer>
+                        </div>
+                    </div>
+                )
+            }
+
+            {/* Delete Agent Confirmation Modal */}
+            {
+                isDeleteModalOpen && (
+                    <div className="absolute inset-0 z-50 flex items-center justify-center p-10 fade-in">
+                        <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md" onClick={() => setIsDeleteModalOpen(false)} />
+                        <div className="bg-slate-900/95 border border-red-500/30 rounded-2xl shadow-[0_0_50px_rgba(239,68,68,0.1)] w-full max-w-lg relative z-10 overflow-hidden flex flex-col">
+                            <div className="absolute top-0 inset-x-0 h-1 w-full bg-gradient-to-r from-red-500 to-orange-500" />
+                            <header className="px-6 py-5 border-b border-slate-800/60 flex items-center gap-4">
+                                <div className="p-2.5 rounded-xl bg-red-500/10 border border-red-500/20">
+                                    <AlertTriangle className="w-6 h-6 text-red-400" />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-bold text-white tracking-tight">Delete Agent Permanently</h3>
+                                    <p className="text-xs text-slate-400 mt-0.5">This action cannot be undone</p>
+                                </div>
+                            </header>
+
+                            <div className="p-6 space-y-4">
+                                <p className="text-sm text-slate-300 leading-relaxed">
+                                    You are about to permanently delete <strong className="text-red-400">{selectedAgent.name}</strong> ({selectedAgent.id}). The following data will be <strong className="text-red-400">irreversibly lost</strong>:
+                                </p>
+
+                                <div className="space-y-2">
+                                    <div className="flex items-start gap-3 bg-red-500/5 border border-red-500/10 rounded-lg p-3">
+                                        <span className="text-red-400 mt-0.5">✕</span>
+                                        <div>
+                                            <div className="text-sm font-semibold text-slate-200">Identity & Soul</div>
+                                            <div className="text-xs text-slate-400">IDENTITY.md, SOUL.md — the agent's personality and behavior core</div>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-start gap-3 bg-red-500/5 border border-red-500/10 rounded-lg p-3">
+                                        <span className="text-red-400 mt-0.5">✕</span>
+                                        <div>
+                                            <div className="text-sm font-semibold text-slate-200">User Context & Memory</div>
+                                            <div className="text-xs text-slate-400">USER.md — stored user preferences and learned context</div>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-start gap-3 bg-red-500/5 border border-red-500/10 rounded-lg p-3">
+                                        <span className="text-red-400 mt-0.5">✕</span>
+                                        <div>
+                                            <div className="text-sm font-semibold text-slate-200">Capabilities & Skills</div>
+                                            <div className="text-xs text-slate-400">CAPABILITIES.json — assigned tools, model config, and role definition</div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-3 flex items-start gap-3">
+                                    <span className="text-amber-400 mt-0.5">⚠</span>
+                                    <p className="text-xs text-amber-200/80 leading-relaxed">
+                                        If other agents reference <strong>{selectedAgent.id}</strong> in their task delegation, those references will break. Make sure no active workflows depend on this agent.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <footer className="px-6 py-4 bg-slate-950/50 border-t border-slate-800/60 flex justify-end gap-3">
+                                <button onClick={() => setIsDeleteModalOpen(false)} className="px-5 py-2.5 text-sm font-medium text-slate-300 hover:text-white transition-colors rounded-lg hover:bg-slate-800">
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleDeleteAgent}
+                                    disabled={isDeleting}
+                                    className="px-5 py-2.5 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white rounded-lg text-sm font-semibold transition-colors shadow-lg shadow-red-900/30 flex items-center gap-2"
+                                >
+                                    {isDeleting ? 'Deleting...' : 'Yes, Delete Forever'}
+                                </button>
                             </footer>
                         </div>
                     </div>
@@ -1571,16 +1670,27 @@ export default function App() {
 
                         {/* Left Column: Logs */}
                         <section className="flex-1 flex flex-col bg-slate-900/50 rounded-xl border border-slate-800/60 overflow-hidden shadow-lg backdrop-blur-sm">
-                            <div className="p-4 border-b border-slate-800/60 flex items-center justify-between bg-slate-900">
-                                <div className="flex items-center gap-2">
-                                    <Terminal className="w-5 h-5 text-slate-400" />
-                                    <h2 className="font-semibold text-slate-200">Live Agent Communications</h2>
+                            <div className="relative px-6 py-5 border-b border-slate-800/60 flex items-center justify-between bg-gradient-to-r from-slate-900 via-slate-900/95 to-slate-900">
+                                {/* Gradient accent top bar */}
+                                <div className="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-blue-500 via-fuchsia-500 to-purple-500" />
+                                <div className="flex items-center gap-4">
+                                    <div className="relative">
+                                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 border border-blue-500/20 flex items-center justify-center">
+                                            <Radio className="w-5 h-5 text-blue-400" />
+                                        </div>
+                                        {/* Live pulse dot */}
+                                        <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full border-2 border-slate-900 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.6)]" />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-lg font-bold text-white tracking-tight">Live Agent Communications</h2>
+                                        <p className="text-[11px] text-slate-500 font-medium mt-0.5 tracking-wide">Real-time messaging · OpenSpider Agent Network</p>
+                                    </div>
                                 </div>
                                 <button
                                     onClick={() => setIsVerbose(!isVerbose)}
-                                    className={`px-3 py-1.5 text-xs font-bold uppercase tracking-widest rounded-lg transition-colors border ${isVerbose
-                                        ? 'bg-fuchsia-500/10 text-fuchsia-400 hover:bg-fuchsia-500/20 border-fuchsia-500/30 shadow-[0_0_15px_rgba(217,70,239,0.15)]'
-                                        : 'bg-slate-800 hover:bg-slate-700 text-slate-400 border-slate-700'
+                                    className={`px-4 py-2 text-xs font-bold uppercase tracking-widest rounded-lg transition-all duration-300 border ${isVerbose
+                                        ? 'bg-fuchsia-500/10 text-fuchsia-400 hover:bg-fuchsia-500/20 border-fuchsia-500/30 shadow-[0_0_20px_rgba(217,70,239,0.15)]'
+                                        : 'bg-slate-800/80 hover:bg-slate-700 text-slate-400 border-slate-700 hover:border-slate-600'
                                         }`}
                                 >
                                     Verbose: {isVerbose ? 'ON' : 'OFF'}
@@ -1718,57 +1828,6 @@ export default function App() {
                                 </button>
                             </div>
                         </section >
-
-                        {/* Right Column: Diagnostics */}
-                        < aside className="w-[380px] flex flex-col gap-6" >
-
-                            {/* Dynamic Skills */}
-                            < div className="bg-slate-900/50 rounded-xl border border-slate-800/60 p-5 shadow-lg backdrop-blur-sm" >
-                                <h3 className="font-semibold text-slate-200 flex items-center gap-2 mb-4">
-                                    <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                                    Dynamic Skills
-                                </h3>
-                                <div className="space-y-3">
-                                    <p className="text-xs text-slate-400 leading-relaxed mb-4">Files and code segments dynamically generated by the Worker Agents.</p>
-                                    {skills.length === 0 ? (
-                                        <div className="p-3 bg-slate-900 rounded-lg border border-slate-800/60 text-xs text-slate-500 text-center text-balance">
-                                            No skills installed yet. The agent will compose them dynamically.
-                                        </div>
-                                    ) : (
-                                        <ul className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
-                                            {skills.map(skill => (
-                                                <li key={skill} className="text-sm font-mono text-slate-300 bg-slate-800/50 px-3 py-2 rounded-lg border border-slate-700/50 flex items-center justify-between group">
-                                                    <span>{skill}</span>
-                                                    <span className="text-[10px] uppercase tracking-wider text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity">Loaded</span>
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    )}
-                                </div>
-                            </div >
-
-                            {/* System Info */}
-                            < div className="bg-slate-900/50 rounded-xl border border-slate-800/60 p-5 shadow-lg backdrop-blur-sm" >
-                                <h3 className="font-semibold text-slate-200 flex items-center gap-2 mb-4">
-                                    <Server className="w-5 h-5 text-purple-400" />
-                                    System Diagnostics
-                                </h3>
-                                <div className="space-y-4">
-                                    <div className="flex justify-between items-center bg-slate-800/30 p-3 rounded-lg border border-slate-800/60">
-                                        <span className="text-sm text-slate-400">Node Environment</span>
-                                        <span className="text-sm text-slate-200 font-medium font-mono text-emerald-400 text-[13px]">Active</span>
-                                    </div>
-                                    <div className="flex justify-between items-center bg-slate-800/30 p-3 rounded-lg border border-slate-800/60">
-                                        <span className="text-sm text-slate-400">Memory Usage</span>
-                                        <span className="text-sm text-slate-200 font-medium font-mono text-[13px]">{'<'} 100 MB</span>
-                                    </div>
-                                    <div className="flex justify-between items-center bg-slate-800/30 p-3 rounded-lg border border-slate-800/60">
-                                        <span className="text-sm text-slate-400">WhatsApp Gateway</span>
-                                        <span className="text-sm text-slate-200 font-medium font-mono text-[13px] text-blue-400">Listening</span>
-                                    </div>
-                                </div>
-                            </div >
-                        </aside >
                     </div>
                 )
                 }

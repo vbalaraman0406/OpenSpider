@@ -10,6 +10,7 @@ import { ChatMessage } from './llm/BaseProvider';
 import { logMemory, readMemoryContext } from './memory';
 import { initScheduler, runJobForcefully } from './scheduler';
 import { logUsage, getUsageSummary } from './usage';
+import { PersonaShell } from './agents/PersonaShell';
 import gmailWebhookRouter from './webhooks/gmail';
 
 export function startServer() {
@@ -525,24 +526,23 @@ Return ONLY the raw Python code.`;
     // API Route to create a new agent
     app.post('/api/agents', (req, res) => {
         try {
-            const { name, role, model, color, prompt, initial } = req.body;
-            const id = name.toLowerCase().replace(/[^a-z0-9]/g, '-') + '-' + Math.random().toString(36).substr(2, 5);
+            const { name, role, model, color, prompt } = req.body;
+            const id = name.toLowerCase().replace(/[^a-z0-9]/g, '');
 
             const agentDir = path.join(process.cwd(), 'workspace', 'agents', id);
-            fs.mkdirSync(agentDir, { recursive: true });
+            if (fs.existsSync(agentDir)) {
+                return res.status(400).json({ error: `Agent "${id}" already exists. Choose a different name.` });
+            }
 
-            fs.writeFileSync(path.join(agentDir, 'IDENTITY.md'), `# Identity\n\nYou are ${name}, a ${role}.\n\n${prompt}`);
-            fs.writeFileSync(path.join(agentDir, 'SOUL.md'), `# Soul\n\nYou are helpful and concise.`);
-            fs.writeFileSync(path.join(agentDir, 'USER.md'), `# User Context\n\nNo human context provided yet.`);
+            // Use PersonaShell.bootstrapAgent for consistent pillar file creation
+            PersonaShell.bootstrapAgent(id, name, role, prompt || '');
 
-            const caps = {
-                name: name,
-                role: role,
-                color: color || 'fuchsia',
-                model: model,
-                allowedTools: []
-            };
-            fs.writeFileSync(path.join(agentDir, 'CAPABILITIES.json'), JSON.stringify(caps, null, 2));
+            // Override CAPABILITIES.json with any extra fields from the UI (color, model)
+            const capsPath = path.join(agentDir, 'CAPABILITIES.json');
+            const caps = JSON.parse(fs.readFileSync(capsPath, 'utf-8'));
+            if (color) caps.color = color;
+            if (model) caps.model = model;
+            fs.writeFileSync(capsPath, JSON.stringify(caps, null, 4));
 
             res.json({ success: true, agent: { id } });
         } catch (e: any) {
@@ -593,6 +593,38 @@ Return ONLY the raw Python code.`;
             }
 
             res.json({ success: true });
+        } catch (e: any) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    // API Route to delete an agent (except manager)
+    app.delete('/api/agents/:id', (req, res) => {
+        try {
+            const id = req.params.id;
+
+            // Never allow deleting the manager agent
+            if (id === 'manager') {
+                return res.status(403).json({ error: 'Cannot delete the Manager agent — it is a core system component.' });
+            }
+
+            const agentsDir = path.resolve(process.cwd(), 'workspace', 'agents');
+            const agentDir = path.resolve(agentsDir, id);
+
+            // Path traversal protection
+            if (!agentDir.startsWith(agentsDir)) {
+                return res.status(403).json({ error: 'Forbidden Path Traversal Detected' });
+            }
+
+            if (!fs.existsSync(agentDir)) {
+                return res.status(404).json({ error: 'Agent not found' });
+            }
+
+            // Recursively delete the agent directory
+            fs.rmSync(agentDir, { recursive: true, force: true });
+            console.log(`[Server] Deleted agent: ${id}`);
+
+            res.json({ success: true, message: `Agent "${id}" permanently deleted.` });
         } catch (e: any) {
             res.status(500).json({ error: e.message });
         }

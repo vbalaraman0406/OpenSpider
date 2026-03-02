@@ -21,6 +21,9 @@ export interface UsageEntry {
 export interface UsageSummary {
     totalTokens: number;
     totalCostEst: number;
+    totalRequests: number;
+    avgTokensPerRequest: number;
+    previousPeriodCost: number;
     models: Record<string, number>;
     agents: Record<string, number>;
     dailyTokens: { date: string, totalTokens: number, promptTokens: number, completionTokens: number }[];
@@ -32,7 +35,7 @@ const PRICING_MATRIX: Record<string, { prompt: number, completion: number }> = {
     'claude-3-opus-20240229': { prompt: 15.00, completion: 75.00 },
     'claude-3-sonnet-20240229': { prompt: 3.00, completion: 15.00 },
     'claude-3-haiku-20240307': { prompt: 0.25, completion: 1.25 },
-    'claude-opus-4-6-thinking': { prompt: 0.00, completion: 0.00 }, // Internal local model is free
+    'claude-opus-4-6-thinking': { prompt: 15.00, completion: 75.00 }, // Proxied through Antigravity to Claude Opus 4
     'gpt-4o': { prompt: 5.00, completion: 15.00 },
     'gpt-4-turbo': { prompt: 10.00, completion: 30.00 },
     'gpt-3.5-turbo': { prompt: 0.50, completion: 1.50 },
@@ -91,6 +94,9 @@ export function getUsageSummary(daysScope: number = 30): UsageSummary {
     const summary: UsageSummary = {
         totalTokens: 0,
         totalCostEst: 0,
+        totalRequests: 0,
+        avgTokensPerRequest: 0,
+        previousPeriodCost: 0,
         models: {},
         agents: {},
         dailyTokens: [],
@@ -99,6 +105,10 @@ export function getUsageSummary(daysScope: number = 30): UsageSummary {
 
     const targetDate = new Date();
     targetDate.setDate(targetDate.getDate() - daysScope);
+    // Previous period: e.g. if daysScope=7, previous period is 14..7 days ago
+    const prevPeriodStart = new Date();
+    prevPeriodStart.setDate(prevPeriodStart.getDate() - daysScope * 2);
+    let previousPeriodCost = 0;
     const cutoffTimestamp = targetDate.getTime();
 
     try {
@@ -115,12 +125,22 @@ export function getUsageSummary(daysScope: number = 30): UsageSummary {
 
                 // Filter by date scope
                 const entryTime = entry.timestamp ? new Date(entry.timestamp).getTime() : 0;
+
+                // Check if entry falls in previous period (for cost delta comparison)
+                if (daysScope !== 0 && entryTime >= prevPeriodStart.getTime() && entryTime < cutoffTimestamp) {
+                    if (entry.usage && entry.usage.totalTokens) {
+                        previousPeriodCost += calculateExactCost(entry.model, entry.usage);
+                    }
+                    continue;
+                }
+
                 if (entryTime < cutoffTimestamp && daysScope !== 0) continue; // daysScope 0 = All Time
 
                 entries.push(entry);
 
                 if (entry.usage && entry.usage.totalTokens) {
                     summary.totalTokens += entry.usage.totalTokens;
+                    summary.totalRequests += 1;
 
                     // Exact cost calculate logic
                     summary.totalCostEst += calculateExactCost(entry.model, entry.usage);
@@ -157,6 +177,8 @@ export function getUsageSummary(daysScope: number = 30): UsageSummary {
 
         // Fix precision for cost
         summary.totalCostEst = Number(summary.totalCostEst.toFixed(5));
+        summary.previousPeriodCost = Number(previousPeriodCost.toFixed(5));
+        summary.avgTokensPerRequest = summary.totalRequests > 0 ? Math.round(summary.totalTokens / summary.totalRequests) : 0;
 
     } catch (e: any) {
         console.error('[Usage System] Failed to read usage log:', e.message);
