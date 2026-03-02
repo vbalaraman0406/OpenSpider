@@ -3,6 +3,7 @@ import * as qrcode from 'qrcode-terminal';
 import { Boom } from '@hapi/boom';
 import { ManagerAgent } from './agents/ManagerAgent';
 import { PersonaShell } from './agents/PersonaShell';
+import { logMemory } from './memory';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -302,6 +303,7 @@ export async function startWhatsApp() {
 
         // --- MESSAGE LOGGING & FIREWALL ---
         console.log(`[You] 📱 (WhatsApp) ${textMessage}`);
+        logMemory('User', `📱 (WhatsApp) ${textMessage}`);
 
         // Extract Media Payload
         let mediaBase64String: string | undefined = undefined;
@@ -392,6 +394,7 @@ export async function startWhatsApp() {
             if (cleanResponse.length > 0) {
                 // Broadcast to Web Dashboard UI!
                 console.log(`[Agent] ${cleanResponse.trim()}`);
+                logMemory('Agent', cleanResponse.trim());
 
                 // Send result back to WhatsApp with sleek dynamic header
                 console.log(`[DEBUG] Attempting to send outbound message to jid: ${replyJid}`);
