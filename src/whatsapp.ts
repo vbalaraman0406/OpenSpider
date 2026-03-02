@@ -82,7 +82,7 @@ export async function startWhatsApp() {
                 myLid = userInfo.lid.replace(/:\d+@/, '@');
                 console.log(`[WhatsApp] Bot LID discovered: ${myLid}`);
             } else if (userInfo?.id) {
-                console.log(`[WhatsApp] Bot ID: ${userInfo.id}, LID not available in sock.user — will try creds`);
+                console.log(`[WhatsApp] Bot ID: ${userInfo.id}, LID not in sock.user — will try creds`);
             }
             // Try reading LID from auth state creds
             if (!myLid) {
@@ -97,6 +97,9 @@ export async function startWhatsApp() {
                     }
                 } catch (e) { }
             }
+            if (!myLid) {
+                console.warn(`[WhatsApp] ⚠️ Could not discover Bot LID. "Message Yourself" may not work until next reconnect. This is normal on first-ever connection.`);
+            }
             try {
                 const qrPath = path.join(__dirname, '..', '.latest_qr.txt');
                 if (fs.existsSync(qrPath)) {
@@ -106,8 +109,25 @@ export async function startWhatsApp() {
         }
     });
 
-    // Bot's own Linked Identity JID — discovered on connection
+    // Bot's own Linked Identity JID — discovered on connection or creds update
     let myLid = '';
+
+    // Live LID discovery: Baileys writes the LID to creds after the first key exchange.
+    // For a brand-new install, sock.user.lid may not exist on the first connection,
+    // but creds.update fires once the server provides it.
+    sock.ev.on('creds.update', () => {
+        if (myLid) return; // Already discovered
+        try {
+            const credsPath = path.join(process.cwd(), 'baileys_auth_info', 'creds.json');
+            if (fs.existsSync(credsPath)) {
+                const creds = JSON.parse(fs.readFileSync(credsPath, 'utf-8'));
+                if (creds.me?.lid) {
+                    myLid = creds.me.lid.replace(/:\d+@/, '@');
+                    console.log(`[WhatsApp] Bot LID discovered via creds update: ${myLid}`);
+                }
+            }
+        } catch (e) { }
+    });
 
     // Local LRU Caches to prevent Double-Messages and Infinite Loops
     const processedMessageIds = new Set<string>();
