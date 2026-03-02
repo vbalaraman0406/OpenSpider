@@ -1,71 +1,181 @@
-# Handoff — Session 2026-03-01 (Afternoon)
+# OpenSpider Session Handoff — March 1, 2026
 
-## Summary
-Fixed WhatsApp self-message delivery, native typing bubbles, dashboard chat rendering, and improved the security UI. Two commits pushed to `main`.
-
----
-
-## Changes Made
-
-### Commit `7d3fde3` — WhatsApp Self-Message Delivery & Dashboard Chat Rendering
-
-#### `src/whatsapp.ts`
-- **@lid JID Rerouting**: Self-messages ("Message Yourself") arrive with `remoteJid` as an `@lid` device proxy JID, which is invisible in WhatsApp's chat UI. Outbound replies and presence updates sent to `@lid` are silently blackholed by Meta. Fixed by detecting `@lid` on self-messages and rerouting `replyJid` to `botJid` (`@s.whatsapp.net`).
-- **Fast-Path Composing Trigger**: `sendPresenceUpdate('composing')` now fires immediately on message arrival (before the Bad MAC ghost trap). For `@lid` JIDs, composing is rerouted to `@s.whatsapp.net` so the native typing bubble appears in the correct chat window.
-- **Resilient Presence Updates**: All `sendPresenceUpdate` calls now use `.catch(() => {})` to prevent Meta 503 rejections from crashing the Baileys connection. Mirrors OpenClaw's error-swallowing pattern.
-- **Removed Hourglass Emoji**: Replaced the ⏳ reaction workaround with native composing for all messages (including self-chat).
-
-#### `dashboard/src/App.tsx`
-- **Robust Log Matching**: Replaced fragile `.startsWith('[You]')` / `.startsWith('[Agent]')` with `.includes()` to handle log messages with unexpected prefixes or leading whitespace.
-- **Fixed Content Extraction**: Uses `substring(indexOf(...))` instead of `.replace()` for precise content parsing.
+> **Branch:** `main` | **Latest Commit:** `5817bc4` | **All changes pushed to origin/main**
 
 ---
 
-### Commit `be9f41f` — Apply Security Rules Button Visual Feedback
+## Session Summary
 
-#### `dashboard/src/components/WhatsAppSecurity.tsx`
-- **Amber default**: Button is orange/amber to signal an actionable state.
-- **Pulsing amber**: Animates during save.
-- **Green success**: Turns emerald green with ✓ "Rules Applied!" for 2.5 seconds after successful save, then auto-resets.
-- Uses a `saveStatus` state machine (`'idle' | 'saving' | 'saved'`).
+This session focused on enhancing the OpenSpider dashboard, adding scheduling capabilities, fixing WhatsApp group behavior, professional email formatting, and Gen Z agent branding. All features are deployed and running via PM2.
 
 ---
 
-### Config Fix (not committed — `workspace/` is gitignored)
+## Features Built (Chronological Order)
 
-#### `workspace/whatsapp_config.json`
-- Updated `allowedGroups` from placeholder `120363151234567890@g.us` to real group JID `120363423460684848@g.us`.
+### 1. Chat Input History (`572b292`)
+**Files:** `dashboard/src/App.tsx`
 
----
-
-## Key Technical Insights
-
-### @lid vs @s.whatsapp.net
-WhatsApp's linked-device architecture uses `@lid` (Linked Identity) proxy JIDs internally. When you send a message to yourself, Baileys often receives it with `remoteJid` as `150457066512456@lid` instead of `14156249639@s.whatsapp.net`. Messages and presence updates sent TO `@lid` JIDs are silently dropped by Meta's servers — they never appear in any chat window. The fix detects `@lid` on self-messages and reroutes to the bot's `@s.whatsapp.net` JID.
-
-### Bad MAC Retry & Ghost Trap
-Self-messages trigger Bad MAC errors ~50% of the time due to encryption ratchet de-sync. The first packet arrives with empty text (ghost), gets dropped by the ghost trap. Baileys then renegotiates encryption keys and Meta re-delivers ~2 seconds later with the same message ID. The fast-path composing trigger fires on the ghost packet (which arrives on `@s.whatsapp.net`) so the typing bubble appears immediately — masking the 2-second retry latency.
-
-### PM2 Runs Compiled JS
-PM2 executes `dist/index.js`, not `src/index.ts`. Changes to TypeScript source require `npm run build:backend` before `pm2 restart` for changes to take effect.
+- Up/Down arrow keys in the Agent Chat input box recall previous messages
+- Uses a `chatHistory` state array with `historyIndex` cursor
+- Enter saves to history, Up/Down navigates, Escape resets
 
 ---
 
-## Known Issues / Open Items
+### 2. Schedule Task Tool for Agents (`400ff98`)
+**Files:** `src/agents/WorkerAgent.ts`, `src/agents/ManagerAgent.ts`
 
-1. **Web UI Live Messages**: WhatsApp messages broadcast via WebSocket do appear live when the dashboard is open, but are NOT persisted to `workspace/memory/*.md` chat history. On page refresh, only memory-persisted messages survive. Consider adding a bridging layer that writes `[You]`/`[Agent]` entries from `whatsapp.ts` into the memory system.
-
-2. **Second Message Typing Bubble Delay**: The first message after a restart shows the typing bubble instantly. Subsequent messages may have a ~2s delay due to the Bad MAC encryption renegotiation. This is a fundamental WhatsApp/libsignal limitation that even OpenClaw experiences.
-
-3. **Group Feature**: Config is set up for group `120363423460684848@g.us` with `botMode: 'mention'`. The bot responds when @mentioned by name ("@Ananta") or tagged via WhatsApp's contact picker. Further group testing needed.
+- Added `schedule_task` action to `WorkerAgent.ts` — agents can now create cron jobs
+- Creates entries in `workspace/cron_jobs.json` with description, prompt, intervalHours, status
+- Updated Manager prompt with `[SCHEDULING CAPABILITY]` section so it never refuses recurring task requests
+- The 60-second heartbeat loop in `src/scheduler.ts` picks up and executes these jobs
 
 ---
 
-## Files Modified This Session
+### 3. Cron Job Fixes (`c88e76c`)
+**Files:** `src/scheduler.ts`, `src/server.ts`, `src/agents/WorkerAgent.ts`
 
-| File | Change |
-|------|--------|
-| `src/whatsapp.ts` | @lid rerouting, composing trigger, resilient presence |
-| `dashboard/src/App.tsx` | `.includes()` log matching |
-| `dashboard/src/components/WhatsAppSecurity.tsx` | Save button visual feedback |
-| `workspace/whatsapp_config.json` | Correct group JID |
+- **No immediate fire:** Changed `lastRunTimestamp: 0` → `Date.now()` so new cron jobs wait a full interval before first run
+- **No UI locking:** Added `activeCronJobs` counter to `scheduler.ts`. Server's `console.log` override in `server.ts` skips broadcasting `agent_flow` WebSocket events when `activeCronJobs > 0`
+
+---
+
+### 4. Agent Flow Data Labels (`4ad11f8`)
+**Files:** `dashboard/src/components/AgentFlowGraph.tsx`, `src/agents/ManagerAgent.ts`
+
+- Agent Flow graph now shows **instruction text** on edges from Manager → Worker
+- Shows **result snippets** after task completion in dedicated result nodes
+- `ManagerAgent.ts` emits `instruction` field in `task_start` events and `result` field in `task_complete` events
+
+---
+
+### 5. Dynamic Skill Metadata (`c3b94d6`)
+**Files:** `skills/browse_web.md`, `skills/schedule_task.md`, `skills/wait_for_user.md`
+
+- Created skill metadata files so `browse_web`, `schedule_task`, and `wait_for_user` appear in the Dynamic Skills dashboard screen
+
+---
+
+### 6. Professional HTML Email Template (`f6c8847`, `b72d055`, `daa09e6`, `d01e114`)
+**Files:** `skills/send_email.py`
+
+Complete rewrite of `send_email.py`:
+- **`md_to_html()`** — Zero-dependency markdown → HTML converter (handles headers, bold, italic, links, tables, code blocks, lists, horizontal rules)
+- **`wrap_in_email_template()`** — Professional dark-themed email template with:
+  - `♾️ {AgentName}` gradient header (reads name dynamically from `workspace/agents/manager/IDENTITY.md`)
+  - Styled body on dark navy `#111127` background
+  - Footer: "Powered by ♾️ {AgentName} — OpenSpider Agent System"
+- Agent passes raw markdown → arrives as polished HTML in Gmail
+
+---
+
+### 7. System Logs Level Filtering (`b99cfa7`)
+**Files:** `dashboard/src/App.tsx` (`LogsView` component)
+
+Previously all buttons (Trace, Debug, Info, Warn, Error, Search, Download) were non-functional placeholders. Now:
+- **Level filter buttons** toggle on/off independently with counts (e.g. `TRACE 78`)
+- **Content-based classification** via keyword matching (error/failed → Error, warn/⚠ → Warn, etc.)
+- **Search** filters logs by text in real-time
+- **Download** exports visible (filtered) logs as `.log` file
+- **Auto-follow** checkbox controls scroll behavior
+- **Visual:** colored left-border, level badge per log entry, filtered/total counter
+
+---
+
+### 8. Per-Group Mention/Listen Mode (`aa5232b`)
+**Files:** `src/whatsapp.ts`, `dashboard/src/components/WhatsAppSecurity.tsx`
+
+Previously one global `botMode` applied to ALL groups. Now:
+- **Config format:** `allowedGroups` changed from `["jid"]` to `[{ "jid": "...", "mode": "mention"|"listen" }]`
+- **Backend:** `whatsapp.ts` checks per-group mode. `mention` = respond only when @tagged. `listen` = respond to every message
+- **UI:** Each group in the allowlist has its own **Mention / Listen** toggle. Removed global "Bot Attention Span" section
+- **Backward compatible:** Legacy `string[]` configs auto-migrate to objects on load
+
+---
+
+### 9. Gen Z Character Emojis for Agents (`5817bc4`)
+**Files:** `workspace/agents/*/CAPABILITIES.json`, `src/server.ts`, `dashboard/src/App.tsx`, `dashboard/src/components/AgentFlowGraph.tsx`
+
+| Agent | Role | Emoji |
+|---|---|---|
+| Ananta | Manager / CTO | 🧠 |
+| Cipher | Coder | ⚡ |
+| Oracle | Researcher | 🔮 |
+
+Emojis appear in:
+- Agent Workspace sidebar (emoji prefix before name)
+- Agent detail panel (emoji avatar instead of letter initial)
+- Agent Chat messages (emoji next to agent name)
+- Agent Flow Graph (role-specific emojis on node labels: 🧠 Manager, ⚡ Coder, 🔮 Researcher)
+- `CAPABILITIES.json` has new `emoji` field — set per agent, returned via server API
+- Also renamed `Researcher` → `Oracle` in capabilities
+
+---
+
+## Architecture Notes for Next Agent
+
+### Key Files & Their Roles
+| File | Purpose |
+|---|---|
+| `src/server.ts` | Express + WebSocket server, serves dashboard, API routes, console.log → WS broadcast |
+| `src/whatsapp.ts` | Baileys WhatsApp connection, security firewall, message routing |
+| `src/agents/ManagerAgent.ts` | Orchestrator — plans, delegates to workers, emits agent_flow events via console.log |
+| `src/agents/WorkerAgent.ts` | Executes tasks — has tools like search_web, browse_web, schedule_task, send_email |
+| `src/scheduler.ts` | 60-second heartbeat, executes cron jobs from `workspace/cron_jobs.json` |
+| `src/agents/PersonaShell.ts` | Reads agent identity/soul/capabilities from workspace filesystem |
+| `skills/send_email.py` | Gmail OAuth email sender with markdown→HTML converter |
+| `dashboard/src/App.tsx` | Main dashboard (~2050 lines), all tabs/views |
+| `dashboard/src/components/WhatsAppSecurity.tsx` | WhatsApp channel config UI (DMs, groups, per-group modes) |
+| `dashboard/src/components/AgentFlowGraph.tsx` | Mermaid-based agent flow visualization |
+
+### Config Files
+| File | Purpose |
+|---|---|
+| `workspace/whatsapp_config.json` | DM/group policies, per-group listen modes |
+| `workspace/cron_jobs.json` | Scheduled tasks with intervals |
+| `workspace/agents/*/CAPABILITIES.json` | Agent name, role, emoji, tools, model, budget |
+| `workspace/agents/*/IDENTITY.md` | Agent persona description |
+| `workspace/agents/*/SOUL.md` | Behavioral directives |
+| `workspace/agents/*/USER.md` | Learned user context |
+
+### Build & Deploy Commands
+```bash
+# Backend (TypeScript → dist/)
+npm run build:backend
+
+# Dashboard (Vite → dashboard/dist/, served by Express)
+cd dashboard && npm run build
+
+# Restart
+pm2 restart all
+
+# Commit pattern
+git add -A && git commit -m "type: description" && git push origin main
+```
+
+### Important Patterns
+1. **Agent events flow:** `ManagerAgent` emits `agent_flow` JSON events via `console.log()` → `server.ts` intercepts via overridden console.log → broadcasts to WebSocket clients → dashboard renders in Agent Flow / Agent Chat
+2. **Cron isolation:** `activeCronJobs` counter in `scheduler.ts` prevents cron-triggered agent_flow events from reaching the dashboard WebSocket
+3. **Email:** WorkerAgent calls `python3 skills/send_email.py --to X --subject Y --body Z`. The body is markdown; `send_email.py` converts it to styled HTML automatically
+4. **Per-group modes:** `whatsapp.ts` reads `allowedGroups[].mode` per group. Falls back to global `botMode` for backward compat
+
+---
+
+## Git Commit Log (This Session)
+```
+5817bc4 feat: Gen Z character emojis for all agents 🧠⚡🔮
+aa5232b feat: per-group Mention/Listen mode for WhatsApp group chats
+b99cfa7 feat: fully functional System Logs with level filtering, search, and export
+d01e114 fix: add ♾️ emoji to Powered by footer in email template
+daa09e6 fix: use infinity ♾️ emoji in email header
+b72d055 feat: email template dynamically uses Manager agent persona name from IDENTITY.md
+f6c8847 feat: professional HTML email template with markdown-to-HTML converter
+4ad11f8 feat: enhance Agent Flow graph with instruction and result data labels
+c3b94d6 feat: add skill metadata for browse_web, schedule_task, and wait_for_user
+c88e76c fix: prevent cron jobs from locking dashboard UI
+400ff98 feat: add schedule_task tool to WorkerAgent and scheduling awareness to Manager
+572b292 feat: add up/down arrow input history to Agent Chat input box
+```
+
+---
+
+*Handoff generated: March 1, 2026 at 6:52 PM PST*
