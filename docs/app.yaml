@@ -1,0 +1,31 @@
+runtime: nodejs22
+
+handlers:
+  - url: /assets
+    static_dir: .vitepress/dist/assets
+    secure: always
+
+  - url: /spider.svg
+    static_files: .vitepress/dist/spider.svg
+    upload: .vitepress/dist/spider.svg
+    secure: always
+
+  - url: /hashmap.json
+    static_files: .vitepress/dist/hashmap.json
+    upload: .vitepress/dist/hashmap.json
+    secure: always
+
+  - url: /(.*\.html)
+    static_files: .vitepress/dist/\1
+    upload: .vitepress/dist/(.*)\.html
+    secure: always
+
+  - url: /(.+)
+    static_files: .vitepress/dist/\1.html
+    upload: .vitepress/dist/(.*)\.html
+    secure: always
+
+  - url: /
+    static_files: .vitepress/dist/index.html
+    upload: .vitepress/dist/index.html
+    secure: always
