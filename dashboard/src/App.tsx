@@ -1266,7 +1266,7 @@ function LogsView({ logs }: { logs: LogMessage[] }) {
 function CronView({ agents }: { agents: any[] }) {
     const [jobs, setJobs] = useState<any[]>([]);
     const [showModal, setShowModal] = useState(false);
-    const [formData, setFormData] = useState({ description: '', prompt: '', intervalHours: '24', agentId: 'gateway', status: 'enabled' });
+    const [formData, setFormData] = useState({ description: '', prompt: '', intervalHours: '24', agentId: 'gateway', status: 'enabled', preferredTime: '' });
 
     useEffect(() => {
         fetchJobs();
@@ -1312,13 +1312,14 @@ function CronView({ agents }: { agents: any[] }) {
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
+            const payload = { ...formData, preferredTime: formData.preferredTime || undefined };
             await fetch('/api/cron', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(formData)
+                body: JSON.stringify(payload)
             });
             setShowModal(false);
-            setFormData({ description: '', prompt: '', intervalHours: '24', agentId: 'gateway', status: 'enabled' });
+            setFormData({ description: '', prompt: '', intervalHours: '24', agentId: 'gateway', status: 'enabled', preferredTime: '' });
             fetchJobs();
         } catch (e) { }
     };
@@ -1364,9 +1365,10 @@ function CronView({ agents }: { agents: any[] }) {
                         const isEnabled = job.status !== 'disabled';
                         const neverRun = job.lastRunTimestamp === 0;
 
+                        const hasPreferredTime = !!job.preferredTime;
                         const intervalMs = job.intervalHours * 60 * 60 * 1000;
                         const timeSinceLast = Date.now() - job.lastRunTimestamp;
-                        const timeUntilNext = intervalMs - timeSinceLast;
+                        const timeUntilNext = hasPreferredTime ? 0 : intervalMs - timeSinceLast;
 
                         return (
                             <div key={job.id} className="bg-slate-900/60 backdrop-blur-xl rounded-2xl border border-white/5 p-6 flex flex-col gap-4 shadow-xl hover:bg-slate-900/80 transition-all">
@@ -1376,7 +1378,7 @@ function CronView({ agents }: { agents: any[] }) {
                                     <div>
                                         <h3 className="text-xl font-bold text-white tracking-tight mb-1">{job.description}</h3>
                                         <div className="text-xs text-slate-500 font-mono flex gap-2">
-                                            <span>Cron Every {job.intervalHours} Hours</span>
+                                            <span>{job.preferredTime ? `Daily at ${job.preferredTime}` : `Every ${job.intervalHours}h`}</span>
                                         </div>
                                     </div>
 
@@ -1391,7 +1393,7 @@ function CronView({ agents }: { agents: any[] }) {
                                         </div>
                                         <div className="flex justify-between gap-6 items-center">
                                             <span className="text-slate-500 font-bold tracking-widest uppercase">Next</span>
-                                            <span className="text-slate-300 font-mono">{isEnabled ? `in ${formatTimeDelta(timeUntilNext)}` : 'n/a'}</span>
+                                            <span className="text-slate-300 font-mono">{!isEnabled ? 'n/a' : hasPreferredTime ? job.preferredTime : `in ${formatTimeDelta(timeUntilNext)}`}</span>
                                         </div>
                                         <div className="flex justify-between gap-6 items-center">
                                             <span className="text-slate-500 font-bold tracking-widest uppercase">Last</span>
@@ -1457,8 +1459,12 @@ function CronView({ agents }: { agents: any[] }) {
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Interval (Hours)</label>
-                                <input required type="number" min="1" max="8760" value={formData.intervalHours} onChange={e => setFormData({ ...formData, intervalHours: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm text-slate-200 focus:ring-1 focus:ring-rose-500 focus:border-rose-500 outline-none" />
+                                <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Preferred Time (e.g. 07:00) — leave blank for interval-based</label>
+                                <input type="time" value={formData.preferredTime} onChange={e => setFormData({ ...formData, preferredTime: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm text-slate-200 focus:ring-1 focus:ring-rose-500 focus:border-rose-500 outline-none" />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Interval (Hours) — used when no preferred time is set</label>
+                                <input type="number" min="1" max="8760" value={formData.intervalHours} onChange={e => setFormData({ ...formData, intervalHours: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm text-slate-200 focus:ring-1 focus:ring-rose-500 focus:border-rose-500 outline-none" />
                             </div>
                             <div>
                                 <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Task Prompt</label>

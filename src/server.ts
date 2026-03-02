@@ -721,21 +721,22 @@ Return ONLY the raw Python code.`;
 
     app.post('/api/cron', (req, res) => {
         try {
-            const { description, prompt, intervalHours, agentId } = req.body;
+            const { description, prompt, intervalHours, agentId, preferredTime } = req.body;
             let jobs = [];
             if (fs.existsSync(cronJobsPath)) {
                 jobs = JSON.parse(fs.readFileSync(cronJobsPath, 'utf-8'));
             }
 
-            const newJob = {
+            const newJob: any = {
                 id: 'cron-' + Math.random().toString(36).substr(2, 9),
                 description,
                 prompt,
                 intervalHours: Number(intervalHours) || 24,
-                lastRunTimestamp: Date.now(),
+                lastRunTimestamp: preferredTime ? 0 : Date.now(), // 0 so time-of-day jobs trigger at next occurrence
                 agentId: agentId || 'gateway',
                 status: 'enabled'
             };
+            if (preferredTime) newJob.preferredTime = preferredTime;
 
             jobs.push(newJob);
             fs.writeFileSync(cronJobsPath, JSON.stringify(jobs, null, 2));
