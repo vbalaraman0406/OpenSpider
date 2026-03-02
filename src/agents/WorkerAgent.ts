@@ -4,6 +4,7 @@ import { BrowserTool, BrowseAction } from '../browser/tool';
 import fs from 'node:fs';
 import path from 'node:path';
 import { PersonaShell } from './PersonaShell';
+import { sendWhatsAppMessage } from '../whatsapp';
 
 export class WorkerAgent {
     private llm: LLMProvider;
@@ -74,6 +75,7 @@ Available tools you can request in your JSON response:
 - schedule_task: { "command": "24", "content": "Fetch Vancouver WA weather and send to user via WhatsApp", "filename": "Daily Weather Brief" } (Schedule a recurring task that runs automatically. "command" = interval in hours, "content" = the prompt/task to execute, "filename" = short name for the job. The scheduler will auto-execute this task at the specified interval using the Manager Agent.)
 - message_agent: { "target": "Role Name", "message": "Text to send" } (Delegate a sub-task to a specialized sub-agent)
 - send_email: { "to": "user@example.com", "subject": "Hello", "body": "My message here" } (Send an outbound email natively using OAuth.)
+- send_whatsapp: { "message": "Hello!" } (Send a WhatsApp message to the user. The system will automatically route to the configured user's WhatsApp number. Use this whenever the task requires sending results via WhatsApp.)
 - final_answer: { "result": "The final output" } (CRITICAL: You MUST include the 'result' key containing your answer)
 
 BROWSER USAGE GUIDELINES:
@@ -107,7 +109,7 @@ ${context.join('\n')}
             let response;
             try {
                 response = await this.llm.generateStructuredOutputs<{
-                    action: 'run_command' | 'write_script' | 'execute_script' | 'browse_web' | 'wait_for_user' | 'schedule_task' | 'message_agent' | 'send_email' | 'final_answer';
+                    action: 'run_command' | 'write_script' | 'execute_script' | 'browse_web' | 'wait_for_user' | 'schedule_task' | 'message_agent' | 'send_email' | 'send_whatsapp' | 'final_answer';
                     command?: string;
                     filename?: string;
                     content?: string;
@@ -123,7 +125,7 @@ ${context.join('\n')}
                 }>(messages, {
                     type: "object",
                     properties: {
-                        action: { type: "string", enum: ["run_command", "write_script", "execute_script", "browse_web", "wait_for_user", "schedule_task", "message_agent", "send_email", "final_answer"] },
+                        action: { type: "string", enum: ["run_command", "write_script", "execute_script", "browse_web", "wait_for_user", "schedule_task", "message_agent", "send_email", "send_whatsapp", "final_answer"] },
                         thought: { type: "string" },
                         summary_of_findings: { type: "string", description: "A highly compressed, 1-2 sentence memory of what you learned in this step. Retained forever even if thoughts are pruned." },
                         command: { type: "string" },
@@ -264,8 +266,39 @@ ${context.join('\n')}
                     } catch (e: any) {
                         toolOutput = `Failed to send email. Ensure OAuth is configured via 'openspider tools email setup'. Error: ${e.message}\n${e.stdout?.toString() || ''}\n${e.stderr?.toString() || ''}`;
                     }
+                } else if (response.action === 'send_whatsapp' && response.message) {
+                    console.log(`[Worker - ${this.role}] Sending WhatsApp message...`);
+                    try {
+                        // Determine the user's WhatsApp JID from the config
+                        const configPath = path.join(process.cwd(), 'workspace', 'whatsapp_config.json');
+                        let userJid = '';
+                        if (fs.existsSync(configPath)) {
+                            const waConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+                            if (waConfig.allowedDMs && waConfig.allowedDMs.length > 0) {
+                                const rawNumber = waConfig.allowedDMs[0].replace(/\D/g, '');
+                                userJid = `${rawNumber}@s.whatsapp.net`;
+                            }
+                        }
+                        if (!userJid) {
+                            toolOutput = 'Error: No WhatsApp user configured. Add a phone number to the allowedDMs list in Channels > WhatsApp config.';
+                        } else {
+                            // Get agent persona name for the header
+                            let agentName = 'OpenSpider';
+                            try {
+                                const persona = new PersonaShell('manager');
+                                const caps = persona.getCapabilities();
+                                if (caps && caps.name) agentName = caps.name;
+                            } catch (e) { }
+
+                            const formattedMsg = `✨ *${agentName}*\n\n${response.message}`;
+                            await sendWhatsAppMessage(userJid, formattedMsg);
+                            toolOutput = `✅ WhatsApp message sent successfully to ${userJid}.`;
+                        }
+                    } catch (e: any) {
+                        toolOutput = `Failed to send WhatsApp message: ${e.message}`;
+                    }
                 } else {
-                    toolOutput = `Invalid action or missing parameters. You requested '${response.action}'. Check the schema. run_command needs 'command', write_script needs 'filename' and 'content', send_email needs 'to', 'subject', and 'body'. You provided: ${JSON.stringify(response)}`;
+                    toolOutput = `Invalid action or missing parameters. You requested '${response.action}'. Check the schema. run_command needs 'command', write_script needs 'filename' and 'content', send_email needs 'to', 'subject', and 'body', send_whatsapp needs 'message'. You provided: ${JSON.stringify(response)}`;
                 }
             } catch (e: any) {
                 toolOutput = `Tool execution failed: ${e.message}`;

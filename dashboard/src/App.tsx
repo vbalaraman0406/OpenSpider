@@ -1573,14 +1573,19 @@ export default function App() {
             try {
                 const msg = JSON.parse(event.data);
                 if (msg.type === 'log') {
+                    // Ignore cron-originated logs for typing state management
+                    const isCronLog = typeof msg.data === 'string' && msg.data.startsWith('[CRON]');
+
                     if (msg.data.includes('Emulating human typing delay') || msg.data.includes('Sending structured request')) {
                         // We can also trigger typing state here for internal logs if we want
-                        if (msg.data.includes('Sending structured request')) setIsTyping(true);
+                        if (!isCronLog && msg.data.includes('Sending structured request')) setIsTyping(true);
                         return;
                     }
 
-                    if (msg.data.includes('[You]')) setIsTyping(true);
-                    if (msg.data.includes('[Agent]')) setIsTyping(false);
+                    if (!isCronLog) {
+                        if (msg.data.includes('[You]')) setIsTyping(true);
+                        if (msg.data.includes('[Agent]')) setIsTyping(false);
+                    }
 
                     setLogs(prev => [...prev.slice(-49999), msg]); // Keep last 50000 logs to prevent chat eviction
                 } else if (msg.type === 'chat_response') {
@@ -1638,6 +1643,12 @@ export default function App() {
         setLogs(prev => [...prev, { type: 'chat', data: `[You] ${chatInput}`, timestamp: new Date().toISOString() }]);
         setChatInput('');
         setIsTyping(true);
+
+        // Safety timeout: unlock input if agent never responds (e.g. crash, network issue)
+        setTimeout(() => setIsTyping(prev => {
+            if (prev) console.warn('[Chat] Safety timeout: unlocking input after 120s');
+            return false;
+        }), 120_000);
     };
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
