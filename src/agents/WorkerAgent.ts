@@ -1,5 +1,6 @@
 import { LLMProvider, ChatMessage } from '../llm/BaseProvider';
 import { DynamicExecutor } from '../tools/DynamicExecutor';
+import { BrowserTool, BrowseAction } from '../browser/tool';
 import fs from 'node:fs';
 import path from 'node:path';
 import { PersonaShell } from './PersonaShell';
@@ -7,11 +8,13 @@ import { PersonaShell } from './PersonaShell';
 export class WorkerAgent {
     private llm: LLMProvider;
     private executor: DynamicExecutor;
+    private browserTool: BrowserTool;
     private role: string;
 
     constructor(llm: LLMProvider, role: string) {
         this.llm = llm;
         this.executor = new DynamicExecutor();
+        this.browserTool = new BrowserTool();
         this.role = role;
     }
 
@@ -59,9 +62,24 @@ Available tools you can request in your JSON response:
 - run_command: { "command": "echo hello" } (Run a bash command within the project environment)
 - write_script: { "filename": "test.py", "content": "print('hello')" } (Write a code script to disk)
 - execute_script: { "filename": "test.py", "args": "" } (Execute a dynamically written script)
+- browse_web: Open a REAL browser. ALWAYS prefer this over Python scripts for web searches.
+  To use browse_web, set "command" to the sub-action and use other fields:
+    - Navigate: { "action": "browse_web", "command": "navigate", "filename": "https://google.com" }
+    - Click:    { "action": "browse_web", "command": "click", "args": "button.submit" }
+    - Type:     { "action": "browse_web", "command": "type", "args": "input[name=q]", "content": "search query" }
+    - Read:     { "action": "browse_web", "command": "read_content" }
+    - Scroll:   { "action": "browse_web", "command": "scroll", "args": "down" }
+    - Close:    { "action": "browse_web", "command": "close" }
+- wait_for_user: { "message": "Please log in to your account" } (Pause and ask the user to do something in the browser, like logging in. Waits up to 120 seconds.)
 - message_agent: { "target": "Role Name", "message": "Text to send" } (Delegate a sub-task to a specialized sub-agent)
-- send_email: { "to": "user@example.com", "subject": "Hello", "body": "My message here" } (Send an outbound email natively using OAuth. Use this automatically if asked to email someone.)
+- send_email: { "to": "user@example.com", "subject": "Hello", "body": "My message here" } (Send an outbound email natively using OAuth.)
 - final_answer: { "result": "The final output" } (CRITICAL: You MUST include the 'result' key containing your answer)
+
+BROWSER USAGE GUIDELINES:
+- ALWAYS prefer browse_web over writing Python scripts for web searches, data lookup, or scraping. The browser is faster and uses fewer tokens.
+- Typical flow: navigate → read_content → (optionally click/type if needed) → read_content → final_answer
+- For Google searches: navigate to "https://www.google.com/search?q=your+query" then read_content.
+- If a site requires login, use wait_for_user to ask the human to authenticate, then continue.
 
 CRITICAL FORMATTING INSTRUCTION: 
 When providing your \`final_answer\`, you MUST format the output to be highly readable and user-friendly. 
@@ -88,7 +106,7 @@ ${context.join('\n')}
             let response;
             try {
                 response = await this.llm.generateStructuredOutputs<{
-                    action: 'run_command' | 'write_script' | 'execute_script' | 'message_agent' | 'send_email' | 'final_answer';
+                    action: 'run_command' | 'write_script' | 'execute_script' | 'browse_web' | 'wait_for_user' | 'message_agent' | 'send_email' | 'final_answer';
                     command?: string;
                     filename?: string;
                     content?: string;
@@ -104,7 +122,7 @@ ${context.join('\n')}
                 }>(messages, {
                     type: "object",
                     properties: {
-                        action: { type: "string", enum: ["run_command", "write_script", "execute_script", "message_agent", "send_email", "final_answer"] },
+                        action: { type: "string", enum: ["run_command", "write_script", "execute_script", "browse_web", "wait_for_user", "message_agent", "send_email", "final_answer"] },
                         thought: { type: "string" },
                         summary_of_findings: { type: "string", description: "A highly compressed, 1-2 sentence memory of what you learned in this step. Retained forever even if thoughts are pruned." },
                         command: { type: "string" },
@@ -175,6 +193,26 @@ ${context.join('\n')}
                     const subResult = await subWorker.executeTask(response.message, subWorkerContext);
 
                     toolOutput = `Response from ${response.target}:\n${subResult}`;
+                } else if (response.action === 'browse_web') {
+                    // command = sub-action (navigate/click/type/read_content/scroll/close)
+                    // filename = URL (for navigate)
+                    // args = CSS selector (for click/type) or direction (for scroll)
+                    // content = text to type (for type)
+                    const subAction = (response.command || 'navigate') as BrowseAction['action'];
+                    const browseAction: BrowseAction = {
+                        action: subAction,
+                        url: response.filename,
+                        selector: response.args,
+                        text: response.content,
+                        message: response.message,
+                        direction: response.args as 'up' | 'down',
+                    };
+                    console.log(`[Worker - ${this.role}] Browser action: ${browseAction.action} ${browseAction.url || browseAction.selector || ''}`);
+                    toolOutput = await this.browserTool.execute(browseAction);
+                } else if (response.action === 'wait_for_user') {
+                    const waitMessage = response.message || 'Please complete the required action in the browser.';
+                    console.log(`[Worker - ${this.role}] Requesting user interaction: ${waitMessage}`);
+                    toolOutput = await this.browserTool.execute({ action: 'wait_for_user', message: waitMessage });
                 } else if (response.action === 'send_email' && response.to && response.subject && response.body) {
                     console.log(`[Worker - ${this.role}] Dispatching email to ${response.to}...`);
                     try {

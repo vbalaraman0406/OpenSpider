@@ -18,7 +18,8 @@ export class ManagerAgent {
         const agentPersona = process.env.AGENT_PERSONA || "You are a helpful multi-agent assistant designed to write excellent code and utilize terminals.";
 
         // Build dynamic agent catalog
-        let agentCapabilities = "\\nAvailable Worker Agents:\\n";
+        let agentCapabilities = "\n\n[AVAILABLE WORKER AGENTS]\nThe following agents are ALREADY registered and running in this system. You MUST delegate tasks to these existing agents ONLY. DO NOT invent new role names.\n";
+        const existingRoles: string[] = [];
         try {
             const agentsDir = path.join(process.cwd(), 'workspace', 'agents');
             if (fs.existsSync(agentsDir)) {
@@ -28,20 +29,22 @@ export class ManagerAgent {
                     const shell = new PersonaShell(agentId);
                     const caps = shell.getCapabilities();
                     if (caps.status === 'stopped') continue; // Prevent delegating to offline agents
-                    // Grab just the first line of their identity as a summary
+                    if (!caps.role && !caps.name) continue; // Skip empty/broken agent folders
                     const identityStr = shell.getIdentity().split('\\n').filter(l => l.trim().length > 0)[0] || "Specialized Sub-Agent";
-                    agentCapabilities += `- Agent: ${caps.name || agentId} (Role: ${caps.role || agentId})\\n  Summary: ${identityStr}\\n  Tools: ${caps.allowedTools?.join(', ') || 'none'}\\n`;
+                    const roleName = caps.role || agentId;
+                    existingRoles.push(roleName);
+                    agentCapabilities += `- Agent ID: "${agentId}" | Role: "${roleName}" | Name: ${caps.name || agentId}\n  Summary: ${identityStr}\n  Tools: ${caps.allowedTools?.join(', ') || 'none'}\n`;
                 }
             }
 
             const skillsDir = path.join(process.cwd(), 'skills');
             if (fs.existsSync(skillsDir)) {
-                agentCapabilities += "\\nAvailable Skill Summaries:\\n";
+                agentCapabilities += "\nAvailable Skill Summaries:\n";
                 const files = fs.readdirSync(skillsDir).filter(f => f.endsWith('.json') && f !== 'package.json');
                 for (const file of files) {
                     try {
                         const metadata = JSON.parse(fs.readFileSync(path.join(skillsDir, file), 'utf-8'));
-                        agentCapabilities += `- ${metadata.name}: ${metadata.description}\\n`;
+                        agentCapabilities += `- ${metadata.name}: ${metadata.description}\n`;
                     } catch (e) { }
                 }
             }
@@ -52,7 +55,8 @@ export class ManagerAgent {
 
         const systemPrompt = `${compiledPersonaPrompt}\n\n[SYSTEM CONTEXT]\nCurrent Local Time: ${new Date().toLocaleString()}\nTimezone Name: ${Intl.DateTimeFormat().resolvedOptions().timeZone}\n\n[MEMORY CONTEXT]\n${readMemoryContext()}\n\n[TASK INSTRUCTIONS]
 Your job is to break down the user's complex request into a sequential plan of sub-tasks.
-Each sub-task should be assigned to a specialized Worker Agent role. Utilize the existing agents below or define generic roles if none match exactly.
+Each sub-task MUST be assigned to one of the EXISTING Worker Agents listed above. Use their exact Role name (e.g. "${existingRoles[0] || 'Researcher'}", "${existingRoles[1] || 'Coder'}").
+CRITICAL: DO NOT invent new agent roles! If a task doesn't perfectly match any agent, assign it to the closest matching existing agent. The Coder agent is your general-purpose workhorse for any file/script/implementation work.
 ${agentCapabilities}
 
 If the user is simply saying hello, asking a basic question about you, or making small talk, DO NOT generate a plan. Instead, use the 'direct_response' field to reply strictly in character as your Persona without delegating any subtasks.

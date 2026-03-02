@@ -9,8 +9,11 @@ Record enduring facts, system quirks, or important constraints discovered during
 - **Website**: https://anantaventurescom.com/
 - **Logo**: ananta_logo.png (red shield + infinity symbol)
 - **Vibe**: Calm, sharp, lightly snarky
+- **CEO**: Vishnu Balaraman
 
 ## User Profile
+- **Name**: Vishnu Balaraman
+- **Role**: CEO of Ananta Ventures LLC
 - **Primary User**: Administrator of the OpenSpider framework
 - **Email**: coolvishnu@gmail.com
 - **Tone Preference**: Efficiency over pleasantries. Direct answers, actionable markdown, high-quality results.
