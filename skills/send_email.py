@@ -194,7 +194,7 @@ def wrap_in_email_template(html_body: str, subject: str = '') -> str:
 <table width="100%" cellspacing="0" cellpadding="0">
 <tr>
 <td style="font-size:11px;color:#64648a;line-height:1.5;">
-  Powered by <strong style="color:#818cf8;">{agent_name}</strong> — OpenSpider Agent System<br/>
+  Powered by ♾️ <strong style="color:#818cf8;">{agent_name}</strong> — OpenSpider Agent System<br/>
   This is an automated message. Do not reply directly.
 </td>
 <td align="right" style="font-size:11px;color:#64648a;">
