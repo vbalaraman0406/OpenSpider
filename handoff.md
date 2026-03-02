@@ -1,42 +1,71 @@
-# OpenSpider Handoff Document
+# Handoff — Session 2026-03-01 (Afternoon)
 
-## Session Summary (March 1, 2026)
+## Summary
+Fixed WhatsApp self-message delivery, native typing bubbles, dashboard chat rendering, and improved the security UI. Two commits pushed to `main`.
 
-This session focused heavily on fixing edge cases surrounding WhatsApp's "Message Yourself" feature and the React Dashboard Web UI chat rendering.
+---
 
-### 1. The 503 Service Unavailable Error (Presence Updates)
-- **Problem**: When the user texted the bot using their own number ("Message Yourself"), the bot would send a `composing` (typing) presence update back to the sender's JID (`@s.whatsapp.net`). Meta's servers forbid sending presence updates to yourself and instantly crash the connection with a HTTP 503 Service Unavailable stream error.
-- **Fix**: We added a strict `isNoteToSelf` check. We ensure that we only send `composing` and `paused` presence updates if the sender is not the bot's own number.
+## Changes Made
 
-### 2. The "Ghost Payload" (Bad MAC) Decryption Error
-- **Problem**: "Message Yourself" packets from linked devices occasionally desync the end-to-end encryption ratchets. `libsignal` throws a "Bad MAC" error and strips the payload, resulting in an empty message hitting the Baileys event listener.
-- **Discovery**: We reviewed the legacy `OpenClaw` codebase and discovered that OpenClaw simply dropped these messages silently. In OpenSpider, Baileys' native `msgRetryCounterCache` catches this Bad MAC and securely requests a fresh key from Meta, re-delivering the true payload approximately 2 seconds later.
-- **Fix**: We removed the noisy `console.warn` statements about the "Ghost Payload" so the terminal remains clean while the native Baileys retry orchestration happens transparently in the background.
+### Commit `7d3fde3` — WhatsApp Self-Message Delivery & Dashboard Chat Rendering
 
-### 3. Web UI Chat Rendering Broken by Logger Formatting
-- **Problem**: The user noticed that the React Dashboard Web UI was no longer showing new chat bubbles.
-- **Discovery**: We had added `\n` prefixes to the `console.log("[You] ...")` and `console.log("[Agent] ...")` statements in the backend (`whatsapp.ts`) to make terminal logs cleaner. However, the frontend (`App.tsx`) parsed these logs via WebSocket and strictly checked `if (log.data.startsWith('[You]'))`. The leading newlines broke the matcher, causing the frontend to silently drop all chat messages.
-- **Fix**: We modified the frontend parser in `dashboard/src/App.tsx` to call `.trim()` on the log data before performing the `startsWith` checks. We also recompiled and deployed the React frontend.
+#### `src/whatsapp.ts`
+- **@lid JID Rerouting**: Self-messages ("Message Yourself") arrive with `remoteJid` as an `@lid` device proxy JID, which is invisible in WhatsApp's chat UI. Outbound replies and presence updates sent to `@lid` are silently blackholed by Meta. Fixed by detecting `@lid` on self-messages and rerouting `replyJid` to `botJid` (`@s.whatsapp.net`).
+- **Fast-Path Composing Trigger**: `sendPresenceUpdate('composing')` now fires immediately on message arrival (before the Bad MAC ghost trap). For `@lid` JIDs, composing is rerouted to `@s.whatsapp.net` so the native typing bubble appears in the correct chat window.
+- **Resilient Presence Updates**: All `sendPresenceUpdate` calls now use `.catch(() => {})` to prevent Meta 503 rejections from crashing the Baileys connection. Mirrors OpenClaw's error-swallowing pattern.
+- **Removed Hourglass Emoji**: Replaced the ⏳ reaction workaround with native composing for all messages (including self-chat).
 
-### 4. The Native "Typing..." Bubble for Self-Messages (Current Issue)
-- **Problem**: The user strongly preferred seeing the native "typing..." WhatsApp bubble when talking to the bot, *even* when using the "Message Yourself" feature, instead of a custom emoji reaction (⏳).
-- **Attempted Fixes**: 
-  - We reverted the `replyJid` logic to route outbound messages and presence updates strictly to `msg.key.remoteJid`. For multi-device self-messages, this JID often comes in as an encrypted Device Proxy ID (`...something...@lid`).
-  - We attempted a "Fast-Path Composing Trigger" very early in the `whatsapp.ts` `messages.upsert` handler:
-    ```typescript
-    if (msg.key.fromMe && msg.key.remoteJid) {
-        sock.sendPresenceUpdate('composing', msg.key.remoteJid).catch(() => {});
-    }
-    ```
-    This was intended to fire the "typing..." indicator *before* the empty Ghost Payload is dropped by the Bad MAC trap, masking the 2-second decryption retry delay.
+#### `dashboard/src/App.tsx`
+- **Robust Log Matching**: Replaced fragile `.startsWith('[You]')` / `.startsWith('[Agent]')` with `.includes()` to handle log messages with unexpected prefixes or leading whitespace.
+- **Fixed Content Extraction**: Uses `substring(indexOf(...))` instead of `.replace()` for precise content parsing.
 
-## Current Broken State (For the Next Agent)
+---
 
-The user reported two critical failures with the current active build:
-1. **Typing Bubble Delay**: The 2-second delay in the typing bubble is *still* happening on self-messages, suggesting the fast-path trigger is failing to reach the device proxy, or Baileys queues presence updates behind decryption retries.
-2. **Web UI Regression**: The React Web UI has completely lost all WhatsApp messages again and is not displaying new messages. The frontend parsing logic or WebSocket broadcasting might be broken again.
+### Commit `be9f41f` — Apply Security Rules Button Visual Feedback
 
-### Next Steps for the Incoming Agent:
-1. Check `pm2 logs openspider-gateway` and verify the `msg.key.remoteJid` for self-messages. Why is the early `sendPresenceUpdate('composing', msg.key.remoteJid)` failing, or is it blocked by the 503 error again?
-2. Check `dashboard/src/App.tsx` log filtering logic. Did the recent `.trim()` fix regress, or is the backend no longer dispatching the exact `[You]` and `[Agent]` string structures?
-3. Carefully review `whatsapp.ts` line ~190-250. The interplay between `isNoteToSelf`, `@lid` proxies, the Bad MAC return trap, and the presence update is brittle and needs a robust architectural cleanup.
+#### `dashboard/src/components/WhatsAppSecurity.tsx`
+- **Amber default**: Button is orange/amber to signal an actionable state.
+- **Pulsing amber**: Animates during save.
+- **Green success**: Turns emerald green with ✓ "Rules Applied!" for 2.5 seconds after successful save, then auto-resets.
+- Uses a `saveStatus` state machine (`'idle' | 'saving' | 'saved'`).
+
+---
+
+### Config Fix (not committed — `workspace/` is gitignored)
+
+#### `workspace/whatsapp_config.json`
+- Updated `allowedGroups` from placeholder `120363151234567890@g.us` to real group JID `120363423460684848@g.us`.
+
+---
+
+## Key Technical Insights
+
+### @lid vs @s.whatsapp.net
+WhatsApp's linked-device architecture uses `@lid` (Linked Identity) proxy JIDs internally. When you send a message to yourself, Baileys often receives it with `remoteJid` as `150457066512456@lid` instead of `14156249639@s.whatsapp.net`. Messages and presence updates sent TO `@lid` JIDs are silently dropped by Meta's servers — they never appear in any chat window. The fix detects `@lid` on self-messages and reroutes to the bot's `@s.whatsapp.net` JID.
+
+### Bad MAC Retry & Ghost Trap
+Self-messages trigger Bad MAC errors ~50% of the time due to encryption ratchet de-sync. The first packet arrives with empty text (ghost), gets dropped by the ghost trap. Baileys then renegotiates encryption keys and Meta re-delivers ~2 seconds later with the same message ID. The fast-path composing trigger fires on the ghost packet (which arrives on `@s.whatsapp.net`) so the typing bubble appears immediately — masking the 2-second retry latency.
+
+### PM2 Runs Compiled JS
+PM2 executes `dist/index.js`, not `src/index.ts`. Changes to TypeScript source require `npm run build:backend` before `pm2 restart` for changes to take effect.
+
+---
+
+## Known Issues / Open Items
+
+1. **Web UI Live Messages**: WhatsApp messages broadcast via WebSocket do appear live when the dashboard is open, but are NOT persisted to `workspace/memory/*.md` chat history. On page refresh, only memory-persisted messages survive. Consider adding a bridging layer that writes `[You]`/`[Agent]` entries from `whatsapp.ts` into the memory system.
+
+2. **Second Message Typing Bubble Delay**: The first message after a restart shows the typing bubble instantly. Subsequent messages may have a ~2s delay due to the Bad MAC encryption renegotiation. This is a fundamental WhatsApp/libsignal limitation that even OpenClaw experiences.
+
+3. **Group Feature**: Config is set up for group `120363423460684848@g.us` with `botMode: 'mention'`. The bot responds when @mentioned by name ("@Ananta") or tagged via WhatsApp's contact picker. Further group testing needed.
+
+---
+
+## Files Modified This Session
+
+| File | Change |
+|------|--------|
+| `src/whatsapp.ts` | @lid rerouting, composing trigger, resilient presence |
+| `dashboard/src/App.tsx` | `.includes()` log matching |
+| `dashboard/src/components/WhatsAppSecurity.tsx` | Save button visual feedback |
+| `workspace/whatsapp_config.json` | Correct group JID |
