@@ -1,0 +1,7 @@
+{
+    "name": "browse_web",
+    "description": "Opens a real Chromium browser to navigate web pages, click elements, type text, read content, and scroll — like a human. Preferred over Python scripts for web searches and scraping. Supports user-assisted authentication via wait_for_user.",
+    "instructions": "This is a BUILT-IN agent action. Use action 'browse_web' with command=navigate, filename=URL to open a page. Use command=read_content to extract text. Use command=click with args=selector to click elements. Use command=type with args=selector and content=text to type. Use action 'wait_for_user' with message='Please log in' when authentication is needed.",
+    "type": "built-in",
+    "actions": ["navigate", "click", "type", "read_content", "screenshot", "scroll", "close"]
+}
