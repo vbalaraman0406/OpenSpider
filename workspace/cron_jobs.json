@@ -1,19 +1,10 @@
 [
   {
-    "id": "cron-o2xbxg95q",
-    "description": "Mock Test Job",
-    "prompt": "This is a test prompt for the mock job.",
-    "intervalHours": 1,
-    "lastRunTimestamp": 1772215508721,
-    "agentId": "gateway",
-    "status": "disabled"
-  },
-  {
-    "id": "cron-7lgepztwo",
-    "description": "Daily Vancouver WA Weather Forecast",
-    "prompt": "Search the web for today's 5-day weather forecast for Vancouver, WA. Return a detailed markdown table with Day/Date, High/Low Temp (°F), Conditions, Precipitation %, Wind, Humidity, and any alerts. Send the results directly to the user on WhatsApp.",
+    "id": "cron-dbl1hzbyw",
+    "description": "Daily Vancouver WA Weather — Email + WhatsApp",
+    "prompt": "Fetch the latest 5-day weather forecast for Vancouver, WA from the National Weather Service. Then: 1) Send the forecast via email to coolvishnu@gmail.com with subject '🌦️ Daily Vancouver, WA Weather Forecast' and the full formatted forecast in the body. 2) Also send the forecast summary to the user via WhatsApp. Include highs, lows, conditions, precipitation %, wind, and any active weather alerts.",
     "intervalHours": 24,
-    "lastRunTimestamp": 1772414552748,
+    "lastRunTimestamp": 1772415066855,
     "agentId": "manager",
     "status": "enabled"
   }
