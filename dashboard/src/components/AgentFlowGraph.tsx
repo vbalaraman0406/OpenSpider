@@ -11,7 +11,7 @@ export type AgentFlowEvent = {
             name?: string;
             role?: string;
             instruction?: string;
-            subtasks?: Array<{ role: string; instruction: string }>;
+            subtasks?: Array<{ role: string; instruction: string }>
         }>
     };
     taskId?: string;
@@ -25,6 +25,19 @@ interface AgentFlowGraphProps {
     events: AgentFlowEvent[];
 }
 
+/** Safely truncate and sanitize text for Mermaid edge labels */
+function sanitizeLabel(text: string, maxLen: number = 80): string {
+    let safe = text
+        .replace(/["'\\[\]{}|#&<>]/g, ' ')
+        .replace(/\n/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    if (safe.length > maxLen) {
+        safe = safe.substring(0, maxLen) + '…';
+    }
+    return safe;
+}
+
 export default function AgentFlowGraph({ events }: AgentFlowGraphProps) {
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -36,7 +49,10 @@ export default function AgentFlowGraph({ events }: AgentFlowGraphProps) {
             fontFamily: 'monospace',
             flowchart: {
                 htmlLabels: true,
-                curve: 'basis'
+                curve: 'basis',
+                padding: 20,
+                nodeSpacing: 60,
+                rankSpacing: 80
             }
         });
     }, []);
@@ -48,12 +64,14 @@ export default function AgentFlowGraph({ events }: AgentFlowGraphProps) {
         graphDef += '  M["🤖 Manager Agent"]:::manager\n';
         graphDef += '  classDef manager fill:#1e3a8a,stroke:#3b82f6,stroke-width:2px,color:#fff;\n';
         graphDef += '  classDef worker fill:#0f766e,stroke:#14b8a6,stroke-width:2px,color:#fff;\n';
+        graphDef += '  classDef complete fill:#065f46,stroke:#34d399,stroke-width:2px,color:#fff;\n';
         graphDef += '  classDef pending fill:#3f3f46,stroke:#71717a,stroke-width:1px,stroke-dasharray: 5 5,color:#a1a1aa;\n';
+        graphDef += '  classDef result fill:#1e1b4b,stroke:#818cf8,stroke-width:2px,color:#c7d2fe;\n';
 
         const planEvent = events.find(e => e.event === 'plan_generated');
 
         if (planEvent && planEvent.plan && planEvent.plan.plan) {
-            let prevNodes = ['M']; // Keep track of the preceding layer of nodes to link edges
+            let prevNodes = ['M'];
 
             planEvent.plan.plan.forEach((step, stepIdx) => {
                 const stepNum = stepIdx + 1;
@@ -67,14 +85,40 @@ export default function AgentFlowGraph({ events }: AgentFlowGraphProps) {
                     const startEvent = events.find(e => e.event === 'task_start' && e.taskId === taskId);
                     const completeEvent = events.find(e => e.event === 'task_complete' && e.taskId === taskId);
 
-                    let stateLabel = completeEvent ? '<br/><b><font color="#34d399">[COMPLETED]</font></b>' :
-                        startEvent ? '<br/><i><font color="#60a5fa">[IN PROGRESS]</font></i>' : '';
-                    let className = completeEvent || startEvent ? 'worker' : 'pending';
+                    // Build node label with status
+                    let stateLabel = '';
+                    let className = 'pending';
+                    if (completeEvent) {
+                        stateLabel = '<br/><b><font color="#34d399">✓ COMPLETED</font></b>';
+                        className = 'complete';
+                    } else if (startEvent) {
+                        stateLabel = '<br/><i><font color="#60a5fa">⏳ IN PROGRESS</font></i>';
+                        className = 'worker';
+                    }
 
-                    graphDef += `  ${nodeName}["Sub-Agent: ${step.role}${stateLabel}"]:::${className}\n`;
+                    graphDef += `  ${nodeName}["🔧 ${step.role}${stateLabel}"]:::${className}\n`;
+
+                    // === EDGE: Manager/Previous → Worker (show instruction) ===
+                    const instruction = startEvent?.instruction || step.instruction || '';
+                    prevNodes.forEach(prev => {
+                        if (instruction) {
+                            const label = sanitizeLabel(instruction, 60);
+                            graphDef += `  ${prev} -->|"📋 ${label}"| ${nodeName}\n`;
+                        } else {
+                            graphDef += `  ${prev} -->|"Task ${taskId}"| ${nodeName}\n`;
+                        }
+                    });
+
+                    // === RESULT NODE: show result data below the worker ===
+                    if (completeEvent && completeEvent.result) {
+                        const resultPreview = sanitizeLabel(completeEvent.result, 120);
+                        const resultNodeName = `R${taskId}`;
+                        graphDef += `  ${resultNodeName}["📄 ${resultPreview}"]:::result\n`;
+                        graphDef += `  ${nodeName} -.->|"Result"| ${resultNodeName}\n`;
+                    }
 
                 } else if (step.type === 'parallel' && step.subtasks) {
-                    graphDef += `  subgraph PG${stepNum} ["Parallel: ${step.name || 'Data Fetch'}"]\n`;
+                    graphDef += `  subgraph PG${stepNum} ["⚡ Parallel: ${step.name || 'Data Fetch'}"]\n`;
                     graphDef += `    direction TB\n`;
 
                     step.subtasks.forEach((subtask, subIdx) => {
@@ -85,59 +129,47 @@ export default function AgentFlowGraph({ events }: AgentFlowGraphProps) {
                         const startEvent = events.find(e => e.event === 'task_start' && e.taskId === taskId);
                         const completeEvent = events.find(e => e.event === 'task_complete' && e.taskId === taskId);
 
-                        let stateLabel = completeEvent ? '<br/><b><font color="#34d399">[COMPLETED]</font></b>' :
-                            startEvent ? '<br/><i><font color="#60a5fa">[IN PROGRESS]</font></i>' : '';
-                        let className = completeEvent || startEvent ? 'worker' : 'pending';
+                        let stateLabel = '';
+                        let className = 'pending';
+                        if (completeEvent) {
+                            stateLabel = '<br/><b><font color="#34d399">✓ COMPLETED</font></b>';
+                            className = 'complete';
+                        } else if (startEvent) {
+                            stateLabel = '<br/><i><font color="#60a5fa">⏳ IN PROGRESS</font></i>';
+                            className = 'worker';
+                        }
 
-                        graphDef += `    ${nodeName}["Sub-Agent: ${subtask.role}${stateLabel}"]:::${className}\n`;
+                        graphDef += `    ${nodeName}["🔧 ${subtask.role}${stateLabel}"]:::${className}\n`;
+
+                        // Result nodes for parallel tasks
+                        if (completeEvent && completeEvent.result) {
+                            const resultPreview = sanitizeLabel(completeEvent.result, 80);
+                            const resultNodeName = `PR${stepNum}_${subIdx + 1}`;
+                            graphDef += `    ${resultNodeName}["📄 ${resultPreview}"]:::result\n`;
+                            graphDef += `    ${nodeName} -.->|"Result"| ${resultNodeName}\n`;
+                        }
                     });
 
                     graphDef += `  end\n`;
+
+                    // Draw edges from previous layer to parallel items with instructions
+                    prevNodes.forEach(prev => {
+                        step.subtasks!.forEach((subtask, subIdx) => {
+                            const nodeName = `P${stepNum}_${subIdx + 1}`;
+                            const instruction = subtask.instruction || '';
+                            if (instruction) {
+                                const label = sanitizeLabel(instruction, 50);
+                                graphDef += `  ${prev} -->|"📋 ${label}"| ${nodeName}\n`;
+                            } else {
+                                graphDef += `  ${prev} --> ${nodeName}\n`;
+                            }
+                        });
+                    });
                 }
 
-                // Draw edges from all nodes in the previous layer to all nodes in the current layer
-                prevNodes.forEach(prev => {
-                    currentLayerNodes.forEach(curr => {
-                        let edgeLabel = prev === 'M' ? 'Task 1' : 'Context Hand-off';
-
-                        // Extract context preview if the previous node was a completed task
-                        if (prev !== 'M') {
-                            // prev could be 'T2' or 'P2_1'
-                            const isParallel = prev.startsWith('P');
-                            const prevTaskId = isParallel ? prev.substring(1).replace('_', '-') : prev.substring(1);
-
-                            const prevCompleteEvent = events.find(e => e.event === 'task_complete' && e.taskId === prevTaskId);
-                            if (prevCompleteEvent && prevCompleteEvent.result) {
-                                // Clean up the result for safe Mermaid rendering
-                                // We strip quotes, brackets, and specific unescaped control characters
-                                // But permit HTML brackets so Mermaid can parse <br/>
-                                let safeResult = prevCompleteEvent.result
-                                    .replace(/["'\\[\\]{}]/g, ' ')
-                                    .replace(/\\n/g, '<br/>')
-                                    .replace(/\n/g, '<br/>')
-                                    .substring(0, 100)
-                                    .trim();
-
-                                if (prevCompleteEvent.result.length > 100) safeResult += '...';
-                                edgeLabel = `<b>Context</b>:<br/><i>${safeResult}</i>`;
-                            }
-                        }
-
-                        // Clean up label if parallel fan-out is large to prevent UI clutter
-                        if (currentLayerNodes.length > 1 || prevNodes.length > 1) {
-                            if (prev === 'M') edgeLabel = '';
-                            else edgeLabel = 'Merged Context';
-                        }
-
-                        if (edgeLabel) {
-                            graphDef += `  ${prev} -->|"${edgeLabel}"| ${curr}\n`;
-                        } else {
-                            graphDef += `  ${prev} --> ${curr}\n`;
-                        }
-                    });
-                });
-
-                prevNodes = currentLayerNodes; // Push forward the execution sequence
+                if (currentLayerNodes.length > 0) {
+                    prevNodes = currentLayerNodes;
+                }
             });
         }
 
@@ -175,9 +207,15 @@ export default function AgentFlowGraph({ events }: AgentFlowGraphProps) {
                     <Activity className="w-4 h-4 text-cyan-400" />
                     Agent Execution Flow
                 </h3>
-                <span className="text-xs font-mono font-medium text-slate-400 bg-slate-900 px-3 py-1 rounded-full border border-slate-700/50">
-                    {events.length} Flow Events Mapped
-                </span>
+                <div className="flex items-center gap-3">
+                    <span className="text-xs font-mono font-medium text-emerald-400 bg-emerald-950/60 px-3 py-1 rounded-full border border-emerald-700/40 flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                        {events.filter(e => e.event === 'task_complete').length} / {events.filter(e => e.event === 'task_start').length} Tasks Done
+                    </span>
+                    <span className="text-xs font-mono font-medium text-slate-400 bg-slate-900 px-3 py-1 rounded-full border border-slate-700/50">
+                        {events.length} Events
+                    </span>
+                </div>
             </header>
 
             <div className="flex-1 w-full h-full overflow-auto relative p-8 fade-in flex items-center justify-center bg-transparent">
