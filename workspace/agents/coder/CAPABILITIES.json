@@ -1,6 +1,7 @@
 {
     "name": "Cipher",
     "role": "Coder",
+    "emoji": "⚡",
     "allowedTools": [
         "read_file",
         "write_file",

@@ -1,6 +1,7 @@
 {
   "name": "Ananta",
   "role": "Manager",
+  "emoji": "🧠",
   "allowedTools": [
     "delegate_task",
     "read_file",

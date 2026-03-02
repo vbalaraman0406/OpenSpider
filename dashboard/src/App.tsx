@@ -431,7 +431,7 @@ function AgentsView({ agents, onRefresh, provider, skills }: { agents: any[], on
                             >
                                 <div>
                                     <h4 className={`text-sm font-semibold transition-colors ${selectedAgentId === agent.id ? `text-${agent.color}-400` : 'text-slate-300 group-hover:text-white'}`}>
-                                        {agent.name}
+                                        {(agent as any).emoji ? `${(agent as any).emoji} ${agent.name}` : agent.name}
                                     </h4>
                                     <p className={`text-xs mt-1 ${selectedAgentId === agent.id ? 'text-slate-400' : 'text-slate-500'}`}>
                                         {agent.role}
@@ -446,8 +446,8 @@ function AgentsView({ agents, onRefresh, provider, skills }: { agents: any[], on
                 <div className="flex-1 bg-slate-900/40 backdrop-blur-xl rounded-2xl border border-white/5 p-8 shadow-xl relative overflow-hidden group hover:bg-slate-900/60 transition-all">
                     <div className={`absolute top-0 inset-x-0 h-px w-full bg-gradient-to-r from-transparent via-${selectedAgent.color}-500/30 to-transparent`}></div>
                     <div className="flex items-center gap-4 mb-8">
-                        <div className={`w-16 h-16 rounded-2xl bg-${selectedAgent.color}-500/20 border border-${selectedAgent.color}-500/30 flex items-center justify-center text-${selectedAgent.color}-400 text-2xl font-bold`}>
-                            {selectedAgent.initial}
+                        <div className={`w-16 h-16 rounded-2xl bg-${selectedAgent.color}-500/20 border border-${selectedAgent.color}-500/30 flex items-center justify-center text-3xl`}>
+                            {(selectedAgent as any).emoji || selectedAgent.initial}
                         </div>
                         <div className="flex-1 min-w-0">
                             <input
@@ -1193,8 +1193,8 @@ function LogsView({ logs }: { logs: LogMessage[] }) {
                                         key={level}
                                         onClick={() => toggleLevel(level)}
                                         className={`px-3 py-1 text-[10px] uppercase tracking-widest font-bold rounded transition-all ${isActive
-                                                ? `${cfg.bg} ${cfg.color} shadow-sm`
-                                                : 'text-slate-600 hover:text-slate-400'
+                                            ? `${cfg.bg} ${cfg.color} shadow-sm`
+                                            : 'text-slate-600 hover:text-slate-400'
                                             }`}
                                     >
                                         {level}
@@ -1881,7 +1881,7 @@ export default function App() {
                                                 ) : (
                                                     <div className="flex flex-col gap-1">
                                                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 pt-1 ml-1 opacity-70">
-                                                            {agents.length > 0 ? agents[0].name : 'OpenSpider'}
+                                                            {agents.length > 0 ? `${(agents[0] as any).emoji ? (agents[0] as any).emoji + ' ' : ''}${agents[0].name}` : 'OpenSpider'}
                                                         </span>
                                                         <div className="prose prose-invert prose-sm max-w-none prose-p:leading-relaxed prose-pre:bg-slate-950/80 prose-pre:border prose-pre:border-slate-800 prose-pre:shadow-inner text-[14.5px]">
                                                             <ReactMarkdown

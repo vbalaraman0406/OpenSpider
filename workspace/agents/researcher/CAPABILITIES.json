@@ -1,6 +1,7 @@
 {
-  "name": "Researcher",
+  "name": "Oracle",
   "role": "Researcher",
+  "emoji": "🔮",
   "allowedTools": [
     "search_web",
     "read_url_content",

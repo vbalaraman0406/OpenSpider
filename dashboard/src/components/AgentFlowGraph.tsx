@@ -61,7 +61,7 @@ export default function AgentFlowGraph({ events }: AgentFlowGraphProps) {
         if (!containerRef.current || events.length === 0) return;
 
         let graphDef = 'graph TD\n';
-        graphDef += '  M["🤖 Manager Agent"]:::manager\n';
+        graphDef += '  M["🧠 Manager"]:::manager\n';
         graphDef += '  classDef manager fill:#1e3a8a,stroke:#3b82f6,stroke-width:2px,color:#fff;\n';
         graphDef += '  classDef worker fill:#0f766e,stroke:#14b8a6,stroke-width:2px,color:#fff;\n';
         graphDef += '  classDef complete fill:#065f46,stroke:#34d399,stroke-width:2px,color:#fff;\n';
@@ -96,7 +96,8 @@ export default function AgentFlowGraph({ events }: AgentFlowGraphProps) {
                         className = 'worker';
                     }
 
-                    graphDef += `  ${nodeName}["🔧 ${step.role}${stateLabel}"]:::${className}\n`;
+                    const roleEmoji = step.role?.toLowerCase().includes('cod') ? '⚡' : step.role?.toLowerCase().includes('research') ? '🔮' : '🔧';
+                    graphDef += `  ${nodeName}["${roleEmoji} ${step.role}${stateLabel}"]:::${className}\n`;
 
                     // === EDGE: Manager/Previous → Worker (show instruction) ===
                     const instruction = startEvent?.instruction || step.instruction || '';
@@ -139,7 +140,8 @@ export default function AgentFlowGraph({ events }: AgentFlowGraphProps) {
                             className = 'worker';
                         }
 
-                        graphDef += `    ${nodeName}["🔧 ${subtask.role}${stateLabel}"]:::${className}\n`;
+                        const subRoleEmoji = subtask.role?.toLowerCase().includes('cod') ? '⚡' : subtask.role?.toLowerCase().includes('research') ? '🔮' : '🔧';
+                        graphDef += `    ${nodeName}["${subRoleEmoji} ${subtask.role}${stateLabel}"]:::${className}\n`;
 
                         // Result nodes for parallel tasks
                         if (completeEvent && completeEvent.result) {
