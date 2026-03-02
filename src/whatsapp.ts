@@ -299,7 +299,8 @@ export async function startWhatsApp() {
         try {
             // Send to the Manager Agent
             // Note: ManagerAgent expects images array in updated implementation
-            const response = await manager.processUserRequest(textMessage, mediaBase64String ? [mediaBase64String] : []);
+            const groupContextPrefix = isGroup ? `[GROUP CHAT] You are responding in a WhatsApp group chat. People can talk to you by tagging you as @${agentName}. Keep this in mind when introducing yourself or giving instructions.\n\n` : '';
+            const response = await manager.processUserRequest(groupContextPrefix + textMessage, mediaBase64String ? [mediaBase64String] : []);
 
             if (composingInterval) clearInterval(composingInterval);
 
