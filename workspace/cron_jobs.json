@@ -4,16 +4,17 @@
     "description": "Daily Vancouver WA Weather — Email + WhatsApp",
     "prompt": "Fetch the latest 5-day weather forecast for Vancouver, WA from the National Weather Service. Then: 1) Send the forecast via email to coolvishnu@gmail.com with subject '🌦️ Daily Vancouver, WA Weather Forecast' and the full formatted forecast in the body. 2) Also send the forecast summary to the user via WhatsApp. Include highs, lows, conditions, precipitation %, wind, and any active weather alerts.",
     "intervalHours": 24,
-    "lastRunTimestamp": 1772415066855,
+    "lastRunTimestamp": 1772474460386,
     "agentId": "manager",
-    "status": "enabled"
+    "status": "enabled",
+    "preferredTime": "07:00"
   },
   {
     "id": "cron-tilekzruu",
     "description": "Iran War & Market Update",
     "prompt": "Search for the latest Iran war/conflict activity and military developments from the past 2 hours. Also search for stock market reactions to Iran tensions including S&P 500, Dow Jones, oil prices, gold, and defense stocks (LMT, RTX, NOC). Compile a short WhatsApp-friendly summary (max 300 words) with emojis, bold headers (*bold*), and bullet points. Send the summary to the user via WhatsApp.",
-    "intervalHours": 2,
-    "lastRunTimestamp": 1772429905384,
+    "intervalHours": 1,
+    "lastRunTimestamp": 1772473140358,
     "agentId": "manager",
     "status": "enabled"
   }
