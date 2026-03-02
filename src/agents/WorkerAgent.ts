@@ -71,6 +71,7 @@ Available tools you can request in your JSON response:
     - Scroll:   { "action": "browse_web", "command": "scroll", "args": "down" }
     - Close:    { "action": "browse_web", "command": "close" }
 - wait_for_user: { "message": "Please log in to your account" } (Pause and ask the user to do something in the browser, like logging in. Waits up to 120 seconds.)
+- schedule_task: { "command": "24", "content": "Fetch Vancouver WA weather and send to user via WhatsApp", "filename": "Daily Weather Brief" } (Schedule a recurring task that runs automatically. "command" = interval in hours, "content" = the prompt/task to execute, "filename" = short name for the job. The scheduler will auto-execute this task at the specified interval using the Manager Agent.)
 - message_agent: { "target": "Role Name", "message": "Text to send" } (Delegate a sub-task to a specialized sub-agent)
 - send_email: { "to": "user@example.com", "subject": "Hello", "body": "My message here" } (Send an outbound email natively using OAuth.)
 - final_answer: { "result": "The final output" } (CRITICAL: You MUST include the 'result' key containing your answer)
@@ -106,7 +107,7 @@ ${context.join('\n')}
             let response;
             try {
                 response = await this.llm.generateStructuredOutputs<{
-                    action: 'run_command' | 'write_script' | 'execute_script' | 'browse_web' | 'wait_for_user' | 'message_agent' | 'send_email' | 'final_answer';
+                    action: 'run_command' | 'write_script' | 'execute_script' | 'browse_web' | 'wait_for_user' | 'schedule_task' | 'message_agent' | 'send_email' | 'final_answer';
                     command?: string;
                     filename?: string;
                     content?: string;
@@ -122,7 +123,7 @@ ${context.join('\n')}
                 }>(messages, {
                     type: "object",
                     properties: {
-                        action: { type: "string", enum: ["run_command", "write_script", "execute_script", "browse_web", "wait_for_user", "message_agent", "send_email", "final_answer"] },
+                        action: { type: "string", enum: ["run_command", "write_script", "execute_script", "browse_web", "wait_for_user", "schedule_task", "message_agent", "send_email", "final_answer"] },
                         thought: { type: "string" },
                         summary_of_findings: { type: "string", description: "A highly compressed, 1-2 sentence memory of what you learned in this step. Retained forever even if thoughts are pruned." },
                         command: { type: "string" },
@@ -213,6 +214,38 @@ ${context.join('\n')}
                     const waitMessage = response.message || 'Please complete the required action in the browser.';
                     console.log(`[Worker - ${this.role}] Requesting user interaction: ${waitMessage}`);
                     toolOutput = await this.browserTool.execute({ action: 'wait_for_user', message: waitMessage });
+                } else if (response.action === 'schedule_task') {
+                    // command = interval in hours, content = the prompt, filename = job name
+                    const intervalHours = parseFloat(response.command || '24');
+                    const taskPrompt = response.content || response.message || '';
+                    const jobName = response.filename || 'Scheduled Task';
+
+                    if (!taskPrompt) {
+                        toolOutput = 'Error: No task prompt provided for schedule_task. Provide the task description in the "content" field.';
+                    } else {
+                        try {
+                            const cronPath = path.join(process.cwd(), 'workspace', 'cron_jobs.json');
+                            let jobs: any[] = [];
+                            if (fs.existsSync(cronPath)) {
+                                jobs = JSON.parse(fs.readFileSync(cronPath, 'utf-8'));
+                            }
+                            const newJob = {
+                                id: 'cron-' + Math.random().toString(36).substr(2, 9),
+                                description: jobName,
+                                prompt: taskPrompt,
+                                intervalHours: intervalHours,
+                                lastRunTimestamp: 0,
+                                agentId: 'manager',
+                                status: 'enabled'
+                            };
+                            jobs.push(newJob);
+                            fs.writeFileSync(cronPath, JSON.stringify(jobs, null, 2));
+                            console.log(`[Worker - ${this.role}] Scheduled recurring task: "${jobName}" every ${intervalHours}h`);
+                            toolOutput = `✅ Successfully scheduled recurring task!\n- Name: ${jobName}\n- Interval: Every ${intervalHours} hours\n- Task: ${taskPrompt}\n- Status: Enabled\n- ID: ${newJob.id}\n\nThe scheduler heartbeat checks every 60 seconds and will auto-execute this task at the specified interval.`;
+                        } catch (e: any) {
+                            toolOutput = `Failed to schedule task: ${e.message}`;
+                        }
+                    }
                 } else if (response.action === 'send_email' && response.to && response.subject && response.body) {
                     console.log(`[Worker - ${this.role}] Dispatching email to ${response.to}...`);
                     try {
