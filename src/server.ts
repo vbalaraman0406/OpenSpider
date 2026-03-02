@@ -60,12 +60,16 @@ export function startServer() {
                     // Log user message to session memory
                     logMemory('User', parsed.text);
 
-
+                    // Extract attached images (base64 data URLs) if present
+                    const images: string[] = parsed.images || [];
+                    if (images.length > 0) {
+                        console.log(`[Web Chat] ${images.length} image(s) attached`);
+                    }
 
                     // Process request
                     const memoryStr = readMemoryContext();
                     const fullPrompt = `Below is your historic Memory Context and Transcript.\n${memoryStr}\n\n[NEW USER REQUEST]\n${parsed.text}`;
-                    const response = await manager.processUserRequest(fullPrompt);
+                    const response = await manager.processUserRequest(fullPrompt, images);
 
                     // Log agent response to session memory
                     logMemory('Agent', response);
