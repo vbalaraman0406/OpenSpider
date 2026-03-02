@@ -1,48 +1,136 @@
 # OpenSpider 🕷️
-Autonomous Multi-Agent System tailored for WhatsApp.
 
-This guide walks you through the step-by-step process of installing, configuring, and testing OpenSpider locally.
+**Autonomous Multi-Agent System for WhatsApp**
 
-## Getting Started
+OpenSpider is an open-source, self-hosted AI agent system that connects to WhatsApp, email, and a web dashboard. It uses a hierarchical multi-agent architecture where a Manager agent orchestrates specialized Worker agents (Coder, Researcher) to fulfill complex tasks autonomously.
 
-### Step 1: Installation & Global Linking
-To use the `openspider` CLI commands globally on your machine, you must link the built package. 
+📖 **Full Documentation**: [https://openspider.dev](https://openspider.dev) *(or run the docs site locally)*
 
-From the root directory of the OpenSpider repository, run:
+---
+
+## Features
+
+- 🤖 **Multi-Agent System** — Manager + Coder + Researcher agents with automatic task delegation
+- 📱 **WhatsApp Integration** — Full WhatsApp bot with DM/group support, mention detection, and media handling
+- 🌐 **Web Dashboard** — Real-time agent chat, system telemetry, usage analytics, agent management
+- ⏰ **Cron Scheduler** — Interval-based or time-of-day scheduling for autonomous tasks
+- 🔌 **6 LLM Providers** — Google Gemini, Anthropic, OpenAI, Ollama (local), and custom endpoints
+- 📧 **Email** — Gmail OAuth integration for sending formatted emails
+- 🛠️ **Dynamic Skills** — Create and assign custom Python tools to agents
+- 🔒 **Security** — Allowlist-based access control for WhatsApp DMs and groups
+
+## Quick Start
+
+### 1. Install & Link
+
 ```bash
+git clone https://github.com/vbalaraman0406/OpenSpider.git
+cd OpenSpider
+npm install
 npm link
 ```
-This creates a global symlink, allowing you to run `openspider` from anywhere.
 
-### Step 2: Onboarding & Configuration
-OpenSpider requires you to configure an LLM provider (like Google Antigravity) and define your agent's persona.
+### 2. Configure
 
-To start the interactive setup wizard, run:
 ```bash
 openspider onboard
 ```
-This wizard will automatically generate an `.env` file in your current directory.
 
-### Step 3: Starting the Gateway Manager Server
-The OpenSpider Gateway is the core engine that processes requests, manages agents, and handles WebSocket connections.
+This interactive wizard generates your `.env` file with LLM provider settings.
 
-To start the gateway server, run:
+### 3. Build & Start
+
 ```bash
+npm run build
 openspider gateway
 ```
-You should see a message indicating the server is running on `http://localhost:3000`. Leave this terminal window open.
 
-### Step 4: Accessing the Web Dashboard (Optional)
-OpenSpider includes a graphical web dashboard for managing the agent and viewing logs.
+The gateway starts on `http://localhost:4001` with the web dashboard included.
 
-1. Open a **new terminal tab/window**.
-2. Navigate to the dashboard directory:
-   ```bash
-   cd dashboard
-   ```
-3. Install dependencies and start the development server:
-   ```bash
-   npm i
-   npm run dev
-   ```
-4. Open your browser and navigate to the URL provided (usually `http://localhost:5173`).
+### 4. (Optional) Development Mode
+
+```bash
+npm run dev
+```
+
+Starts backend + frontend dev servers with hot-reload.
+
+---
+
+## Project Structure
+
+```
+OpenSpider/
+├── src/                          # Backend TypeScript source
+│   ├── server.ts                 # Express + WebSocket server
+│   ├── whatsapp.ts               # WhatsApp connection & message routing
+│   ├── scheduler.ts              # Cron job scheduler (60s heartbeat)
+│   ├── memory.ts                 # Conversation memory & workspace init
+│   ├── agents/
+│   │   ├── ManagerAgent.ts       # Orchestrator — plans & delegates
+│   │   ├── WorkerAgent.ts        # Task executor with tool loop
+│   │   └── PersonaShell.ts       # Reads agent persona from filesystem
+│   └── llm/                      # LLM provider implementations
+├── dashboard/                    # React + Vite web dashboard
+├── workspace-defaults/           # Default agent configs (shipped with repo)
+│   ├── agents/manager/           # Manager agent pillar files
+│   ├── agents/coder/             # Coder agent pillar files
+│   ├── agents/researcher/        # Researcher agent pillar files
+│   └── memory.md                 # Long-term memory template
+├── workspace/                    # Runtime data (auto-created on first run)
+├── skills/                       # Custom Python tools
+└── docs/                         # VitePress documentation site
+```
+
+## Agent Configuration
+
+Each agent has 4 **pillar files** in `workspace/agents/<agent-id>/`:
+
+| File | Purpose |
+|---|---|
+| `IDENTITY.md` | Who the agent is (name, personality, CEO/boss, company) |
+| `SOUL.md` | Behavioral directives, safety rules, system architecture knowledge |
+| `CAPABILITIES.json` | Allowed tools, role, emoji, operational limits |
+| `USER.md` | Learned context about the user (evolves over time) |
+
+On **first run**, defaults from `workspace-defaults/` are automatically copied to `workspace/`. Edit the files in `workspace/agents/` to customize — changes take effect **immediately** (no rebuild needed).
+
+See [Agent Configuration](https://openspider.dev/agents) for detailed docs.
+
+## Cron Scheduling
+
+OpenSpider supports two scheduling modes:
+
+```json
+// Interval-based: runs every N hours
+{ "intervalHours": 1, "status": "enabled" }
+
+// Time-of-day: runs once daily at a specific time
+{ "preferredTime": "07:00", "status": "enabled" }
+```
+
+Manage cron jobs via the dashboard UI or the REST API at `/api/cron`.
+
+## LLM Providers
+
+| Provider | `DEFAULT_PROVIDER` | Local? |
+|---|---|---|
+| Google Gemini | `antigravity` | No |
+| Anthropic Claude | `anthropic` | No |
+| OpenAI | `openai` | No |
+| Ollama | `ollama` | **Yes** |
+| Custom | `custom` | Varies |
+
+## Documentation
+
+Run the docs site locally:
+
+```bash
+cd docs
+npm install
+npm run dev
+```
+
+## License
+
+ISC

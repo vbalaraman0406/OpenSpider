@@ -24,6 +24,7 @@ export default defineConfig({
             {
                 text: 'Guides', items: [
                     { text: 'Configuration', link: '/configuration' },
+                    { text: 'Agent Configuration', link: '/agents' },
                     { text: 'Channels', link: '/channels' },
                     { text: 'Dashboard', link: '/dashboard' },
                     { text: 'Tools & Skills', link: '/tools-and-skills' },
@@ -51,6 +52,7 @@ export default defineConfig({
                 text: 'Guides',
                 items: [
                     { text: 'Configuration', link: '/configuration' },
+                    { text: 'Agent Configuration', link: '/agents' },
                     { text: 'Channels (WhatsApp)', link: '/channels' },
                     { text: 'Dashboard', link: '/dashboard' },
                     { text: 'Tools & Skills', link: '/tools-and-skills' },

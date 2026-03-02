@@ -128,15 +128,17 @@ See [Channels](/channels) for detailed configuration.
 
 **File:** `workspace/cron_jobs.json`
 
-Stores scheduled tasks created by agents via the `schedule_task` tool.
+Stores scheduled tasks. Jobs can use **interval-based** scheduling (every N hours) or **time-of-day** scheduling (run once daily at a specific time).
 
-```json
+::: code-group
+
+```json [Interval-Based (every N hours)]
 [
   {
-    "id": "abc123",
-    "description": "Daily news summary",
-    "prompt": "Search for the latest tech news and send a summary email",
-    "intervalHours": 24,
+    "id": "cron-abc123",
+    "description": "Iran War & Market Update",
+    "prompt": "Search for latest Iran conflict news and market reactions...",
+    "intervalHours": 1,
     "lastRunTimestamp": 1709337600000,
     "agentId": "manager",
     "status": "enabled"
@@ -144,15 +146,37 @@ Stores scheduled tasks created by agents via the `schedule_task` tool.
 ]
 ```
 
+```json [Time-of-Day (daily at specific time)]
+[
+  {
+    "id": "cron-xyz789",
+    "description": "Daily Weather Report",
+    "prompt": "Fetch the 5-day forecast for Vancouver, WA and send via email...",
+    "intervalHours": 24,
+    "lastRunTimestamp": 0,
+    "agentId": "manager",
+    "status": "enabled",
+    "preferredTime": "07:00"
+  }
+]
+```
+
+:::
+
 | Field | Type | Description |
 |---|---|---|
 | `id` | `string` | Unique job identifier |
 | `description` | `string` | Human-readable description |
 | `prompt` | `string` | The instruction sent to the Manager agent |
-| `intervalHours` | `number` | Hours between executions |
-| `lastRunTimestamp` | `number` | Unix ms timestamp of last execution |
-| `agentId` | `string` | Which agent created the job |
+| `intervalHours` | `number` | Hours between executions (ignored when `preferredTime` is set) |
+| `lastRunTimestamp` | `number` | Unix ms timestamp of last execution (set to `0` for time-of-day jobs to trigger on next occurrence) |
+| `agentId` | `string` | Which agent runs the job |
 | `status` | `"enabled"` \| `"disabled"` | Toggle job on/off |
+| `preferredTime` | `string` _(optional)_ | Time of day to run (e.g. `"07:00"`, `"14:30"`). When set, the job runs **once daily** at this time in the server's local timezone |
+
+::: tip Time-of-Day Scheduling
+When `preferredTime` is set, the scheduler checks every 60 seconds if the current time is within a 5-minute window of the preferred time **and** the job hasn't already run today. This is ideal for daily reports like weather forecasts or news digests.
+:::
 
 ### Agent Capabilities
 
@@ -222,3 +246,35 @@ openspider start
 # Or restart if already running
 pm2 restart all
 ```
+
+## Workspace Defaults & First Run
+
+OpenSpider ships with a `workspace-defaults/` directory containing all default agent configurations. On **first run**, these are automatically copied to `workspace/`.
+
+### What's Included
+
+| Default File | Purpose |
+|---|---|
+| `agents/manager/IDENTITY.md` | Manager agent persona (customize with your name/company) |
+| `agents/manager/SOUL.md` | Safety directives + system architecture knowledge |
+| `agents/manager/CAPABILITIES.json` | Manager tools, role, emoji |
+| `agents/manager/USER.md` | Empty user context template |
+| `agents/coder/*` | Coder agent pillar files |
+| `agents/researcher/*` | Researcher agent pillar files |
+| `memory.md` | Long-term memory template |
+
+### Customization After Install
+
+After first run, edit the files in `workspace/agents/` to personalize:
+
+```bash
+# Set your name as the manager's boss
+nano workspace/agents/manager/IDENTITY.md
+
+# Modify behavioral rules
+nano workspace/agents/manager/SOUL.md
+```
+
+Pillar files are read at **runtime** — changes take effect immediately without rebuilding.
+
+See [Agent Configuration](/agents) for detailed customization options.
