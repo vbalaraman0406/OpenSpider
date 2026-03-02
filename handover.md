@@ -1,68 +1,104 @@
-# OpenSpider Development Handover
+# Session Handover — March 2, 2026
 
-## Overview
-This document serves as a technical continuity layer for the incoming AI Agent taking over the OpenSpider workspace.
+## Summary
 
-The previous session (Feb 28) focused entirely on **Token Optimization**, **Dashboard Bug Fixes**, and **JSON Parity Hardening** to prevent rogue LLM hallucinations from crashing the Node.js backend. 
-
----
-
-## 1. Latest Session Fixes & System Integrations
-
-### 1.1 Chat UI Eviction Bug (`dashboard/src/App.tsx`)
-- **The Problem:** The user noted that their entire Chat History disappeared the instant the Agent began typing deep research.
-- **The Fix:** The React `setLogs` state was strictly retaining only the last 5,000 WebSocket events. During complex multi-source scraping, the backend Worker Agents spewed thousands of internal `type: 'log'` diagnostic updates via the WebSocket. This rapidly flushed out and completely evicted the actual historical chat messages from the `.slice(-4999)` array. We fixed this by expanding the slice buffer to `50,000` and forcefully ignoring hyper-repetitive telemetry logs (like `"Emulating human typing"`).
-
-### 1.2 "Task completed without explicit result" Bug & Token Limit Expansion
-- **The Problem:** The WorkerAgent was returning a useless generic summary instead of the fully comprehensive Markdown tables requested, simply because the JSON `result` key was missing.
-- **The Fix (`src/llm/providers/AntigravityInternalProvider.ts`):** 
-    1. The internal Provider API had a hardcoded `maxOutputTokens: 1500` config, which fatally amputated any rich markdown tables mid-generation. This was expanded to `8192`.
-    2. The `jsonrepair` AST regex fallback parser was aggressively ignoring the `"result"` key while saving properties like `"thought"`. The `"result"` key string was added to the bypass dictionary.
-    3. `WorkerAgent.ts` was patched with strict Self-Healing logic: If the LLM submits a `final_answer` without a `result` payload, it throws an internal exception to force the LLM to reiterate.
-
-### 1.3 Chat Amnesia Reboot Bug (`src/server.ts`)
-- **The Problem:** The `/api/chat/history` endpoint returned an empty array `[]` on browser refresh because `fs.readdirSync` couldn't find the memory files.
-- **The Fix:** Removed a fatal double-escaped regex string (`\\d{4}` -> `\d{4}`) inside the chronological file merger, allowing Node to safely read `2026-03-01.md`.
+Major reliability and feature improvements across the OpenSpider codebase: chat history persistence, WhatsApp self-message detection, cron scheduler upgrade, agent system knowledge, workspace defaults for fresh installs, and comprehensive documentation updates.
 
 ---
 
-## 2. Legacy Architecture Additions (V2)
+## Changes Made (Chronological)
 
-### 2.1 Token Optimization & Context Pruning (V2)
-- **The Problem:** The `WorkerAgent` was submitting exponential ~20,000+ token payloads to Anthropic/Google Gemini on iteration `25` because it was sending its entire historical Thought process and raw HTML stdout scrapes array.
-- **The Fix (`src/agents/WorkerAgent.ts`):** We implemented "OpenClaw V2 Hard Pruning". 
-    - At the start of every loop, the engine iterates backwards through the `messages` array.
-    - If a turn is older than the `SLIDING_WINDOW_TURNS` (currently set to `2`), the engine dynamically parses the historic `assistant` JSON payload and **destructively skeletonizes it**.
-    - It replaces massive `thought`, `content`, `command`, and `args` variables with memory pointers (e.g. `[PRUNED_BY_OPENCLAW_COMPACTION]`), dropping historic token drag to ~0 while retaining the logical sequence (`action: "web_search"`).
-    - It also truncates raw `user` tool stdout results.
+### 1. Group Chat Agent Introduction (`whatsapp.ts`, `SOUL.md`)
+- Updated `SOUL.md` with "Group Chat Behavior" section — agent introduces itself with `@Ananta <msg>` format in groups
+- Updated `whatsapp.ts` to prepend `[GROUP CHAT]` tag with agent name to the manager prompt for group messages
 
-### 1.2 JSON Hallucination Hardening
-- **The Problem:** Even with a pruned 1k prompt, the internal Antigravity IDE model would occasionally ignore the schema and write a massive 20,000-word essay about its `thought` process instead of actually executing the `run_command` action, which crashed the `JSON.parse()` wrapper with a SyntaxError.
-- **The Fix (`src/llm/providers/AntigravityInternalProvider.ts`):** 
-    - Reduced `maxOutputTokens` from `64000` down to `1500`.
-    - Enforced `temperature: 0.1` to force deterministic adherence to the schema.
-    - Ripped out the basic JSON parser and replaced it with a strict, multi-tier Regex extractor that explicitly isolates ````json ... ```` fenced blocks OR strictly bounded `{}` brackets, ignoring any trailing conversational hallucinations.
+### 2. Explicit Self-Introduction Rules (`SOUL.md`)
+- Made SOUL.md instruction explicit about which IDENTITY.md fields to include (CEO/Boss, Company, Website, etc.)
+- Previously the LLM was cherry-picking which fields to mention and skipping CEO/Boss/Company
 
-### 1.3 Dashboard React UI Fixes
-- **The Auto-Scroll Bug (`dashboard/src/App.tsx`):** Injected `chatEndRef` and `scrollRef` DOM markers to trigger `scrollIntoView({ behavior: 'smooth' })` when `logs` arrays map new Agent messages.
-- **The Timestamp Bug (`src/server.ts`):** The `/api/chat/history` endpoint was reading `[11:15:32 AM]` from the `memory.md` transcript and sending it raw. The React frontend couldn't parse it upon page refresh. Updated the Node server to prepend the current Date strings so they compile into valid ISO Date strings.
-- **The Expense Bug (`src/usage.ts`):** Corrected the Pricing Matrix to attribute `$0.00` to the internal `claude-opus-4-6-thinking` model so it stops falsely generating fake expenses on the billing card.
+### 3. WhatsApp Note-to-Self Fix (`whatsapp.ts`)
+- **Bug**: `isNoteToSelf` used `remoteJid?.includes('@lid')` which matched ALL linked-device outbound messages — every message sent to anyone triggered the AI
+- **Fix**: Changed to only match the bot's own number via `remoteJid?.startsWith(botNumber)` and the bot's own LID via `sock.user.lid`
+- Restored "Message Yourself" functionality using bot's own LID instead of any `@lid`
+
+### 4. Plan Execution Output Stripping (`App.tsx`)
+- Added regex to strip `Plan execution finished successfully. Final Output:` from agent responses in the chat UI
+- Users no longer see internal system messages in the chat view
+
+### 5. Dashboard Chat History Persistence (`server.ts`, `whatsapp.ts`)
+**Root cause**: Two issues — WhatsApp messages never saved to memory files, and WebSocket events were fire-and-forget with no buffer.
+
+**Three-layer fix**:
+| Layer | What | File |
+|-------|------|------|
+| Server Event Buffer | Last 500 chat events stored in memory, replayed to new WebSocket connections | `server.ts` |
+| Chat Response Buffering | Agent responses also buffered alongside log events | `server.ts` |
+| WhatsApp Memory Logging | Both user messages and agent responses now call `logMemory()` | `whatsapp.ts` |
+
+### 6. Cron Scheduler Upgrade (`scheduler.ts`, `cron_jobs.json`, `App.tsx`, `server.ts`)
+- **New feature**: `preferredTime` field for time-of-day scheduling (e.g., `"07:00"` for daily 7 AM)
+- Uses 5-minute window matching + same-day dedup to prevent double-triggering
+- Interval-based jobs continue working as before
+- Weather job set to daily at 7:00 AM, Iran job changed to every 1 hour
+- Dashboard UI updated with time picker in "Deploy Job" modal
+- Server cron API updated to accept `preferredTime`
+
+### 7. System Architecture Knowledge (`SOUL.md`)
+- Added "System Architecture Knowledge" section telling the agent where files live:
+  - `workspace/cron_jobs.json` — cron jobs
+  - `workspace/memory/YYYY-MM-DD.md` — conversation logs
+  - `workspace/agents/<id>/` — agent configs
+  - `workspace/whatsapp_config.json` — WhatsApp policies
+  - `skills/` — custom tools
+- Agent was previously guessing wrong filenames when asked about system status
+
+### 8. Workspace Defaults for Fresh Installs (`workspace-defaults/`, `memory.ts`)
+- Created `workspace-defaults/` template directory with all default agent configs (manager, coder, researcher)
+- Updated `initWorkspace()` to detect first run and copy defaults → `workspace/`
+- `.gitignore` keeps `workspace/` blanket-ignored (sensitive data protection) while `workspace-defaults/` is tracked
+- Default manager IDENTITY.md has placeholder fields for new users to customize
+
+### 9. Documentation Overhaul (`docs/`, `README.md`)
+- **New page**: `docs/agents.md` — comprehensive agent customization guide (pillar files, defaults, creating agents)
+- **Updated**: `docs/configuration.md` — `preferredTime` cron field, time-of-day scheduling, workspace-defaults section
+- **Updated**: `docs/architecture.md` — scheduling modes table, workspace first-run seeding
+- **Updated**: `docs/.vitepress/config.mts` — added Agent Configuration to nav/sidebar
+- **Rewritten**: `README.md` — features, quick start, project structure, agent config, cron scheduling, LLM providers
+- **Deployed**: VitePress docs site rebuilt and deployed to Google App Engine (`vish-cloud.wl.r.appspot.com`)
 
 ---
 
-## 2. Critical Environmental Warning (Port 4001)
+## Key File Changes
 
-- **The Issue:** The user accidentally executed the `openspider dashboard` CLI command in a separate background terminal window. This means the global installation of OpenSpider is locked onto server port `4001`.
-- **The Symptoms:** Running `npm run dev` in this local workspace successfully launches Vite on port `5173`, but the backend will crash with `EADDRINUSE: :::4001`.
-- **The Workaround Used:** Instead of fighting the background terminal, we ran `npm run build:frontend` to compile the local React `/dist/` bundle directly into the global OpenSpider instance so the user could see the UI fixes live. 
-- **⚠️ NEXT STEPS:** To resume standard `npm run dev` local iterations, the user or the Incoming Agent MUST find the rogue background terminal window and `Ctrl+C` kill the global `openspider` command, or write a brute-force bash script to sever any process listening on TCP `4001`.
+| File | Type | What Changed |
+|------|------|-------------|
+| `src/server.ts` | Modified | Event buffer (500 events), chat response buffering, cron API `preferredTime` |
+| `src/whatsapp.ts` | Modified | Note-to-self fix, `logMemory()` calls for WhatsApp messages |
+| `src/scheduler.ts` | Rewritten | Time-of-day scheduling via `preferredTime`, interval + time-of-day modes |
+| `src/memory.ts` | Modified | `initWorkspace()` seeds from `workspace-defaults/` on first run |
+| `dashboard/src/App.tsx` | Modified | Plan output stripping, cron `preferredTime` UI, time picker |
+| `workspace/agents/manager/SOUL.md` | Modified | System architecture knowledge, self-intro rules, group chat behavior |
+| `workspace/cron_jobs.json` | Modified | Weather → 7:00 AM daily, Iran → every 1 hour |
+| `workspace-defaults/` | **New** | Template directory for fresh installs (all 3 agent pillar files) |
+| `docs/agents.md` | **New** | Agent configuration documentation page |
+| `docs/configuration.md` | Modified | `preferredTime`, workspace defaults |
+| `docs/architecture.md` | Modified | Scheduling modes, first-run seeding |
+| `README.md` | Rewritten | Comprehensive project overview |
+| `.gitignore` | Modified | Comment clarifying workspace-defaults is tracked |
 
 ---
 
-## 3. Pending Work / Roadmap
+## Current System State
 
-1. **Dynamic Sandboxing:** Further restrict the `run_command` permissions defined in `<AGENT>/CAPABILITIES.json`.
-2. **Cron Jobs UI:** The previous agent began exploring the `cron_jobs.json` file. The frontend dashboard route for `/cron` has not been fully implemented.
-3. **Agent Flow Graph Resilience:** Ensure the `/api/chat/history` logic correctly rehydrates the `AgentFlowGraph.tsx` nodes upon page refresh, not just the text logs.
+- **PM2**: Running (`openspider-gateway`, restart count 34)
+- **Port**: 4001
+- **Docs site**: Deployed at `https://vish-cloud.wl.r.appspot.com`
+- **Cron jobs**: 2 active — Weather daily at 7:00 AM, Iran War every 1 hour
+- **Git**: All changes pushed to `main` branch on GitHub
 
-*Godspeed.*
+## Known Issues / Future Work
+
+- VitePress `printQRInTerminal` deprecation warnings in PM2 logs (cosmetic, from Baileys)
+- Dashboard `App.tsx` is ~2050 lines — could benefit from component extraction
+- No automated tests yet
+- `workspace-defaults/` only seeds on true first run (no `workspace/` dir) — consider a version check for upgrades
