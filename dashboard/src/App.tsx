@@ -1605,6 +1605,14 @@ export default function App() {
                     setTimeout(() => {
                         setAlerts(prev => prev.filter(a => a.id !== alertId));
                     }, 6000);
+                } else if (msg.type === 'cron_result') {
+                    // Show cron job results in the chat window
+                    const cronLog = {
+                        type: 'cron_result' as any,
+                        data: `[Cron: ${msg.data.jobName}] ${msg.data.result}`,
+                        timestamp: msg.data.timestamp || new Date().toISOString()
+                    };
+                    setLogs(prev => [...prev.slice(-49999), cronLog]);
                 }
             } catch (e) { }
         };
@@ -1862,18 +1870,30 @@ export default function App() {
                                         return true; // Keep genuine [Agent] dialogue responses
                                     }
 
+                                    // Show cron job results in chat
+                                    if ((log as any).type === 'cron_result') return true;
+
                                     // Hide absolutely everything else (raw JSON, [Server], [Web Chat], [Manager], [Worker])
                                     return false;
                                 }).map((log, i) => {
                                     const text = log.data.trim();
                                     const isUser = text.includes('[You]');
                                     const isAgent = text.includes('[Agent]');
-                                    const isSystem = !isUser && !isAgent;
+                                    const isCronResult = (log as any).type === 'cron_result';
+                                    const isSystem = !isUser && !isAgent && !isCronResult;
 
                                     // Strip the prefixes
                                     let content = text;
+                                    let cronJobName = '';
                                     if (isUser) {
                                         content = content.substring(content.indexOf('[You]') + 5).trim();
+                                    } else if (isCronResult) {
+                                        const cronMatch = content.match(/^\[Cron: (.+?)\] /);
+                                        if (cronMatch) {
+                                            cronJobName = cronMatch[1];
+                                            content = content.substring(cronMatch[0].length).trim();
+                                        }
+                                        content = content.replace(/Plan execution finished successfully\. Final Output:?[\s\n]*/g, '').trim();
                                     } else if (isAgent) {
                                         content = content.substring(content.indexOf('[Agent]') + 7).trim();
                                         content = content.replace(/Plan execution finished successfully\. Final Output:?[\s\n]*/g, '').trim();
@@ -1883,9 +1903,11 @@ export default function App() {
                                         <div key={i} className={`flex w-full mb-6 ${isUser ? 'justify-end' : 'justify-start'}`}>
                                             <div className={`max-w-[85%] sm:max-w-[75%] rounded-2xl px-5 py-3.5 shadow-md relative group ${isUser
                                                 ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-br-sm shadow-blue-900/20'
-                                                : isAgent
-                                                    ? 'bg-slate-800/90 backdrop-blur-md border border-slate-700/50 text-slate-200 rounded-bl-sm shadow-slate-900/50'
-                                                    : 'bg-slate-900/50 border border-slate-800 text-slate-400 rounded-xl font-mono text-[11px] p-2'
+                                                : isCronResult
+                                                    ? 'bg-gradient-to-br from-indigo-950/90 to-purple-950/80 backdrop-blur-md border border-indigo-700/50 text-slate-200 rounded-bl-sm shadow-indigo-900/30'
+                                                    : isAgent
+                                                        ? 'bg-slate-800/90 backdrop-blur-md border border-slate-700/50 text-slate-200 rounded-bl-sm shadow-slate-900/50'
+                                                        : 'bg-slate-900/50 border border-slate-800 text-slate-400 rounded-xl font-mono text-[11px] p-2'
                                                 }`}>
                                                 <span className={`absolute -bottom-5 text-[10px] text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap ${isUser ? 'right-2' : 'left-2'}`}>
                                                     {safeFormatTimestamp(log.timestamp)}
@@ -1895,6 +1917,33 @@ export default function App() {
                                                     <span className="whitespace-pre-wrap opacity-80">{content}</span>
                                                 ) : isUser ? (
                                                     <span className="whitespace-pre-wrap font-medium text-[15px] leading-relaxed">{content}</span>
+                                                ) : isCronResult ? (
+                                                    <div className="flex flex-col gap-1">
+                                                        <span className="text-[10px] font-bold text-indigo-300 uppercase tracking-wider mb-1 pt-1 ml-1 flex items-center gap-1.5">
+                                                            <span>⏰</span> Cron: {cronJobName}
+                                                        </span>
+                                                        <div className="prose prose-invert prose-sm max-w-none prose-p:leading-relaxed prose-pre:bg-slate-950/80 prose-pre:border prose-pre:border-slate-800 prose-pre:shadow-inner text-[14.5px]">
+                                                            <ReactMarkdown
+                                                                remarkPlugins={[remarkGfm]}
+                                                                components={{
+                                                                    table: ({ node, ...props }) => (
+                                                                        <div className="overflow-x-auto my-4 rounded-xl border border-indigo-700/50 bg-indigo-950/50 shadow-lg">
+                                                                            <table className="min-w-full divide-y divide-indigo-700/50 text-sm" {...props} />
+                                                                        </div>
+                                                                    ),
+                                                                    thead: ({ node, ...props }) => <thead className="bg-indigo-900/50" {...props} />,
+                                                                    th: ({ node, ...props }) => <th className="px-4 py-3 text-left font-semibold text-indigo-200 tracking-wide bg-indigo-900/40 first:rounded-tl-lg last:rounded-tr-lg" {...props} />,
+                                                                    td: ({ node, ...props }) => <td className="px-4 py-3 border-t border-indigo-700/40 text-slate-300" {...props} />,
+                                                                    tr: ({ node, ...props }) => <tr {...props} />,
+                                                                    p: ({ node, ...props }) => <p className="mb-2.5 last:mb-0" {...props} />,
+                                                                    code: ({ node, inline, ...props }: any) => inline
+                                                                        ? <code className="bg-indigo-950/60 text-indigo-300 px-1.5 py-0.5 rounded text-[13px] border border-indigo-700/40" {...props} />
+                                                                        : <code {...props} />,
+                                                                    a: ({ node, ...props }) => <a className="text-indigo-400 hover:text-indigo-300 underline underline-offset-2 decoration-indigo-500/30 hover:decoration-indigo-400 transition-all font-medium" {...props} />
+                                                                }}
+                                                            >{content}</ReactMarkdown>
+                                                        </div>
+                                                    </div>
                                                 ) : (
                                                     <div className="flex flex-col gap-1">
                                                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 pt-1 ml-1 opacity-70">

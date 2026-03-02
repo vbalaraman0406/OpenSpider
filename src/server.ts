@@ -103,9 +103,9 @@ export function startServer() {
             let isSpecialEvent = false;
 
             try {
-                if (message.includes('"type":"usage"') || message.includes('"type":"agent_flow"')) {
+                if (message.includes('"type":"usage"') || message.includes('"type":"agent_flow"') || message.includes('"type":"cron_result"')) {
                     const parsed = JSON.parse(message);
-                    if (parsed.type === 'usage' || parsed.type === 'agent_flow') {
+                    if (parsed.type === 'usage' || parsed.type === 'agent_flow' || parsed.type === 'cron_result') {
                         isSpecialEvent = true;
 
                         // Skip broadcasting agent_flow events to dashboard during cron runs
