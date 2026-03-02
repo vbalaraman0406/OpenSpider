@@ -169,7 +169,7 @@ def wrap_in_email_template(html_body: str, subject: str = '') -> str:
 <table width="100%" cellspacing="0" cellpadding="0">
 <tr>
 <td>
-  <span style="font-size:24px;font-weight:700;color:#fff;letter-spacing:-0.5px;">🐍 {agent_name}</span>
+  <span style="font-size:24px;font-weight:700;color:#fff;letter-spacing:-0.5px;">♾️ {agent_name}</span>
   <br/>
   <span style="font-size:12px;color:#a5b4fc;letter-spacing:1px;text-transform:uppercase;">Autonomous Agent Report</span>
 </td>
