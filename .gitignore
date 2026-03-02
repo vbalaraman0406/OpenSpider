@@ -8,3 +8,6 @@ openclaw_examine/
 test-proxy-*
 workspace/
 baileys_auth_info/
+
+# workspace-defaults/ is explicitly TRACKED (not listed here)
+# It ships with the repo and seeds workspace/ on first run
