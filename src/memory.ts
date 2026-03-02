@@ -5,13 +5,43 @@ const WORKSPACE_DIR = path.join(process.cwd(), 'workspace');
 const MEMORY_DIR = path.join(WORKSPACE_DIR, 'memory');
 
 export function initWorkspace() {
-    if (!fs.existsSync(WORKSPACE_DIR)) fs.mkdirSync(WORKSPACE_DIR, { recursive: true });
+    const isFirstRun = !fs.existsSync(WORKSPACE_DIR);
+
+    if (isFirstRun) {
+        fs.mkdirSync(WORKSPACE_DIR, { recursive: true });
+
+        // Seed workspace from shipped defaults (workspace-defaults/)
+        const defaultsDir = path.join(process.cwd(), 'workspace-defaults');
+        if (fs.existsSync(defaultsDir)) {
+            console.log('[Workspace] First run detected — seeding from workspace-defaults/...');
+            copyDirRecursive(defaultsDir, WORKSPACE_DIR);
+            console.log('[Workspace] Default agent configs, SOUL.md, and system settings copied successfully.');
+        }
+    }
+
     if (!fs.existsSync(MEMORY_DIR)) fs.mkdirSync(MEMORY_DIR, { recursive: true });
 
     // Initialize memory.md - Long term agent memory
     const memoryPath = path.join(WORKSPACE_DIR, 'memory.md');
     if (!fs.existsSync(memoryPath)) {
         fs.writeFileSync(memoryPath, `# Long Term Memory\n\nRecord enduring facts, system quirks, or important constraints discovered during operation here.\n`);
+    }
+}
+
+/** Recursively copy a directory tree, skipping files that already exist at the destination */
+function copyDirRecursive(src: string, dest: string) {
+    if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
+
+    for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+        const srcPath = path.join(src, entry.name);
+        const destPath = path.join(dest, entry.name);
+
+        if (entry.isDirectory()) {
+            copyDirRecursive(srcPath, destPath);
+        } else if (!fs.existsSync(destPath)) {
+            // Only copy if the file doesn't already exist (don't overwrite user customizations)
+            fs.copyFileSync(srcPath, destPath);
+        }
     }
 }
 
