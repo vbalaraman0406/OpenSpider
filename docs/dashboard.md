@@ -130,6 +130,24 @@ A high-level summary view of your OpenSpider instance.
 
 View and manage active agent sessions.
 
+## Favicon & PWA Icon
+
+The dashboard includes a full favicon suite for crisp display across all platforms:
+
+| File | Size | Used for |
+|---|---|---|
+| `favicon-16.png` | 16×16 | Browser tab icon |
+| `favicon-32.png` | 32×32 | High-DPI browser tabs |
+| `favicon-192.png` | 192×192 | Android home screen |
+| `favicon-512.png` | 512×512 | PWA splash screen |
+| `apple-touch-icon.png` | 180×180 | iOS home screen bookmark |
+
+The browser chrome (address bar on Android/Chrome) uses `#0f172a` as the theme color, matching the dark navy dashboard background.
+
+::: tip
+If the favicon doesn't update after redeployment, do a hard refresh: **Cmd+Shift+R** (Mac) or **Ctrl+Shift+R** (Windows). Browsers cache favicons aggressively.
+:::
+
 ## Architecture
 
 The dashboard is a single-page React application:
