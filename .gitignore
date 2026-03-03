@@ -12,3 +12,15 @@ baileys_auth_info/
 
 # workspace-defaults/ is explicitly TRACKED (not listed here)
 # It ships with the repo and seeds workspace/ on first run
+
+# Agent-generated runtime output files (user-specific, not source code)
+skills/*.md
+skills/copy_*.py
+skills/fetch_*.py
+skills/iran_*.py
+skills/market_*.py
+skills/mlb_*.py
+skills/morning_*.py
+skills/parse_*.py
+skills/scrape_*.py
+skills/weather_*.py
