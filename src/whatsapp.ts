@@ -655,6 +655,19 @@ export async function startWhatsApp() {
         }
 
         try {
+            // ── Phase 1: Immediate acknowledgment ──────────────────────────────────────
+            // WhatsApp's "composing" bubble only shows for ~30-60s then disappears.
+            // On long research tasks (2-5 min) the user sees nothing and thinks it hung.
+            // Fix: send a brief "thinking" message immediately, then replace with the full answer.
+            const ackMsg = await sock.sendMessage(replyJid, {
+                text: `⏳ *${agentName}* is researching your question...`
+            }).catch(() => null);
+            if (ackMsg?.key?.id) {
+                sentMessageIds.add(ackMsg.key.id);
+                if (sentMessageIds.size > 1000) sentMessageIds.delete(Array.from(sentMessageIds)[0]!);
+            }
+
+            // ── Phase 2: Run the agent ─────────────────────────────────────────────────
             // Send to the Manager Agent
             // Note: ManagerAgent expects images array in updated implementation
             const groupContextPrefix = isGroup ? `[GROUP CHAT] You are responding in a WhatsApp group chat. People can talk to you by tagging you as @${agentName}. Keep this in mind when introducing yourself or giving instructions.\n\n` : '';
