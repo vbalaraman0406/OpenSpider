@@ -15,7 +15,7 @@ const program = new Command();
 program
     .name('openspider')
     .description('Autonomous Multi-Agent System tailored for WhatsApp')
-    .version('1.0.0');
+    .version('2.0.2');
 
 program
     .command('onboard')
@@ -407,19 +407,97 @@ modelsMenu
     .command('list')
     .description('List currently configured models from .env')
     .action(() => {
-        require('dotenv').config();
-        console.log('\n🕷️ OpenSpider Configure Models:');
-        console.log('---------------------------------');
-        console.log(`Default Provider:   ${process.env.DEFAULT_PROVIDER || 'Not Set'}`);
-        console.log(`Primary Model:      ${process.env.DEFAULT_PROVIDER === 'antigravity' ? process.env.GEMINI_MODEL :
-            process.env.DEFAULT_PROVIDER === 'ollama' ? process.env.OLLAMA_MODEL :
-                process.env.DEFAULT_PROVIDER === 'openai' ? process.env.OPENAI_MODEL :
-                    process.env.DEFAULT_PROVIDER === 'anthropic' ? process.env.ANTHROPIC_MODEL :
-                        process.env.DEFAULT_PROVIDER === 'custom' ? process.env.CUSTOM_MODEL : 'Unknown'
-            }`);
+        // BUGFIX: resolve .env relative to the project root (parent of dist/), not CWD.
+        // When openspider is run from any directory, __dirname = .../dist/
+        // and require('dotenv').config() without a path defaults to process.cwd()/.env
+        // which fails unless the user happens to be in the project root.
+        const rootDir = __dirname.endsWith('src') ? path.join(__dirname, '..') : path.join(__dirname, '..');
+        const envPath  = path.join(rootDir, '.env');
+        require('dotenv').config({ path: envPath });
+
+        const provider = process.env.DEFAULT_PROVIDER || 'Not Set';
+
+        // Pick the primary model based on the active provider
+        const primaryModel =
+            provider === 'antigravity'          ? (process.env.GEMINI_MODEL      || 'Not Set') :
+            provider === 'antigravity-internal' ? (process.env.GEMINI_MODEL      || 'Not Set') :
+            provider === 'ollama'               ? (process.env.OLLAMA_MODEL      || 'Not Set') :
+            provider === 'openai'               ? (process.env.OPENAI_MODEL      || 'Not Set') :
+            provider === 'anthropic'            ? (process.env.ANTHROPIC_MODEL   || 'Not Set') :
+            provider === 'custom'               ? (process.env.CUSTOM_MODEL      || 'Not Set') : 'Unknown';
+
+        // Build list of all configured providers
+        const configured: string[] = [];
+        if (process.env.GEMINI_API_KEY)    configured.push(`antigravity  (model: ${process.env.GEMINI_MODEL    || 'gemini-2.0-flash'})`);
+        if (process.env.OLLAMA_HOST)        configured.push(`ollama       (model: ${process.env.OLLAMA_MODEL       || 'llama3'}, host: ${process.env.OLLAMA_HOST})`);
+        if (process.env.OPENAI_API_KEY)    configured.push(`openai       (model: ${process.env.OPENAI_MODEL    || 'gpt-4o'})`);
+        if (process.env.ANTHROPIC_API_KEY) configured.push(`anthropic    (model: ${process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet'})`);
+        if (process.env.CUSTOM_BASE_URL)   configured.push(`custom       (model: ${process.env.CUSTOM_MODEL   || 'N/A'}, url: ${process.env.CUSTOM_BASE_URL})`);
+        // antigravity-internal is the managed cloud mode (no separate key env var)
+        if (provider === 'antigravity-internal' && configured.length === 0) {
+            configured.push(`antigravity-internal  (model: ${process.env.GEMINI_MODEL || 'claude-opus-4-6-thinking'})`);
+        }
+        console.log('\n🕷️  OpenSpider Model Configuration:');
+        console.log('─'.repeat(50));
+        console.log(`Default Provider:   ${provider}`);
+        console.log(`Primary Model:      ${primaryModel}`);
         console.log(`Fallback Model:     ${process.env.FALLBACK_MODEL || 'None'}`);
-        console.log('---------------------------------');
+        console.log('─'.repeat(50));
+        if (configured.length > 0) {
+            console.log('\nAll configured providers:');
+            configured.forEach(p => console.log(`  ✅ ${p}`));
+        } else {
+            console.log('\n⚠️  No providers configured. Run: openspider onboard');
+        }
+        console.log(`\nConfig file: ${envPath}`);
+        console.log('');
         process.exit(0);
+    });
+
+program
+    .command('status')
+    .description('Show current OpenSpider gateway status and configuration')
+    .action(() => {
+        const rootDir = __dirname.endsWith('src') ? path.join(__dirname, '..') : path.join(__dirname, '..');
+        const envPath = path.join(rootDir, '.env');
+        require('dotenv').config({ path: envPath });
+
+        const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf-8'));
+
+        console.log('\n🕷️  OpenSpider Status');
+        console.log('─'.repeat(50));
+        console.log(`Version:          v${pkg.version}`);
+        console.log(`Provider:         ${process.env.DEFAULT_PROVIDER || '⚠️  Not configured (run: openspider onboard)'}`);
+        console.log(`API Port:         ${process.env.PORT || '4001'}`);
+        console.log(`Dashboard:        http://localhost:${process.env.PORT || '4001'}`);
+        console.log('─'.repeat(50));
+
+        // Check if PM2 process is running
+        pm2.connect((err) => {
+            if (err) {
+                console.log('Gateway:          ⚠️  PM2 not available');
+                pm2.disconnect();
+                process.exit(0);
+                return;
+            }
+            pm2.describe('openspider-gateway', (err, desc: any[]) => {
+                pm2.disconnect();
+                if (err || !desc || desc.length === 0) {
+                    console.log('Gateway:          ⛔ Not running  (start with: openspider start)');
+                } else {
+                    const proc = desc[0];
+                    const status = proc?.pm2_env?.status || 'unknown';
+                    const uptime = proc?.pm2_env?.pm_uptime
+                        ? Math.round((Date.now() - proc.pm2_env.pm_uptime) / 60000) + ' min'
+                        : 'N/A';
+                    const restarts = proc?.pm2_env?.restart_time ?? 0;
+                    const icon = status === 'online' ? '✅' : '⛔';
+                    console.log(`Gateway:          ${icon} ${status}  (uptime: ${uptime}, restarts: ${restarts})`);
+                }
+                console.log('');
+                process.exit(0);
+            });
+        });
     });
 
 program
