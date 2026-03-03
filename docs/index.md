@@ -2,7 +2,7 @@
 layout: home
 
 hero:
-  name: OpenSpider v2.0.0 🕷️
+  name: OpenSpider v2.0.1 🕷️
   text: Autonomous Multi-Agent System
   tagline: A self-hosted AI agent gateway for WhatsApp — with multi-agent orchestration, voice messages, scheduled tasks, and a beautiful web dashboard with dark/light themes.
   actions:
