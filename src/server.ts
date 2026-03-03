@@ -208,6 +208,37 @@ export function startServer() {
         });
     };
 
+    // Health endpoint for dashboard status indicator & version badge
+    app.get('/api/health', (req, res) => {
+        const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf-8'));
+        const uptimeSec = Math.floor(process.uptime());
+        const memMB = Math.round(process.memoryUsage().rss / 1024 / 1024);
+        let waStatus: 'connected' | 'disconnected' = 'disconnected';
+        try {
+            const { getWhatsAppStatus } = require('./whatsapp');
+            waStatus = getWhatsAppStatus();
+        } catch { }
+        const llmProvider = process.env.DEFAULT_PROVIDER || 'ollama';
+
+        // Overall status: green = all OK, amber = degraded, red = critical
+        let status: 'green' | 'amber' | 'red' = 'green';
+        if (waStatus !== 'connected') status = 'amber';
+        if (memMB > 1024) status = 'amber'; // >1GB memory = amber
+
+        res.json({
+            version: pkg.version,
+            status,
+            uptime: uptimeSec,
+            memory: memMB,
+            components: {
+                whatsapp: waStatus,
+                llm: llmProvider,
+                server: 'running',
+                scheduler: 'running'
+            }
+        });
+    });
+
     // API Route to fetch current connection config
     app.get('/api/config', (req, res) => {
         const provider = process.env.DEFAULT_PROVIDER || 'ollama';

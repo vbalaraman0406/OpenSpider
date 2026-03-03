@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Activity, Terminal, CheckCircle2, Server, Key, Bot, Send, MessageSquare, Radio, Smartphone, MessagesSquare, Users, Globe, Play, Square, Settings, RefreshCw, LayoutDashboard, ListTree, FolderGit2, Wrench, FileText, Search, Download, X, Trash, GitMerge, Timer, Plus, Clock, AlertTriangle, Paperclip, Image as ImageIcon } from 'lucide-react';
+import { Activity, Terminal, CheckCircle2, Server, Key, Bot, Send, MessageSquare, Radio, Smartphone, MessagesSquare, Users, Globe, Play, Square, Settings, RefreshCw, LayoutDashboard, ListTree, FolderGit2, Wrench, FileText, Search, Download, X, Trash, GitMerge, Timer, Plus, Clock, AlertTriangle, Paperclip, Image as ImageIcon, Sun, Moon, Monitor, Heart } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import AgentFlowGraph, { AgentFlowEvent } from './components/AgentFlowGraph';
@@ -1514,6 +1514,49 @@ export default function App() {
     const chatEndRef = useRef<HTMLDivElement>(null);
     const wsRef = useRef<WebSocket | null>(null);
 
+    // Theme state
+    type ThemeMode = 'dark' | 'light' | 'system';
+    const [theme, setTheme] = useState<ThemeMode>(() => {
+        const saved = localStorage.getItem('openspider-theme');
+        return (saved === 'dark' || saved === 'light' || saved === 'system') ? saved : 'dark';
+    });
+
+    useEffect(() => {
+        document.documentElement.setAttribute('data-theme', theme);
+        localStorage.setItem('openspider-theme', theme);
+    }, [theme]);
+
+    // Health state
+    const [health, setHealth] = useState<{
+        version: string;
+        status: 'green' | 'amber' | 'red';
+        uptime: number;
+        memory: number;
+        components: { whatsapp: string; llm: string; server: string; scheduler: string };
+    } | null>(null);
+    const [isHealthHovered, setIsHealthHovered] = useState(false);
+
+    useEffect(() => {
+        const fetchHealth = () => {
+            fetch('/api/health')
+                .then(r => r.json())
+                .then(data => setHealth(data))
+                .catch(() => setHealth(prev => prev ? { ...prev, status: 'red' } : null));
+        };
+        fetchHealth();
+        const interval = setInterval(fetchHealth, 30000);
+        return () => clearInterval(interval);
+    }, []);
+
+    const formatUptime = (seconds: number) => {
+        const d = Math.floor(seconds / 86400);
+        const h = Math.floor((seconds % 86400) / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        if (d > 0) return `${d}d ${h}h`;
+        if (h > 0) return `${h}h ${m}m`;
+        return `${m}m`;
+    };
+
     const [loadingStatus, setLoadingStatus] = useState(funnyStatuses[0]);
 
     // Randomize checking status every 2 seconds if generating
@@ -1745,7 +1788,14 @@ export default function App() {
                         <img src="/openspider-logo.png" alt="OpenSpider Logo" className="w-10 h-10 object-contain drop-shadow-md" />
                     </div>
                     <div className="flex flex-col">
-                        <h1 className="text-xl font-bold text-white tracking-tight leading-tight">OpenSpider</h1>
+                        <div className="flex items-center gap-2">
+                            <h1 className="text-xl font-bold text-white tracking-tight leading-tight">OpenSpider</h1>
+                            {health && (
+                                <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-gradient-to-r from-indigo-500/20 to-purple-500/20 text-indigo-300 border border-indigo-500/30 rounded-md">
+                                    v{health.version}
+                                </span>
+                            )}
+                        </div>
                         <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-widest mt-0.5">Dashboard</p>
                     </div>
                 </div>
@@ -1844,21 +1894,121 @@ export default function App() {
                     </div>
                 </nav>
 
-                <div className="p-6 border-t border-slate-800/60 bg-slate-900/30 space-y-4">
-                    <div className="flex flex-col">
-                        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">LLM Provider</span>
-                        <div className="flex items-center gap-2">
-                            <Bot className="w-4 h-4 text-blue-400" />
-                            <span className="text-sm font-mono text-slate-300 truncate">{config.provider.toUpperCase()}</span>
+                <div className="p-5 border-t border-slate-800/60 bg-slate-900/30 space-y-4">
+                    {/* Theme Toggle */}
+                    <div className="flex flex-col gap-2">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Appearance</span>
+                        <div className="theme-toggle">
+                            <button
+                                onClick={() => setTheme('light')}
+                                className={theme === 'light' ? 'active' : ''}
+                                title="Light mode"
+                            >
+                                <Sun className="w-3.5 h-3.5 inline-block mr-1 relative -top-px" />Light
+                            </button>
+                            <button
+                                onClick={() => setTheme('dark')}
+                                className={theme === 'dark' ? 'active' : ''}
+                                title="Dark mode"
+                            >
+                                <Moon className="w-3.5 h-3.5 inline-block mr-1 relative -top-px" />Dark
+                            </button>
+                            <button
+                                onClick={() => setTheme('system')}
+                                className={theme === 'system' ? 'active' : ''}
+                                title="System preference"
+                            >
+                                <Monitor className="w-3.5 h-3.5 inline-block mr-1 relative -top-px" />Auto
+                            </button>
                         </div>
                     </div>
+
                     <div className="h-px w-full bg-slate-800/60"></div>
-                    <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Engine</span>
-                        <div className="flex items-center gap-2 bg-slate-950 px-2 py-1 rounded-md border border-slate-800">
-                            <div className={`w-2 h-2 rounded-full ${config.status === 'connected' ? 'bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-red-500'}`}></div>
-                            <span className="text-[11px] text-slate-300 font-medium capitalize tracking-wide">{config.status}</span>
+
+                    {/* Health Status */}
+                    <div
+                        className="relative"
+                        onMouseEnter={() => setIsHealthHovered(true)}
+                        onMouseLeave={() => setIsHealthHovered(false)}
+                    >
+                        <div className="flex items-center justify-between cursor-pointer">
+                            <div className="flex items-center gap-2.5">
+                                <div className={`relative flex items-center justify-center w-8 h-8 rounded-lg ${health?.status === 'green' ? 'bg-emerald-500/10 border border-emerald-500/30' :
+                                        health?.status === 'amber' ? 'bg-amber-500/10 border border-amber-500/30' :
+                                            'bg-red-500/10 border border-red-500/30'
+                                    }`}>
+                                    <Heart className={`w-4 h-4 ${health?.status === 'green' ? 'text-emerald-400' :
+                                            health?.status === 'amber' ? 'text-amber-400' :
+                                                'text-red-400'
+                                        }`} />
+                                    <span className={`absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-slate-900 ${health?.status === 'green' ? 'bg-emerald-400 health-pulse shadow-[0_0_8px_rgba(52,211,153,0.6)]' :
+                                            health?.status === 'amber' ? 'bg-amber-400 health-pulse shadow-[0_0_8px_rgba(251,191,36,0.6)]' :
+                                                'bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.6)]'
+                                        }`}></span>
+                                </div>
+                                <div className="flex flex-col">
+                                    <span className={`text-xs font-semibold ${health?.status === 'green' ? 'text-emerald-400' :
+                                            health?.status === 'amber' ? 'text-amber-400' :
+                                                'text-red-400'
+                                        }`}>
+                                        {health?.status === 'green' ? 'All Systems Healthy' :
+                                            health?.status === 'amber' ? 'Degraded' :
+                                                'Unreachable'}
+                                    </span>
+                                    <span className="text-[10px] text-slate-500 font-medium">
+                                        {health ? `Uptime: ${formatUptime(health.uptime)}` : 'Connecting...'}
+                                    </span>
+                                </div>
+                            </div>
                         </div>
+
+                        {/* Health Detail Tooltip */}
+                        {isHealthHovered && health && (
+                            <div className="absolute bottom-full left-0 right-0 mb-3 bg-slate-900/95 backdrop-blur-xl border border-slate-700/60 rounded-xl shadow-2xl p-4 z-50">
+                                <div className="absolute bottom-[-6px] left-6 w-3 h-3 bg-slate-900/95 border-r border-b border-slate-700/60 rotate-45"></div>
+                                <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">System Health</div>
+                                <div className="space-y-2.5">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-xs text-slate-400 flex items-center gap-2">
+                                            <Smartphone className="w-3 h-3" /> WhatsApp
+                                        </span>
+                                        <span className={`text-xs font-semibold flex items-center gap-1.5 ${health.components.whatsapp === 'connected' ? 'text-emerald-400' : 'text-amber-400'
+                                            }`}>
+                                            <span className={`w-1.5 h-1.5 rounded-full ${health.components.whatsapp === 'connected' ? 'bg-emerald-400' : 'bg-amber-400'
+                                                }`}></span>
+                                            {health.components.whatsapp}
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-xs text-slate-400 flex items-center gap-2">
+                                            <Bot className="w-3 h-3" /> LLM
+                                        </span>
+                                        <span className="text-xs font-semibold text-emerald-400 flex items-center gap-1.5">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                                            {health.components.llm}
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-xs text-slate-400 flex items-center gap-2">
+                                            <Server className="w-3 h-3" /> Server
+                                        </span>
+                                        <span className="text-xs font-semibold text-emerald-400 flex items-center gap-1.5">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                                            running
+                                        </span>
+                                    </div>
+                                    <div className="h-px w-full bg-slate-800/60 my-1"></div>
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-[10px] text-slate-500">Memory</span>
+                                        <span className="text-[10px] font-mono text-slate-300">{health.memory} MB</span>
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-[10px] text-slate-500">Uptime</span>
+                                        <span className="text-[10px] font-mono text-slate-300">{formatUptime(health.uptime)}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             </aside>

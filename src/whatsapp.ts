@@ -10,6 +10,9 @@ import { execSync } from 'node:child_process';
 import os from 'node:os';
 
 let globalSocket: any = null;
+export function getWhatsAppStatus(): 'connected' | 'disconnected' {
+    return globalSocket ? 'connected' : 'disconnected';
+}
 export const sentMessageIds = new Set<string>(); // Global cache for outbound messages to prevent echo loops
 // Stores the proto content of sent messages so Baileys can re-relay them on retry requests.
 // Without this, getMessage returns undefined and Baileys gives up on retries silently.
