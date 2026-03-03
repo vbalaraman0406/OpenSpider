@@ -393,6 +393,53 @@ export function startServer() {
         }
     });
 
+    // --- VOICE CONFIG ENDPOINTS ---
+    const voiceConfigPath = path.join(process.cwd(), 'workspace', 'voice_config.json');
+
+    app.get('/api/voice/config', (req, res) => {
+        try {
+            if (!fs.existsSync(voiceConfigPath)) {
+                return res.json({
+                    voiceId: process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM',
+                    voiceName: 'Rachel',
+                    elevenlabsApiKey: process.env.ELEVENLABS_API_KEY || '',
+                    whisperModel: process.env.WHISPER_MODEL || 'base'
+                });
+            }
+            const config = JSON.parse(fs.readFileSync(voiceConfigPath, 'utf-8'));
+            res.json(config);
+        } catch (e: any) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    app.post('/api/voice/config', (req, res) => {
+        try {
+            const { voiceId, voiceName, elevenlabsApiKey, whisperModel } = req.body;
+            const newConfig = {
+                voiceId: voiceId || '21m00Tcm4TlvDq8ikWAM',
+                voiceName: voiceName || 'Rachel',
+                elevenlabsApiKey: elevenlabsApiKey || '',
+                whisperModel: whisperModel || 'base'
+            };
+
+            // Ensure workspace directory exists
+            const wsDir = path.join(process.cwd(), 'workspace');
+            if (!fs.existsSync(wsDir)) fs.mkdirSync(wsDir, { recursive: true });
+
+            fs.writeFileSync(voiceConfigPath, JSON.stringify(newConfig, null, 2), 'utf-8');
+
+            // Also update env vars in memory so they take effect immediately without restart
+            process.env.ELEVENLABS_VOICE_ID = newConfig.voiceId;
+            process.env.ELEVENLABS_API_KEY = newConfig.elevenlabsApiKey;
+            process.env.WHISPER_MODEL = newConfig.whisperModel;
+
+            res.json({ success: true, config: newConfig });
+        } catch (e: any) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
     // API Route to generate a new skill from natural language
     app.post('/api/skills/generate', async (req, res) => {
         try {

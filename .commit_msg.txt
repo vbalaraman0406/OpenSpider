@@ -1,0 +1,38 @@
+fix(whatsapp): resolve Bad MAC, duplicate voice, and intermittent message drop issues
+
+Root Causes Fixed:
+
+1. processingMessageIds lock leak (intermittent drops)
+   Every early-return path in messages.upsert handler now properly releases
+   the processingMessageIds lock before returning. Previously, 5 paths
+   (status@broadcast, forwarded, sentMessageIds echo, !isNoteToSelf,
+   reactionMessage) would lock a message ID and never release it, causing
+   Baileys retries of the same message to be silently blocked as duplicates.
+
+2. Stale Signal session files (Bad MAC on restart)
+   On startup, all session-*.json files are deleted from baileys_auth_info
+   before useMultiFileAuthState loads. After a process restart, the phone
+   advances its Signal ratchet but on-disk session files are frozen at the
+   old state, causing Bad MAC on every message.
+
+3. makeCacheableSignalKeyStore (Bad MAC session renegotiation)
+   auth is now passed as { creds, keys: makeCacheableSignalKeyStore(...) }
+   instead of raw state. Enables proper Signal key caching required for
+   session renegotiation after decryption failures.
+
+4. sentMessageStore for Baileys retry (getMessage callback)
+   Added sentMessageStore Map to cache outgoing message proto content.
+   getMessage now returns from this store so Baileys can re-relay messages
+   on retry receipts instead of silently giving up.
+
+5. Duplicate voice message prevention (Manager agent)
+   Added rule to Manager system prompt: voice message inputs must produce
+   exactly ONE task combining research + voice reply, not separate tasks.
+
+6. Text reply suppression after voice reply
+   Replaced fragile exact-string matching with keyword detection to suppress
+   text replies when a voice note was already delivered.
+
+7. Ghost packet handling
+   Bad MAC ghost packets (empty payloads from decryption failure) are now
+   silently dropped. Baileys handles retries automatically via msgRetryCounterCache.
