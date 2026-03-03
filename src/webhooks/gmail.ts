@@ -7,11 +7,17 @@ const manager = new ManagerAgent();
 
 router.post('/gmail', async (req, res) => {
     try {
+        // SECURITY FIX (HIGH-3): Remove hardcoded fallback token. Fail safely at startup if not set.
+        const configuredToken = process.env.OPENSPIDER_HOOK_TOKEN;
+        if (!configuredToken || configuredToken.trim().length < 16) {
+            console.error('[GmailWebhook] OPENSPIDER_HOOK_TOKEN is not set or too short. Rejecting all webhook requests.');
+            return res.status(403).json({ error: 'Webhook authentication is not configured on this server.' });
+        }
+
         // Enforce basic auth parameter as required by documentation
         const token = req.query.token || req.headers['x-gog-token'];
-        const configuredToken = process.env.OPENSPIDER_HOOK_TOKEN || 'OPENSPIDER_HOOK_TOKEN';
 
-        if (token !== configuredToken) {
+        if (token !== configuredToken.trim()) {
             return res.status(401).json({ error: "Unauthorized. Invalid Token." });
         }
 

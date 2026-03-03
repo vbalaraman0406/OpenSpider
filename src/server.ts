@@ -12,11 +12,34 @@ import { initScheduler, runJobForcefully, activeCronJobs } from './scheduler';
 import { logUsage, getUsageSummary } from './usage';
 import { PersonaShell } from './agents/PersonaShell';
 import gmailWebhookRouter from './webhooks/gmail';
+import { apiKeyAuth, validateWsConnection } from './middleware/auth';
 
 export function startServer() {
     const app = express();
-    app.use(cors());
-    app.use(express.json());
+
+    // SECURITY: Restrict CORS to localhost only — dashboard is local-only.
+    app.use(cors({
+        origin: (origin, callback) => {
+            // Allow same-origin requests (no Origin header) and localhost origins
+            if (!origin || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+                callback(null, true);
+            } else {
+                callback(new Error('CORS: origin not allowed'));
+            }
+        },
+        credentials: true,
+    }));
+
+    // Limit JSON body size to prevent memory exhaustion via large payloads
+    app.use(express.json({ limit: '25mb' }));
+
+    // SECURITY: Require API key on all /api/* routes.
+    // /api/health is public (health checks don't need auth).
+    // /hooks/* uses its own token — handled inside the gmail router.
+    app.use('/api', (req, res, next) => {
+        if (req.path === '/health') return next(); // public health check
+        return apiKeyAuth(req, res, next);
+    });
 
     const server = http.createServer(app);
     const wss = new WebSocketServer({ server });
@@ -39,7 +62,14 @@ export function startServer() {
 
     const manager = new ManagerAgent();
 
-    wss.on('connection', (ws) => {
+    wss.on('connection', (ws, req) => {
+        // SECURITY: Validate API key on WebSocket connect
+        if (!validateWsConnection(req)) {
+            console.warn('[Server] Rejected unauthenticated WebSocket connection');
+            ws.close(1008, 'Unauthorized: missing or invalid apiKey');
+            return;
+        }
+
         clients.add(ws);
 
         // Replay buffered events to new client so they see the full conversation
@@ -69,7 +99,7 @@ export function startServer() {
                     // Save uploaded non-image files to workspace/uploads/ so Workers can access them
                     const uploadedFilePaths: string[] = [];
                     if (parsed.files && Array.isArray(parsed.files)) {
-                        const uploadsDir = path.join(process.cwd(), 'workspace', 'uploads');
+                        const uploadsDir = path.resolve(process.cwd(), 'workspace', 'uploads');
                         if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
                         for (const file of parsed.files) {
@@ -78,12 +108,31 @@ export function startServer() {
                                 // Extract base64 data from data URL (format: data:mimetype;base64,XXXXX)
                                 const base64Match = dataUrl.match(/^data:[^;]+;base64,(.+)$/);
                                 if (base64Match) {
-                                    const buffer = Buffer.from(base64Match[1], 'base64');
-                                    const safeName = name.replace(/[^a-zA-Z0-9._-]/g, '_');
-                                    const filePath = path.join(uploadsDir, safeName);
-                                    fs.writeFileSync(filePath, buffer);
-                                    uploadedFilePaths.push(filePath);
-                                    console.log(`[Web Chat] Saved uploaded file: ${filePath} (${buffer.length} bytes)`);
+                                    // HIGH-5 FIX: Enforce file size limit (10MB decoded)
+                                    const MAX_FILE_BYTES = 10 * 1024 * 1024;
+                                    const base64Data = base64Match[1];
+                                    if (base64Data.length > MAX_FILE_BYTES * 1.4) { // base64 expands ~33%
+                                        console.warn(`[Web Chat] File too large, rejected: ${name}`);
+                                        continue;
+                                    }
+                                    const buffer = Buffer.from(base64Data, 'base64');
+                                    if (buffer.length > MAX_FILE_BYTES) {
+                                        console.warn(`[Web Chat] Decoded file exceeds 10MB limit, rejected: ${name}`);
+                                        continue;
+                                    }
+
+                                    // HIGH-5 FIX: Strip path separators and leading dots, use basename only
+                                    const rawName = path.basename(name).replace(/^[\.]+/, '').replace(/[^a-zA-Z0-9._-]/g, '_') || 'upload';
+                                    const resolvedPath = path.resolve(uploadsDir, rawName);
+                                    // Path traversal guard
+                                    if (!resolvedPath.startsWith(uploadsDir)) {
+                                        console.warn(`[Web Chat] Filename traversal detected, rejected: ${name}`);
+                                        continue;
+                                    }
+
+                                    fs.writeFileSync(resolvedPath, buffer);
+                                    uploadedFilePaths.push(resolvedPath);
+                                    console.log(`[Web Chat] Saved uploaded file: ${resolvedPath} (${buffer.length} bytes)`);
                                 }
                             } catch (fileErr: any) {
                                 console.error(`[Web Chat] Failed to save file:`, fileErr.message);
@@ -708,7 +757,13 @@ Return ONLY the raw Python code.`;
         try {
             const id = req.params.id;
             const { identity, soul, userContext, capabilities } = req.body;
-            const agentDir = path.join(process.cwd(), 'workspace', 'agents', id);
+            const agentsDir = path.resolve(process.cwd(), 'workspace', 'agents');
+            const agentDir = path.resolve(agentsDir, id);
+
+            // SECURITY FIX (HIGH-4): Path traversal protection
+            if (!agentDir.startsWith(agentsDir + path.sep)) {
+                return res.status(403).json({ error: 'Forbidden: Path traversal detected' });
+            }
 
             if (!fs.existsSync(agentDir)) return res.status(404).json({ error: 'Agent not found' });
 
@@ -719,7 +774,7 @@ Return ONLY the raw Python code.`;
 
             res.json({ success: true });
         } catch (e: any) {
-            res.status(500).json({ error: e.message });
+            res.status(500).json({ error: 'Internal server error' });
         }
     });
 
@@ -730,7 +785,14 @@ Return ONLY the raw Python code.`;
             const { skill } = req.body;
             if (!skill) return res.status(400).json({ error: 'Skill is required' });
 
-            const agentDir = path.join(process.cwd(), 'workspace', 'agents', agentId);
+            const agentsDir = path.resolve(process.cwd(), 'workspace', 'agents');
+            const agentDir = path.resolve(agentsDir, agentId);
+
+            // SECURITY FIX (HIGH-4): Path traversal protection
+            if (!agentDir.startsWith(agentsDir + path.sep)) {
+                return res.status(403).json({ error: 'Forbidden: Path traversal detected' });
+            }
+
             if (!fs.existsSync(agentDir)) return res.status(404).json({ error: 'Agent not found' });
 
             const capsPath = path.join(agentDir, 'CAPABILITIES.json');
@@ -747,7 +809,7 @@ Return ONLY the raw Python code.`;
 
             res.json({ success: true });
         } catch (e: any) {
-            res.status(500).json({ error: e.message });
+            res.status(500).json({ error: 'Internal server error' });
         }
     });
 

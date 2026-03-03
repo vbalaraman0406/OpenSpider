@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Mic, Save, CheckCircle, Volume2, Play } from 'lucide-react';
+import { apiFetch } from '../lib/apiFetch';
 
 const ELEVENLABS_VOICES = [
     { id: '21m00Tcm4TlvDq8ikWAM', name: 'Rachel', style: 'Warm female', accent: 'American' },
@@ -27,7 +28,7 @@ export function VoiceSettings() {
     const fetchConfig = async () => {
         setIsLoading(true);
         try {
-            const res = await fetch('/api/voice/config');
+            const res = await apiFetch('/api/voice/config');
             const data = await res.json();
             setConfig(data);
         } catch (e) {
@@ -46,7 +47,7 @@ export function VoiceSettings() {
     const handleSave = async () => {
         setSaveStatus('saving');
         try {
-            await fetch('/api/voice/config', {
+            await apiFetch('/api/voice/config', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(config)

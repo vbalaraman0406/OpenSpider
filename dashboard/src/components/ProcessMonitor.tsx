@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Activity, RefreshCw, XCircle, AlertTriangle, Terminal, Cpu } from 'lucide-react';
+import { apiFetch } from '../lib/apiFetch';
 
 interface ProcessInfo {
     uid: string;
@@ -20,7 +21,7 @@ export function ProcessMonitor() {
         setLoading(true);
         setError('');
         try {
-            const res = await fetch('/api/processes');
+            const res = await apiFetch('/api/processes');
             if (!res.ok) throw new Error(await res.text());
             const data = await res.json();
             setProcesses(data);
@@ -36,7 +37,7 @@ export function ProcessMonitor() {
 
         setKilling(pid);
         try {
-            const res = await fetch(`/api/processes/${pid}`, { method: 'DELETE' });
+            const res = await apiFetch(`/api/processes/${pid}`, { method: 'DELETE' });
             if (!res.ok) throw new Error(await res.text());
             await fetchProcesses();
         } catch (e: any) {

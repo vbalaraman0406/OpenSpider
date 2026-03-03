@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Shield, ShieldAlert, ShieldCheck, Save, Users, MessageSquare, AlertTriangle, Fingerprint, CheckCircle } from 'lucide-react';
+import { apiFetch } from '../lib/apiFetch';
 
 export function WhatsAppSecurity({ isRunning }: { isRunning: boolean }) {
     const [config, setConfig] = useState<any>(null);
@@ -20,7 +21,7 @@ export function WhatsAppSecurity({ isRunning }: { isRunning: boolean }) {
 
     const fetchGroups = async () => {
         try {
-            const res = await fetch('/api/whatsapp/groups');
+            const res = await apiFetch('/api/whatsapp/groups');
             const data = await res.json();
             if (data.groups) setAvailableGroups(data.groups);
         } catch (e) {
@@ -31,7 +32,7 @@ export function WhatsAppSecurity({ isRunning }: { isRunning: boolean }) {
     const fetchConfig = async () => {
         setIsLoading(true);
         try {
-            const res = await fetch('/api/whatsapp/config');
+            const res = await apiFetch('/api/whatsapp/config');
             const data = await res.json();
             // Migrate legacy: convert plain string allowedGroups to objects
             if (data.allowedGroups && data.allowedGroups.length > 0 && typeof data.allowedGroups[0] === 'string') {
@@ -52,7 +53,7 @@ export function WhatsAppSecurity({ isRunning }: { isRunning: boolean }) {
         setIsSaving(true);
         setSaveStatus('saving');
         try {
-            await fetch('/api/whatsapp/config', {
+            await apiFetch('/api/whatsapp/config', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(config)
