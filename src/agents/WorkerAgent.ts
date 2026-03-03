@@ -58,6 +58,7 @@ Your goal is to complete the task autonomously and return the final result.
 CRITICAL TOKEN RULE: Do not print massive HTML dumps. Use Python to parse, summarize, and extract ONLY the exact data you need. Your tool output context is truncated to 3000 characters.
 CRITICAL JSON TRUNCATION RULE: The backend API has a hard limit of 1500 output tokens. If your response exceeds this length, it will be forcefully clipped, causing a fatal JSON parse crash. You MUST keep your 'thought' string under 500 words and be concise in your intermediate steps to prevent array string truncation!
 CRITICAL MACOS PRIVACY RULE: NEVER run commands to search, list, or read files in \`~/Desktop\`, \`~/Documents\`, or \`~/Downloads\` as this will trigger a strict macOS GUI permission dialog that blocks the backend. You must ONLY work within the current project directory \`${process.cwd()}\`.
+CRITICAL COMPLETION RULE: You have a maximum of 40 steps. ALWAYS output final_answer as soon as you have enough information. For research tasks (finding businesses, data, lists), write final_answer after 3-5 sources — do NOT keep browsing trying to be exhaustive. Partial results delivered are ALWAYS better than a perfect answer never delivered. If a website fails to load after 2 attempts, move on immediately.
 ${assignedSkillsContext}
 
 Available tools you can request in your JSON response:
@@ -109,12 +110,22 @@ ${context.join('\n')}
             { role: 'user', content: instruction }
         ];
 
-        const maxLoops = 25;
+        const maxLoops = 40; // Raised from 25 — research tasks need: navigate→read→click→read×N
+        const warnAtIteration = 32; // Inject wrap-up warning when 8 iterations remain
 
         // Autonomy Loop
         for (let i = 0; i < maxLoops; i++) {
 
-
+            // --- Iteration budget warning ---
+            // When approaching the limit, push a system message forcing the agent
+            // to compile what it has gathered and issue a final_answer immediately.
+            if (i === warnAtIteration) {
+                console.warn(`[Worker - ${this.role}] ⚠️ Iteration budget warning at step ${i}/${maxLoops}. Forcing wrap-up.`);
+                messages.push({
+                    role: 'user',
+                    content: `⚠️ SYSTEM: CRITICAL ITERATION BUDGET WARNING — You are on step ${i} of a maximum ${maxLoops}. You have approximately ${maxLoops - i} steps remaining before the task is forcibly terminated. You MUST wrap up NOW. Compile everything you have gathered into a final_answer IMMEDIATELY. Do NOT navigate to any more pages, do NOT run any more commands. Use your summary_of_findings to reconstruct the data and issue a final_answer with whatever results you have, even if incomplete. Partial results are INFINITELY better than no result.`
+                });
+            }
             let response;
             try {
                 response = await this.llm.generateStructuredOutputs<{
@@ -440,6 +451,18 @@ ${context.join('\n')}
             }
 
         }
-        return "Worker Agent hit max iteration limit without finding a final answer.";
+        // Collect any summaries gathered across the loop and return them as a best-effort result
+        const gatheredSummaries = messages
+            .filter(m => m.role === 'user' && typeof m.content === 'string' && m.content.startsWith('[PRIOR AGENT ACTION HISTORY]'))
+            .map(m => {
+                try { return (JSON.parse((m.content as string).replace('[PRIOR AGENT ACTION HISTORY]: \n', '')))?.summary_of_findings; } catch { return null; }
+            })
+            .filter(Boolean)
+            .join('\n');
+
+        console.warn(`[Worker - ${this.role}] Hit max iteration limit (${maxLoops}). Returning best-effort summary.`);
+        return gatheredSummaries
+            ? `**Note: Task reached maximum step limit. Partial findings collected:**\n\n${gatheredSummaries}`
+            : "Worker Agent hit max iteration limit without finding a final answer.";
     }
 }
