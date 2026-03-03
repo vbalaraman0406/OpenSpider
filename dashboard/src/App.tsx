@@ -8,6 +8,14 @@ import { WhatsAppSecurity } from './components/WhatsAppSecurity';
 import { VoiceSettings } from './components/VoiceSettings';
 import { ProcessMonitor } from './components/ProcessMonitor';
 
+// SECURITY: Authenticated fetch wrapper - attaches the dashboard API key to every request
+const API_KEY = import.meta.env.VITE_API_KEY || '';
+const apiFetch = (url: string, options: RequestInit = {}): Promise<Response> => {
+    const headers = new Headers(options.headers || {});
+    headers.set('X-API-Key', API_KEY);
+    return fetch(url, { ...options, headers });
+};
+
 const safeFormatTime = (ts: any) => {
     if (!ts) return '--:--:--';
     try {
@@ -356,7 +364,7 @@ function AgentsView({ agents, onRefresh, provider, skills }: { agents: any[], on
     const handleSaveAgent = async () => {
         setIsSaving(true);
         try {
-            const res = await fetch(`/api/agents/${selectedAgent.id}`, {
+            const res = await apiFetch(`/api/agents/${selectedAgent.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(editedPillars)
@@ -384,7 +392,7 @@ function AgentsView({ agents, onRefresh, provider, skills }: { agents: any[], on
     const handleDeleteAgent = async () => {
         setIsDeleting(true);
         try {
-            const res = await fetch(`/api/agents/${selectedAgent.id}`, { method: 'DELETE' });
+            const res = await apiFetch(`/api/agents/${selectedAgent.id}`, { method: 'DELETE' });
             const data = await res.json();
             if (data.success) {
                 setIsDeleteModalOpen(false);
@@ -620,7 +628,7 @@ function AgentsView({ agents, onRefresh, provider, skills }: { agents: any[], on
                                 <button onClick={() => setIsCreateModalOpen(false)} className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white transition-colors">Cancel</button>
                                 <button onClick={async () => {
                                     try {
-                                        const res = await fetch('/api/agents', {
+                                        const res = await apiFetch('/api/agents', {
                                             method: 'POST',
                                             headers: { 'Content-Type': 'application/json' },
                                             body: JSON.stringify({
@@ -686,7 +694,7 @@ function AgentsView({ agents, onRefresh, provider, skills }: { agents: any[], on
                                 <button onClick={async () => {
                                     if (!skillToAdd) return;
                                     try {
-                                        const res = await fetch(`/api/agents/${selectedAgent.id}/skills`, {
+                                        const res = await apiFetch(`/api/agents/${selectedAgent.id}/skills`, {
                                             method: 'POST',
                                             headers: { 'Content-Type': 'application/json' },
                                             body: JSON.stringify({ skill: skillToAdd })
@@ -806,7 +814,7 @@ function SkillsView({ skills, onRefresh, isGenerating, setIsGenerating }: Skills
                 return;
             }
 
-            const res = await fetch(`/api/skills/${name}`);
+            const res = await apiFetch(`/api/skills/${name}`);
             const data = await res.json();
             if (data.content) {
                 setDetailsModalSkill({ name, content: data.content });
@@ -831,7 +839,7 @@ function SkillsView({ skills, onRefresh, isGenerating, setIsGenerating }: Skills
         setIsGenerating(true);
 
         try {
-            const res = await fetch('/api/skills/generate', {
+            const res = await apiFetch('/api/skills/generate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name: skillName, description: skillDesc, instructions: skillInstruct })
@@ -856,7 +864,7 @@ function SkillsView({ skills, onRefresh, isGenerating, setIsGenerating }: Skills
     const confirmDeleteSkill = async () => {
         if (!skillToDelete) return;
         try {
-            const res = await fetch(`/api/skills/${skillToDelete}`, { method: 'DELETE' });
+            const res = await apiFetch(`/api/skills/${skillToDelete}`, { method: 'DELETE' });
             const data = await res.json();
             if (data.success) {
                 setSkillToDelete(null);
@@ -1275,7 +1283,7 @@ function CronView({ agents }: { agents: any[] }) {
 
     const fetchJobs = async () => {
         try {
-            const res = await fetch('/api/cron');
+            const res = await apiFetch('/api/cron');
             const data = await res.json();
             setJobs(data);
         } catch (e) {
@@ -1285,7 +1293,7 @@ function CronView({ agents }: { agents: any[] }) {
 
     const handleDelete = async (id: string) => {
         try {
-            await fetch(`/api/cron/${id}`, { method: 'DELETE' });
+            await apiFetch(`/api/cron/${id}`, { method: 'DELETE' });
             fetchJobs();
         } catch (e) { }
     };
@@ -1293,7 +1301,7 @@ function CronView({ agents }: { agents: any[] }) {
     const toggleStatus = async (job: any) => {
         try {
             const newStatus = job.status === 'enabled' ? 'disabled' : 'enabled';
-            await fetch(`/api/cron/${job.id}`, {
+            await apiFetch(`/api/cron/${job.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ status: newStatus })
@@ -1304,7 +1312,7 @@ function CronView({ agents }: { agents: any[] }) {
 
     const handleRunForcefully = async (id: string) => {
         try {
-            await fetch(`/api/cron/${id}/run`, { method: 'POST' });
+            await apiFetch(`/api/cron/${id}/run`, { method: 'POST' });
             // We just optimistically refetch to update the last run time
             setTimeout(fetchJobs, 1000);
         } catch (e) { }
@@ -1314,7 +1322,7 @@ function CronView({ agents }: { agents: any[] }) {
         e.preventDefault();
         try {
             const payload = { ...formData, preferredTime: formData.preferredTime || undefined };
-            await fetch('/api/cron', {
+            await apiFetch('/api/cron', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
@@ -1538,7 +1546,7 @@ export default function App() {
 
     useEffect(() => {
         const fetchHealth = () => {
-            fetch('/api/health')
+            apiFetch('/api/health')
                 .then(r => r.json())
                 .then(data => setHealth(data))
                 .catch(() => setHealth(prev => prev ? { ...prev, status: 'red' } : null));
@@ -1580,17 +1588,17 @@ export default function App() {
 
     useEffect(() => {
         // Fetch initial config
-        fetch('/api/config')
+        apiFetch('/api/config')
             .then(r => r.json())
             .then(data => setConfig(prev => ({ ...prev, provider: data.provider })))
             .catch(e => console.error("Could not fetch config API", e));
 
-        fetch('/api/skills')
+        apiFetch('/api/skills')
             .then(r => r.json())
             .then(data => setSkills(data.skills))
             .catch(e => console.error("Could not fetch skills API", e));
 
-        fetch('/api/chat/history')
+        apiFetch('/api/chat/history')
             .then(r => r.json())
             .then(data => {
                 if (Array.isArray(data) && data.length > 0) {
@@ -1606,11 +1614,11 @@ export default function App() {
 
         fetchAgents();
 
-        // Connect WebSocket for live logs
+        // Connect WebSocket for live logs (API key sent as query param for auth)
         const host = window.location.port === '5173' ? 'localhost:4001' : window.location.host;
         const wsUrl = window.location.protocol === 'https:'
-            ? `wss://${host}`
-            : `ws://${host}`;
+            ? `wss://${host}/?apiKey=${API_KEY}`
+            : `ws://${host}/?apiKey=${API_KEY}`;
         const ws = new WebSocket(wsUrl);
 
         ws.onmessage = (event) => {
@@ -1671,7 +1679,7 @@ export default function App() {
 
     const fetchAgents = async () => {
         try {
-            const res = await fetch('/api/agents');
+            const res = await apiFetch('/api/agents');
             const data = await res.json();
             setAgents(data);
         } catch (e) {
@@ -2320,7 +2328,7 @@ export default function App() {
                 {activeTab === 'agents' && <AgentsView agents={agents} onRefresh={fetchAgents} provider={config.provider} skills={skills} />}
                 {
                     activeTab === 'skills' && <SkillsView skills={skills} onRefresh={() => {
-                        return fetch('/api/skills')
+                        return apiFetch('/api/skills')
                             .then(r => r.json())
                             .then(data => setSkills(data.skills))
                             .catch(e => console.error("Could not refresh skills API", e));

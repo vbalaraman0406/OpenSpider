@@ -3,6 +3,7 @@ import { DynamicExecutor } from '../tools/DynamicExecutor';
 import { BrowserTool, BrowseAction } from '../browser/tool';
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { PersonaShell } from './PersonaShell';
 import { sendWhatsAppMessage, sendWhatsAppAudio } from '../whatsapp';
 
@@ -259,20 +260,23 @@ ${context.join('\n')}
                 } else if (response.action === 'send_email' && response.to && response.subject && response.body) {
                     console.log(`[Worker - ${this.role}] Dispatching email to ${response.to}...`);
                     try {
-                        const path = require('node:path');
-                        const { execSync } = require('node:child_process');
                         const rootDir = __dirname.endsWith('src') ? path.join(__dirname, '..', '..') : path.join(__dirname, '..', '..');
                         const pythonScript = path.join(rootDir, 'skills', 'send_email.py');
 
-                        // We safely escape quotes to prevent injection into the python args
-                        const safeTo = response.to.replace(/"/g, '\\"');
-                        const safeSubject = response.subject.replace(/"/g, '\\"');
-                        const safeBody = response.body.replace(/"/g, '\\"');
+                        // SECURITY FIX (CRIT-2): Use spawnSync with argument array instead of execSync
+                        // template string to completely eliminate shell injection risk.
+                        const result = spawnSync('python3', [
+                            pythonScript,
+                            '--to', response.to,
+                            '--subject', response.subject,
+                            '--body', response.body
+                        ], { timeout: 30000, encoding: 'utf-8' });
 
-                        const stdout = execSync(`python3 "${pythonScript}" --to "${safeTo}" --subject "${safeSubject}" --body "${safeBody}"`);
-                        toolOutput = `Email sent successfully:\n${stdout.toString()}`;
+                        if (result.error) throw result.error;
+                        if (result.status !== 0) throw new Error(result.stderr || 'python3 exited non-zero');
+                        toolOutput = `Email sent successfully:\n${result.stdout}`;
                     } catch (e: any) {
-                        toolOutput = `Failed to send email. Ensure OAuth is configured via 'openspider tools email setup'. Error: ${e.message}\n${e.stdout?.toString() || ''}\n${e.stderr?.toString() || ''}`;
+                        toolOutput = `Failed to send email. Ensure OAuth is configured via 'openspider tools email setup'. Error: ${e.message}`;
                     }
                 } else if (response.action === 'send_whatsapp' && response.message) {
                     console.log(`[Worker - ${this.role}] Sending WhatsApp message...`);
@@ -323,26 +327,25 @@ ${context.join('\n')}
                         } else {
                             const rootDir = __dirname.endsWith('src') ? path.join(__dirname, '..', '..') : path.join(__dirname, '..', '..');
                             const pythonScript = path.join(rootDir, 'skills', 'send_voice.py');
-                            const safeText = response.message.replace(/"/g, '\\"');
 
-                            const { execSync } = require('node:child_process');
+                            // SECURITY FIX (CRIT-2): Build args array for spawnSync — no shell interpretation.
                             // Read voice config: use agent-specified voice_id, or fall back to dashboard config
-                            let voiceIdArg = '';
+                            const spawnArgs = [pythonScript, '--text', response.message];
                             if (response.args) {
-                                voiceIdArg = ` --voice_id "${response.args.replace(/"/g, '\\"')}"`;
+                                spawnArgs.push('--voice_id', response.args);
                             } else {
                                 const voiceConfigPath = path.join(process.cwd(), 'workspace', 'voice_config.json');
                                 if (fs.existsSync(voiceConfigPath)) {
                                     try {
                                         const voiceConfig = JSON.parse(fs.readFileSync(voiceConfigPath, 'utf-8'));
-                                        if (voiceConfig.voiceId) voiceIdArg = ` --voice_id "${voiceConfig.voiceId}"`;
+                                        if (voiceConfig.voiceId) { spawnArgs.push('--voice_id', voiceConfig.voiceId); }
                                     } catch (e) { }
                                 }
                             }
-                            const stdout = execSync(
-                                `python3 "${pythonScript}" --text "${safeText}"${voiceIdArg}`,
-                                { timeout: 60000 }
-                            ).toString();
+                            const voiceResult = spawnSync('python3', spawnArgs, { timeout: 60000, encoding: 'utf-8' });
+                            if (voiceResult.error) throw voiceResult.error;
+                            if (voiceResult.status !== 0) throw new Error(voiceResult.stderr || 'send_voice.py exited non-zero');
+                            const stdout = voiceResult.stdout;
 
                             // Extract audio file path from script output
                             const pathMatch = stdout.match(/AUDIO_FILE_PATH:(.+)/);

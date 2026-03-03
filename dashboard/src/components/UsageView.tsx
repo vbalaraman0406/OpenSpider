@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { RefreshCw, AlertTriangle, TrendingUp, TrendingDown, Coins, Search, Cpu, Zap, Hash, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { apiFetch } from '../lib/apiFetch';
 import {
     AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, Label,
     XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
@@ -100,7 +101,7 @@ export function UsageView() {
     const fetchUsage = async () => {
         setLoading(true);
         try {
-            const res = await fetch(`/api/usage?days=${daysScope}`);
+            const res = await apiFetch(`/api/usage?days=${daysScope}`);
             const data = await res.json();
             // Safe fallbacks for new fields (backward compat if backend not yet rebuilt)
             data.totalRequests = data.totalRequests ?? data.recentSessions?.length ?? 0;

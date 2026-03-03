@@ -30,19 +30,23 @@ export class DynamicExecutor {
 
     /**
      * Heuristic Static Analysis to prevent Agentic Prompt Injections
+     * HIGH-2 FIX: Expanded blocklist to prevent interpreter bypass via importlib,
+     * getattr, compile, __import__, and other obfuscation vectors.
      */
     private scanScriptForThreats(content: string, filename: string) {
         const blocklistedKeywords = [
-            'os.system',
-            'subprocess.',
-            'pty.spawn',
-            'child_process',
-            'exec(',
-            'eval(',
-            'fs.unlink',
-            'fs.rmdir',
-            'shutil.rmtree',
-            'rm -rf'
+            // Direct OS/subprocess access
+            'os.system', 'subprocess.', 'pty.spawn', 'child_process',
+            // Eval/exec variants
+            'exec(', 'eval(', 'execfile(',
+            // Dynamic import bypass vectors
+            'importlib', '__import__', 'compile(',
+            // Attribute-based bypass
+            'getattr(__', '__builtins__',
+            // Filesystem destruction
+            'fs.unlink', 'fs.rmdir', 'shutil.rmtree', 'rm -rf',
+            // Network exfil
+            'socket.', 'urllib.request', 'http.client',
         ];
 
         const normalizedContent = content.toLowerCase();
@@ -55,12 +59,39 @@ export class DynamicExecutor {
 
     /**
      * Allows the agent to run generic shell commands (within the skills directory)
+     * HIGH-1 FIX: Replaced simple keyword blocklist with:
+     *   1. Shell metacharacter detection (prevents chaining/substitution)
+     *   2. Hardened command blocklist (catches bypass variants)
+     *   3. Existing filesystem scanning guard
      */
     async runCommand(command: string): Promise<{ stdout: string; stderr: string; error?: string }> {
-        const blocklistedCmds = ['rm -rf', 'mkfs', 'dd if=', 'sudo ', 'chown ', 'chmod 777'];
-        for (const bad of blocklistedCmds) {
-            if (command.toLowerCase().includes(bad)) {
-                return { stdout: '', stderr: '', error: `Security Guard: Command blocked by Sandbox policy: ${bad}.` };
+        // Detect shell metacharacters that allow command chaining/injection
+        const dangerousMetaCharsPattern = /[;|&`$()<>]/;
+        if (dangerousMetaCharsPattern.test(command)) {
+            return { stdout: '', stderr: '', error: `Security Guard: Command blocked. Dangerous shell metacharacter detected in: ${command}. Only simple commands without pipes, redirects, or chaining are allowed.` };
+        }
+
+        // Hardened blocklist — catches bypass variants like 'rm  -rf', 'chmod 755', etc.
+        const blocklistedPatterns: RegExp[] = [
+            /\brm\s+-rf\b/,           // rm -rf (with possible extra spaces)
+            /\brm\s+-f\b/,            // rm -f
+            /\brmdir\b/,              // rmdir
+            /\bmkfs\b/,              // disk format
+            /\bdd\s+if=/,            // dd disk overwrite
+            /\bsudo\b/,              // privilege escalation
+            /\bchown\b/,             // ownership change
+            /\bchmod\b/,             // permission change (all variants)
+            /\bcurl\b.*\|.*\bbash\b/, // curl pipe to bash
+            /\bwget\b.*\|.*\bbash\b/, // wget pipe to bash
+            /\bnc\b/,                // netcat exfil
+            /\bcat\s+\/etc\b/,       // reading sensitive system files
+            /\bcat\s+~\/\./,         // reading hidden home files (.env, .ssh etc)
+            /\bssh\b/,               // ssh connections
+        ];
+
+        for (const pattern of blocklistedPatterns) {
+            if (pattern.test(command)) {
+                return { stdout: '', stderr: '', error: `Security Guard: Command blocked by sandbox policy: ${pattern}` };
             }
         }
 
@@ -87,24 +118,38 @@ export class DynamicExecutor {
 
     /**
      * Writes a script (Python, JS, etc.) to the skills folder
+     * HIGH-4/HIGH-2 FIX: Added path traversal check on filename before write.
      */
     async writeScript(filename: string, content: string): Promise<string> {
         this.scanScriptForThreats(content, filename);
-        const filePath = path.join(this.skillsDir, filename);
+        // Strip any path separators from filename to prevent traversal
+        const safeFilename = path.basename(filename);
+        const filePath = path.join(this.skillsDir, safeFilename);
+        // Double-check resolved path stays inside skillsDir
+        if (!filePath.startsWith(this.skillsDir)) {
+            throw new Error('Security Guard: Filename resolved outside skills directory.');
+        }
         await fs.writeFile(filePath, content, 'utf-8');
         return `Script saved to ${filePath}`;
     }
 
     /**
      * Executes a saved script
+     * HIGH-4 FIX: Added path traversal check on filename before execute.
      */
     async executeScript(filename: string, args: string = ''): Promise<{ stdout: string; stderr: string; error?: string }> {
-        const ext = path.extname(filename);
+        const safeFilename = path.basename(filename);
+        const resolvedPath = path.join(this.skillsDir, safeFilename);
+        if (!resolvedPath.startsWith(this.skillsDir)) {
+            return { stdout: '', stderr: '', error: 'Security Guard: Script path resolved outside skills directory.' };
+        }
+
+        const ext = path.extname(safeFilename);
         let command = '';
 
-        if (ext === '.js' || ext === '.ts') command = `node ${filename} ${args}`;
-        else if (ext === '.py') command = `python3 ${filename} ${args}`;
-        else if (ext === '.sh') command = `bash ${filename} ${args}`;
+        if (ext === '.js' || ext === '.ts') command = `node ${safeFilename} ${args}`;
+        else if (ext === '.py') command = `python3 ${safeFilename} ${args}`;
+        else if (ext === '.sh') command = `bash ${safeFilename} ${args}`;
         else throw new Error("Unsupported file extension for direct execution.");
 
         return this.runCommand(command);
