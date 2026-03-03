@@ -1,6 +1,6 @@
 # Getting Started
 
-This guide will walk you through installing, configuring, and running OpenSpider on your machine.
+This guide walks you through installing and running OpenSpider for the first time — from zero to a fully working AI agent gateway.
 
 ## Prerequisites
 
@@ -11,7 +11,7 @@ This guide will walk you through installing, configuring, and running OpenSpider
 | **Python 3** | ≥ 3.8 | Required for the email skill (`send_email.py`) |
 | **Git** | Latest | Cloning the repository |
 
-Check your versions:
+Verify your environment:
 
 ```bash
 node --version    # Should be v22.x or higher
@@ -20,146 +20,190 @@ python3 --version # Should be 3.8+
 git --version
 ```
 
-::: tip
-If you don't have Node.js 22+, the install script will attempt to install it via [NVM](https://github.com/nvm-sh/nvm) automatically.
+::: tip No Node.js 22?
+The one-line installer will attempt to install it automatically via [NVM](https://github.com/nvm-sh/nvm).
 :::
 
-## Installation
+---
 
-### Option A: One-Line Install (Recommended)
+## Step 1: Install
+
+### Option A — One-Line Install (Recommended)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/vbalaraman/OpenSpider/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/vbalaraman0406/OpenSpider/main/install.sh | bash
 ```
 
-This script will:
-1. Check for Node.js ≥22 (installs via NVM if missing)
-2. Clone the repository to `~/.openspider`
-3. Install all dependencies (`npm install`)
-4. Build the backend and frontend (`npm run build`)
-5. Link the `openspider` CLI globally (`npm link`)
+This script:
+1. Checks for Node.js ≥ 22 (installs via NVM if missing)
+2. Clones the repo to `~/.openspider`
+3. Runs `npm install` for all dependencies
+4. Builds the backend and frontend
+5. Links the `openspider` CLI globally
 
-### Option B: Manual Install
+### Option B — Manual Install
 
 ```bash
-# Clone the repository
 git clone https://github.com/vbalaraman0406/OpenSpider.git
 cd OpenSpider
-
-# Install dependencies
 npm install
-
-# Build backend (TypeScript → dist/) and frontend (Vite → dashboard/dist/)
 npm run build
-
-# Link the CLI globally
 npm link
 ```
 
-After installation, verify the CLI is available:
+Verify the CLI is available:
 
 ```bash
 openspider --version
-# Output: 1.0.0
 ```
 
-## Initial Setup
+---
 
-Run the onboarding wizard to configure your LLM provider and agent persona:
+## Step 2: Run the Onboarding Wizard
 
 ```bash
 openspider onboard
 ```
 
-The wizard will guide you through:
+The wizard walks you through:
 
-1. **LLM Provider Selection** — Choose from Google Gemini, Anthropic Claude, OpenAI, Ollama (local), or a custom endpoint
-2. **API Key Configuration** — Enter your API key for the selected provider
-3. **Model Selection** — Pick the specific model to use (e.g., `gemini-2.5-pro`, `claude-opus-4`, `gpt-4o`)
-4. **Agent Persona** — Configure your Manager agent's name and personality
-5. **WhatsApp Setup** — Optionally connect WhatsApp by scanning a QR code
+1. **LLM Provider** — Choose from Google Gemini, Anthropic Claude, OpenAI, Ollama (local), or any OpenAI-compatible endpoint
+2. **API Key** — Enter your provider's API key
+3. **Model** — Pick the specific model (e.g. `gemini-2.5-pro`, `claude-opus-4`, `gpt-4o`)
+4. **Agent Persona** — Set the Manager agent's name and personality
+5. **WhatsApp** — Optionally connect WhatsApp by scanning a QR code
 
-The wizard generates a `.env` file with your configuration:
+The wizard creates a `.env` file in the project root:
 
 ```env
-DEFAULT_PROVIDER=antigravity
+DEFAULT_PROVIDER=gemini
 GEMINI_MODEL=gemini-2.5-pro
-FALLBACK_MODEL=
 ENABLE_WHATSAPP=true
+
+# Auto-generated security keys (do not share)
+DASHBOARD_API_KEY=<generated>
+OPENSPIDER_HOOK_TOKEN=<generated>
 ```
 
-## Starting the Gateway
+::: warning Generated Security Keys
+`DASHBOARD_API_KEY` and `OPENSPIDER_HOOK_TOKEN` are auto-generated during onboarding. They protect your dashboard and webhook from unauthorized access. **Never commit `.env` to version control.**
+:::
 
-### Foreground Mode (Development)
+---
 
-```bash
-openspider gateway
-```
+## Step 3: Start the Gateway
 
-Runs the gateway in the foreground with live logs. Press `Ctrl+C` to stop. Best for development and debugging.
-
-### Background Mode (Production)
+### Background Mode (Recommended for daily use)
 
 ```bash
 openspider start
 ```
 
-Starts the gateway as a background daemon using PM2. The server runs on `http://localhost:4001`.
+Starts the gateway as a background daemon via PM2 on `http://localhost:4001`.
 
 ```bash
-# View real-time logs
-openspider logs
-
-# Stop the daemon
-openspider stop
+openspider logs    # Stream live logs
+openspider stop    # Stop the daemon
 ```
 
-## Accessing the Dashboard
+### Foreground Mode (Development / Debugging)
+
+```bash
+openspider gateway
+```
+
+Runs the gateway in the foreground with live console output. Press `Ctrl+C` to stop.
+
+---
+
+## Step 4: Open the Dashboard
 
 ```bash
 openspider dashboard
 ```
 
-Opens the web dashboard at [http://localhost:4001](http://localhost:4001) in your default browser. The dashboard provides:
+Opens `http://localhost:4001` in your browser. The dashboard includes:
 
-- **Agent Chat** — Talk to your agents directly
-- **Agent Flow** — Visualize task delegation in real-time
-- **System Logs** — Filterable, searchable, exportable logs
-- **Workspace** — Browse agent files and configuration
-- **WhatsApp Security** — Manage DM/group allowlists
+| Tab | What it does |
+|---|---|
+| **Agent Chat** | Talk directly to your agents, attach files or images |
+| **Agent Flow** | Watch task delegation visualized in real-time |
+| **System Logs** | Filterable, searchable, exportable logs |
+| **Workspace** | Browse agent files, personas, and cron jobs |
+| **Channels** | Manage WhatsApp DM/group allowlists |
+| **Usage** | Token and cost analytics per model |
+| **Settings** | Configure voice, cron jobs, and agent skills |
 
-## Terminal UI
+The dashboard authenticates automatically using the `DASHBOARD_API_KEY` from your `.env`. No login screen — it just works locally.
 
-For a terminal-based chat experience:
+---
 
-```bash
-openspider tui
-```
+## Step 5: Connect WhatsApp (Optional)
 
-## Connecting WhatsApp
-
-If you didn't connect WhatsApp during onboarding:
+If you skipped WhatsApp during onboarding:
 
 ```bash
 openspider channels login
 ```
 
-This watches for QR codes from the running gateway. Scan the QR code with your phone's WhatsApp to link OpenSpider.
+Scan the QR code with WhatsApp on your phone (`Linked Devices → Link a Device`). Once linked, OpenSpider will respond to your WhatsApp messages automatically.
 
-## What You Now Have
+::: tip DM Allowlist
+After linking, add your phone number to the DM allowlist via the dashboard under **Channels → WhatsApp Security** — or only a strict allowlist of numbers can message your agent.
+:::
 
-After completing setup, you have:
+---
 
-- ✅ A running OpenSpider gateway (HTTP + WebSocket server)
-- ✅ Configured LLM provider with your chosen model
-- ✅ Agent personas ready (Manager, Coder, Researcher)
-- ✅ Web dashboard accessible at `http://localhost:4001`
+## Step 6: Set Up Voice Messages (Optional)
+
+To enable voice note support (voice-in via Whisper, voice-out via ElevenLabs):
+
+1. Install Whisper: `pip3 install openai-whisper`
+2. Get an [ElevenLabs API key](https://elevenlabs.io) and add to `.env`:
+   ```env
+   ELEVENLABS_API_KEY=your_key_here
+   ELEVENLABS_VOICE_ID=21m00Tcm4TlvDq8ikWAM
+   ```
+3. Restart the gateway: `pm2 restart openspider-gateway`
+
+Voice settings (voice model, default voice) can be changed anytime in the dashboard under **Settings → Voice**.
+
+---
+
+## Step 7: Set Up Email Sending (Optional)
+
+To let agents send emails on your behalf via Gmail OAuth:
+
+```bash
+openspider tools email setup
+```
+
+Follow the OAuth flow to authorize your Gmail account. Credentials are stored in `workspace/gmail_credentials.json` and `workspace/gmail_token.json` (both in `.gitignore`).
+
+---
+
+## ✅ You're Ready
+
+After completing setup you have:
+
+- ✅ OpenSpider gateway running on `http://localhost:4001`
+- ✅ Dashboard secured with a generated API key
+- ✅ LLM provider configured with your chosen model
+- ✅ Manager + Worker agents ready (Coder, Researcher)
 - ✅ WhatsApp connected (if configured)
+- ✅ Voice notes working (if configured)
+
+---
 
 ## Next Steps
 
 - **[Configuration](/configuration)** — Fine-tune providers, models, and environment variables
-- **[Channels](/channels)** — Set up WhatsApp DM/group policies and security
+- **[Security](/security)** — API authentication, CORS, webhook tokens, and command sandbox
 - **[Dashboard](/dashboard)** — Explore the full dashboard feature set
-- **[Tools & Skills](/tools-and-skills)** — Enable email, browsing, and scheduling capabilities
+- **[Channels](/channels)** — WhatsApp DM/group policies and security allowlists
+- **[Tools & Skills](/tools-and-skills)** — Email, browsing, scheduling, and custom skills
 - **[CLI Reference](/cli-reference)** — Complete command reference
+
+## Troubleshooting
+
+See the **[Troubleshooting Guide](/troubleshooting)** for common issues like QR code not showing, WhatsApp disconnects, LLM errors, and dashboard connection problems.
