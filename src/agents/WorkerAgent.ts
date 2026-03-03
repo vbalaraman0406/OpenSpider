@@ -240,9 +240,11 @@ ${context.join('\n')}
                     toolOutput = await this.browserTool.execute({ action: 'wait_for_user', message: waitMessage });
                 } else if (response.action === 'schedule_task') {
                     // command = interval in hours, content = the prompt, filename = job name
-                    const intervalHours = parseFloat(response.command || '24');
-                    const taskPrompt = response.content || response.message || '';
-                    const jobName = response.filename || 'Scheduled Task';
+                    const rawInterval = parseFloat(response.command || '24');
+                    const MIN_INTERVAL_HOURS = 0.25; // 15 minutes minimum to prevent LLM spam
+                    const intervalHours = (!rawInterval || rawInterval < MIN_INTERVAL_HOURS) ? 24 : rawInterval;
+                    const taskPrompt = (response.content || response.message || '').substring(0, 2000);
+                    const jobName = (response.filename || 'Scheduled Task').substring(0, 200);
 
                     if (!taskPrompt) {
                         toolOutput = 'Error: No task prompt provided for schedule_task. Provide the task description in the "content" field.';
@@ -253,19 +255,24 @@ ${context.join('\n')}
                             if (fs.existsSync(cronPath)) {
                                 jobs = JSON.parse(fs.readFileSync(cronPath, 'utf-8'));
                             }
-                            const newJob = {
-                                id: 'cron-' + Math.random().toString(36).substr(2, 9),
-                                description: jobName,
-                                prompt: taskPrompt,
-                                intervalHours: intervalHours,
-                                lastRunTimestamp: Date.now(), // Start counting from now, don't fire immediately
-                                agentId: 'manager',
-                                status: 'enabled'
-                            };
-                            jobs.push(newJob);
-                            fs.writeFileSync(cronPath, JSON.stringify(jobs, null, 2));
-                            console.log(`[Worker - ${this.role}] Scheduled recurring task: "${jobName}" every ${intervalHours}h`);
-                            toolOutput = `✅ Successfully scheduled recurring task!\n- Name: ${jobName}\n- Interval: Every ${intervalHours} hours\n- Task: ${taskPrompt}\n- Status: Enabled\n- ID: ${newJob.id}\n\nThe scheduler heartbeat checks every 60 seconds and will auto-execute this task at the specified interval.`;
+                            // SECURITY: Cap at 20 jobs max even from agent-scheduled tasks
+                            if (jobs.length >= 20) {
+                                toolOutput = 'Error: Maximum of 20 cron jobs reached. Delete an existing job before scheduling a new one.';
+                            } else {
+                                const newJob = {
+                                    id: 'cron-' + Math.random().toString(36).substr(2, 9),
+                                    description: jobName,
+                                    prompt: taskPrompt,
+                                    intervalHours,
+                                    lastRunTimestamp: Date.now(),
+                                    agentId: 'manager',
+                                    status: 'enabled'
+                                };
+                                jobs.push(newJob);
+                                fs.writeFileSync(cronPath, JSON.stringify(jobs, null, 2));
+                                console.log(`[Worker - ${this.role}] Scheduled recurring task: "${jobName}" every ${intervalHours}h`);
+                                toolOutput = `✅ Successfully scheduled recurring task!\n- Name: ${jobName}\n- Interval: Every ${intervalHours} hours\n- Task: ${taskPrompt.substring(0, 100)}...\n- Status: Enabled\n- ID: ${newJob.id}`;
+                            }
                         } catch (e: any) {
                             toolOutput = `Failed to schedule task: ${e.message}`;
                         }

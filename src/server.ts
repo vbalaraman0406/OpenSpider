@@ -567,9 +567,20 @@ export function startServer() {
             process.env.ELEVENLABS_API_KEY = newConfig.elevenlabsApiKey;
             process.env.WHISPER_MODEL = newConfig.whisperModel;
 
-            res.json({ success: true, config: newConfig });
+            // SECURITY: Do NOT return the full API key in the response — return masked version.
+            res.json({
+                success: true,
+                config: {
+                    voiceId: newConfig.voiceId,
+                    voiceName: newConfig.voiceName,
+                    elevenlabsApiKey: newConfig.elevenlabsApiKey
+                        ? `${newConfig.elevenlabsApiKey.substring(0, 6)}${'*'.repeat(Math.max(0, newConfig.elevenlabsApiKey.length - 6))}`
+                        : '',
+                    whisperModel: newConfig.whisperModel,
+                }
+            });
         } catch (e: any) {
-            res.status(500).json({ error: e.message });
+            res.status(500).json({ error: 'Internal server error' });
         }
     });
 
@@ -930,13 +941,18 @@ Return ONLY the raw Python code.`;
     app.delete('/api/processes/:pid', (req, res) => {
         try {
             const pid = parseInt(req.params.pid, 10);
-            if (isNaN(pid)) return res.status(400).json({ error: 'Invalid PID' });
-
-            const { execSync } = require('child_process');
-            execSync(`kill -9 ${pid}`);
+            if (isNaN(pid) || pid <= 0) return res.status(400).json({ error: 'Invalid PID' });
+            // SECURITY: Validate PID is in a safe range to prevent kill-1 or kill-0 edge cases.
+            // Also use spawnSync instead of execSync string interpolation to prevent any injection.
+            if (pid <= 1 || pid > 4194304) return res.status(400).json({ error: 'PID out of safe range' });
+            const { spawnSync } = require('child_process');
+            const result = spawnSync('kill', ['-9', String(pid)], { timeout: 3000 });
+            if (result.status !== 0 && result.error) {
+                return res.status(500).json({ error: 'Failed to terminate process' });
+            }
             res.json({ success: true, message: `Terminated process ${pid}` });
         } catch (e: any) {
-            res.status(500).json({ error: e.message });
+            res.status(500).json({ error: 'Internal server error' });
         }
     });
 
@@ -953,27 +969,51 @@ Return ONLY the raw Python code.`;
     app.post('/api/cron', (req, res) => {
         try {
             const { description, prompt, intervalHours, agentId, preferredTime } = req.body;
-            let jobs = [];
+
+            // SECURITY: Input validation
+            if (!description || !prompt) return res.status(400).json({ error: 'description and prompt are required.' });
+            if (typeof description !== 'string' || description.length > 200) return res.status(400).json({ error: 'description must be a string under 200 chars.' });
+            if (typeof prompt !== 'string' || prompt.length > 2000) return res.status(400).json({ error: 'prompt must be a string under 2000 chars.' });
+
+            let jobs: any[] = [];
             if (fs.existsSync(cronJobsPath)) {
                 jobs = JSON.parse(fs.readFileSync(cronJobsPath, 'utf-8'));
             }
 
+            // SECURITY: Cap the maximum number of cron jobs to prevent resource exhaustion
+            const MAX_JOBS = 20;
+            if (jobs.length >= MAX_JOBS) {
+                return res.status(429).json({ error: `Maximum of ${MAX_JOBS} cron jobs allowed. Delete an existing job first.` });
+            }
+
+            // SECURITY: Enforce a minimum interval floor to prevent LLM spam attacks
+            const MIN_INTERVAL_HOURS = 0.25; // 15 minutes minimum
+            const parsedInterval = Number(intervalHours);
+            const safeInterval = (!parsedInterval || parsedInterval < MIN_INTERVAL_HOURS)
+                ? 24  // Default to 24h if invalid or too short
+                : parsedInterval;
+
+            // SECURITY: Validate preferredTime format (HH:MM) to prevent injection
+            const safePreferredTime = preferredTime && /^([01]?\d|2[0-3]):[0-5]\d$/.test(String(preferredTime))
+                ? String(preferredTime)
+                : undefined;
+
             const newJob: any = {
                 id: 'cron-' + Math.random().toString(36).substr(2, 9),
-                description,
-                prompt,
-                intervalHours: Number(intervalHours) || 24,
-                lastRunTimestamp: preferredTime ? 0 : Date.now(), // 0 so time-of-day jobs trigger at next occurrence
+                description: description.trim(),
+                prompt: prompt.trim(),
+                intervalHours: safeInterval,
+                lastRunTimestamp: safePreferredTime ? 0 : Date.now(),
                 agentId: agentId || 'gateway',
                 status: 'enabled'
             };
-            if (preferredTime) newJob.preferredTime = preferredTime;
+            if (safePreferredTime) newJob.preferredTime = safePreferredTime;
 
             jobs.push(newJob);
             fs.writeFileSync(cronJobsPath, JSON.stringify(jobs, null, 2));
             res.json({ success: true, job: newJob });
         } catch (e: any) {
-            res.status(500).json({ error: e.message });
+            res.status(500).json({ error: 'Internal server error' });
         }
     });
 
@@ -986,7 +1026,7 @@ Return ONLY the raw Python code.`;
             fs.writeFileSync(cronJobsPath, JSON.stringify(jobs, null, 2));
             res.json({ success: true });
         } catch (e: any) {
-            res.status(500).json({ error: e.message });
+            res.status(500).json({ error: 'Internal server error' });
         }
     });
 
