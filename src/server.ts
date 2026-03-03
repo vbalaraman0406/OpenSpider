@@ -2,6 +2,8 @@ import express from 'express';
 import { WebSocketServer, WebSocket } from 'ws';
 import * as http from 'http';
 import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import fs from 'node:fs';
 import path from 'node:path';
 import { ManagerAgent } from './agents/ManagerAgent';
@@ -16,6 +18,25 @@ import { apiKeyAuth, validateWsConnection } from './middleware/auth';
 
 export function startServer() {
     const app = express();
+
+    // LOW: Security HTTP headers via Helmet
+    // Adds X-Frame-Options, X-Content-Type-Options, Strict-Transport-Security,
+    // X-XSS-Protection, Referrer-Policy, and Content-Security-Policy.
+    // CSP is relaxed for localhost dashboard assets (inline scripts needed by Vite).
+    app.use(helmet({
+        contentSecurityPolicy: {
+            directives: {
+                defaultSrc: ["'self'"],
+                scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],  // Vite/React requires this in dev
+                styleSrc: ["'self'", "'unsafe-inline'"],
+                imgSrc: ["'self'", "data:", "blob:"],
+                connectSrc: ["'self'", "ws://localhost:*", "wss://localhost:*"],
+                fontSrc: ["'self'", "data:"],
+                frameSrc: ["'none'"],
+            },
+        },
+        crossOriginEmbedderPolicy: false, // Relax for WebSocket compatibility
+    }));
 
     // SECURITY: Restrict CORS to localhost only — dashboard is local-only.
     app.use(cors({
@@ -32,6 +53,28 @@ export function startServer() {
 
     // Limit JSON body size to prevent memory exhaustion via large payloads
     app.use(express.json({ limit: '25mb' }));
+
+    // MED-1: Rate limiting
+    // General limiter: 120 req/min on all API routes (covers config reads, agent lists, etc.)
+    const generalLimiter = rateLimit({
+        windowMs: 60 * 1000,
+        max: 120,
+        standardHeaders: true,
+        legacyHeaders: false,
+        message: { error: 'Too many requests, please slow down.' },
+    });
+    // Strict limiter: 20 req/min on chat/voice/email — these spin up LLM calls and cost money
+    const agentLimiter = rateLimit({
+        windowMs: 60 * 1000,
+        max: 20,
+        standardHeaders: true,
+        legacyHeaders: false,
+        message: { error: 'Agent request rate limit exceeded. Max 20 requests per minute.' },
+    });
+    app.use('/api', generalLimiter);
+    app.use('/api/chat', agentLimiter);
+    app.use('/api/whatsapp/send', agentLimiter);
+    app.use('/api/voice', agentLimiter);
 
     // SECURITY: Require API key on all /api/* routes.
     // /api/health is public (health checks don't need auth).
@@ -235,8 +278,18 @@ export function startServer() {
             }
 
             if (!isSpecialEvent) {
+                // MED-2: Strip sensitive data from log messages before broadcasting to WebSocket clients.
+                // Raw console.log can include API keys, tokens, auth headers, and internal state.
+                let safeMessage = message;
+                // Redact API keys and bearer tokens from log lines
+                safeMessage = safeMessage.replace(/([Xx]-[Aa][Pp][Ii]-[Kk]ey:\s*)([A-Za-z0-9]{16,})/g, 'X-API-Key: [REDACTED]');
+                safeMessage = safeMessage.replace(/(Bearer\s+)([A-Za-z0-9._-]{16,})/g, 'Bearer [REDACTED]');
+                safeMessage = safeMessage.replace(/("apiKey"\s*:\s*")([A-Za-z0-9._-]{16,})(")/g, '"apiKey": "[REDACTED]"');
+                // Redact environment variable values that may appear in error traces
+                safeMessage = safeMessage.replace(/([A-Z_]{6,}_KEY|[A-Z_]{6,}_TOKEN|[A-Z_]{6,}_SECRET)=[A-Za-z0-9._-]{8,}/g, '$1=[REDACTED]');
+
                 // Broadcast standard log to all dashboard clients
-                const logEvent = { type: 'log', data: message, timestamp: new Date().toISOString() };
+                const logEvent = { type: 'log', data: safeMessage, timestamp: new Date().toISOString() };
 
                 // Tag cron-originated logs so the dashboard can ignore them for typing state
                 if (activeCronJobs > 0) {
@@ -979,6 +1032,14 @@ Return ONLY the raw Python code.`;
     } else {
         console.log(`[Server] No compiled dashboard found at ${dashboardDist}. Run 'npm run build:frontend' first if you want the Web UI!`);
     }
+
+    // LOW: Global error handler — prevents stack traces and internal error details
+    // from leaking to clients. All unhandled Express errors return a generic 500.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+        console.error('[Server] Unhandled error:', err.message || err);
+        res.status(err.status || 500).json({ error: 'Internal server error' });
+    });
 
     server.listen(PORT, () => {
         console.log(`[Server] OpenSpider API & WebSocket running on http://localhost:${PORT}`);
