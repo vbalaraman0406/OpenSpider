@@ -2,6 +2,49 @@
 let ws = null;
 let attachedTabId = null;
 
+// SECURITY: CDP Method Allowlist
+// The relay only executes CDP commands in this list.
+// This prevents a malicious page from using the debugger bridge to:
+//   - Read arbitrary files (Page.captureSnapshot, IO.read)
+//   - Access other tabs' data (Target.activateTarget + DOM reads)
+//   - Exfiltrate cookies / localStorage from other origins
+//   - Execute arbitrary JS in privileged contexts
+//   - Control network traffic (Fetch.enable, Network.setCookies)
+const ALLOWED_CDP_METHODS = new Set([
+    // DOM inspection (read-only)
+    'DOM.getDocument',
+    'DOM.querySelector',
+    'DOM.querySelectorAll',
+    'DOM.getOuterHTML',
+    'DOM.describeNode',
+    'DOM.getAttributes',
+    'DOM.getBoxModel',
+    'DOM.getContentQuads',
+    // Input simulation (needed for click/type)
+    'Input.dispatchMouseEvent',
+    'Input.dispatchKeyEvent',
+    'Input.insertText',
+    // Page lifecycle
+    'Page.navigate',
+    'Page.reload',
+    'Page.getLayoutMetrics',
+    'Page.captureScreenshot',
+    'Page.enable',
+    // Runtime JS evaluation (needed for read_content extraction)
+    'Runtime.evaluate',
+    'Runtime.callFunctionOn',
+    'Runtime.getProperties',
+    'Runtime.enable',
+    // Emulation (viewport, user agent)
+    'Emulation.setDeviceMetricsOverride',
+    'Emulation.setUserAgentOverride',
+    // Network (monitoring only, NOT fetch interception)
+    'Network.enable',
+    'Network.disable',
+    // Target management (for tab info only)
+    'Target.getTargetInfo',
+]);
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'attach') {
         attachDebugger(request.tabId, request.token, request.port || 18792);
@@ -66,7 +109,23 @@ function connectWebSocket(tabId, token, port) {
         // Relay CDP commands from Node server -> Chrome Tabs
         try {
             const msg = JSON.parse(event.data);
+
+            // SECURITY: Validate CDP method against allowlist before executing.
+            // Reject any method not explicitly permitted to prevent malicious command injection.
             if (msg.id && msg.method) {
+                if (!ALLOWED_CDP_METHODS.has(msg.method)) {
+                    console.warn(`[OpenSpider Security] Blocked disallowed CDP method: ${msg.method}`);
+                    // Send back an error response so the relay doesn't hang
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({
+                            id: msg.id,
+                            result: {},
+                            error: { message: `Method '${msg.method}' is not in the OpenSpider CDP allowlist.` }
+                        }));
+                    }
+                    return;
+                }
+
                 chrome.debugger.sendCommand({ tabId: tabId }, msg.method, msg.params, (result) => {
                     const response = {
                         id: msg.id,
