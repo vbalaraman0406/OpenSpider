@@ -2,6 +2,33 @@
 
 OpenSpider provides multiple layers of security to control who can interact with your agents and how they behave.
 
+## Rate Limiting
+
+All API endpoints are protected by request rate limiting (v2.0.2+):
+
+| Route | Limit |
+|---|---|
+| All `/api/*` routes | 120 requests/minute |
+| `/api/chat`, `/api/voice`, `/api/whatsapp/send` | 20 requests/minute |
+
+Exceeding the limit returns `429 Too Many Requests`. Standard `RateLimit-*` headers are included in every response.
+
+---
+
+## Security HTTP Headers
+
+The server uses [Helmet.js](https://helmetjs.github.io/) to set security headers on every response:
+
+| Header | Value |
+|---|---|
+| `Content-Security-Policy` | `default-src 'self'; frame-src 'none'; ...` |
+| `X-Frame-Options` | `SAMEORIGIN` |
+| `X-Content-Type-Options` | `nosniff` |
+| `Strict-Transport-Security` | Enabled |
+| `Referrer-Policy` | `no-referrer` |
+
+---
+
 ## Dashboard API Authentication
 
 As of v2.0.1, **all API endpoints and WebSocket connections require an API key**. This prevents anyone on your local network from accessing or controlling your agents without authorization.
