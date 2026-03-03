@@ -36,9 +36,17 @@ const STEALTH_ARGS = [
     '--disable-extensions',
     // Enable GPU (disabled in automation by default — a clear detection signal)
     '--use-gl=swiftshader',
-    // Standard sandbox setup
-    '--no-sandbox',
-    '--disable-setuid-sandbox',
+    // SECURITY: Enforce sandbox isolation for renderer processes.
+    // This prevents a compromised renderer (via malicious page exploit) from
+    // breaking out into the host OS or reading host memory.
+    '--sandbox',
+    '--disable-setuid-sandbox',  // Only disable setuid sandbox (Linux-specific), not the full sandbox
+    // SECURITY: Disable access to file:// URLs from renderer (belt-and-suspenders)
+    '--disable-file-access-from-files',
+    '--disable-file-system',
+    // SECURITY: Isolate each site in its own process (Site Isolation)
+    // Prevents cross-origin data leaks even if one renderer is compromised
+    '--site-per-process',
     // Realistic window / display settings
     '--start-maximized',
     '--window-size=1366,768',
