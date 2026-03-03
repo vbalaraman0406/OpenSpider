@@ -5,6 +5,9 @@ import { Page, BrowserContext } from 'playwright-core';
  * BrowserTool: Agent-friendly wrapper around BrowserManager.
  * Provides simple actions the LLM can request: navigate, click, type, read_content, screenshot, wait_for_user.
  * Uses a singleton BrowserManager instance shared across all worker agents.
+ *
+ * Anti-detection: All interactions use human-like timing (random delays, incremental scrolling)
+ * to avoid triggering bot-detection heuristics on modern sites.
  */
 
 // Singleton browser manager
@@ -16,6 +19,10 @@ function getManager(): BrowserManager {
     }
     return sharedManager;
 }
+
+/** Random delay between min and max milliseconds — mimics human reaction time */
+const humanDelay = (min = 300, max = 900) =>
+    new Promise<void>(r => setTimeout(r, min + Math.floor(Math.random() * (max - min))));
 
 export interface BrowseAction {
     /** The sub-action to perform */
@@ -100,10 +107,21 @@ export class BrowserTool {
         }
 
         console.log(`[BrowserTool] Navigating to: ${url}`);
-        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 });
 
-        // Wait a moment for dynamic content
-        await page.waitForTimeout(1500);
+        // Human-like: wait for page activity to settle + random pause
+        try { await page.waitForLoadState('networkidle', { timeout: 5000 }); } catch { }
+        await humanDelay(800, 1800);
+
+        // Move mouse to a random position on the page to trigger hover events
+        const viewport = page.viewportSize();
+        if (viewport) {
+            await page.mouse.move(
+                200 + Math.floor(Math.random() * (viewport.width - 400)),
+                200 + Math.floor(Math.random() * (viewport.height - 400)),
+                { steps: 5 }
+            );
+        }
 
         const title = await page.title();
         const currentUrl = page.url();
@@ -117,15 +135,19 @@ export class BrowserTool {
         const page = await this.ensurePage();
 
         try {
-            // Try direct selector first
-            await page.click(selector, { timeout: 5000 });
-            await page.waitForTimeout(1000);
+            // Human-like: hover first, then pause, then click
+            await page.hover(selector, { timeout: 5000 });
+            await humanDelay(150, 400);
+            await page.click(selector, { timeout: 5000, delay: 50 + Math.floor(Math.random() * 80) });
+            await humanDelay(400, 1000);
             return `Clicked on element matching "${selector}". Page may have updated.`;
         } catch {
             // Try text-based selector as fallback
             try {
+                await page.hover(`text="${selector}"`, { timeout: 3000 }).catch(() => {});
+                await humanDelay(100, 300);
                 await page.click(`text="${selector}"`, { timeout: 5000 });
-                await page.waitForTimeout(1000);
+                await humanDelay(400, 1000);
                 return `Clicked on text "${selector}". Page may have updated.`;
             } catch (e: any) {
                 return `Could not find element to click: "${selector}". Error: ${e.message}. Try using a different selector or reading the page content first.`;
@@ -140,24 +162,26 @@ export class BrowserTool {
         const page = await this.ensurePage();
 
         try {
-            // Try direct selector
-            await page.fill(selector, text, { timeout: 5000 });
-            return `Typed "${text}" into element "${selector}".`;
+            // Human-like: click first, small pause, then type with realistic WPM delay
+            await page.click(selector, { timeout: 5000 });
+            await humanDelay(200, 500);
+            // Clear existing value then type with per-character delay (50–120ms ≈ 80–120 WPM)
+            await page.fill(selector, '', { timeout: 3000 });
+            await page.type(selector, text, { delay: 50 + Math.floor(Math.random() * 70) });
+            return `Typed "${text.substring(0, 80)}${text.length > 80 ? '...' : ''}" into element "${selector}".`;
         } catch {
-            // Try common input selectors
             try {
-                // Try clicking first to focus, then type
                 const input = page.locator(selector).first();
                 await input.click({ timeout: 3000 });
-                await input.fill(text);
-                return `Typed "${text}" into element "${selector}".`;
-            } catch (e: any) {
-                // Last resort: keyboard-based typing
+                await humanDelay(150, 400);
+                await input.type(text, { delay: 60 + Math.floor(Math.random() * 60) });
+                return `Typed "${text.substring(0, 80)}" into element "${selector}".`;
+            } catch {
                 try {
-                    await page.keyboard.type(text, { delay: 50 });
-                    return `Typed "${text}" using keyboard input (no specific element targeted).`;
+                    await page.keyboard.type(text, { delay: 70 });
+                    return `Typed "${text.substring(0, 80)}" using keyboard input (no specific element targeted).`;
                 } catch (e2: any) {
-                    return `Failed to type into "${selector}": ${e.message}`;
+                    return `Failed to type into "${selector}": ${e2.message}`;
                 }
             }
         }
@@ -293,12 +317,17 @@ export class BrowserTool {
 
     private async doScroll(direction: 'up' | 'down'): Promise<string> {
         const page = await this.ensurePage();
-        const amount = direction === 'down' ? 600 : -600;
-        await page.evaluate((scrollAmount: number) => {
-            window.scrollBy(0, scrollAmount);
-        }, amount);
-        await page.waitForTimeout(500);
-        return `Scrolled ${direction} by 600px.`;
+        const totalScroll = 500 + Math.floor(Math.random() * 300);
+        const steps = 4 + Math.floor(Math.random() * 4); // 4–7 incremental steps
+        const stepSize = Math.floor(totalScroll / steps) * (direction === 'down' ? 1 : -1);
+
+        // Incremental scrolling mimics a human using a mouse wheel
+        for (let i = 0; i < steps; i++) {
+            await page.evaluate((amount: number) => { window.scrollBy(0, amount); }, stepSize);
+            await humanDelay(80, 200);
+        }
+        await humanDelay(300, 600);
+        return `Scrolled ${direction} ~${totalScroll}px in ${steps} steps.`;
     }
 
     private async doClose(): Promise<string> {

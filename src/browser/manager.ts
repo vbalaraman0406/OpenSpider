@@ -1,7 +1,59 @@
-import { chromium, Browser, BrowserContext, Page } from 'playwright-core';
+import { chromium as playwrightChromium, Browser, BrowserContext } from 'playwright-core';
+import { chromium as stealthChromium } from 'playwright-extra';
+import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { BrowserConfigManager, ProfileConfig } from './config';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
+
+// Register the stealth plugin — patches navigator.webdriver, chrome runtime,
+// plugins length, iframe content window, permissions API, and ~30 other signals.
+stealthChromium.use(StealthPlugin());
+
+// Rotate through realistic Chrome stable user-agents to avoid UA fingerprinting
+const REALISTIC_USER_AGENTS = [
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+];
+
+function pickUserAgent(): string {
+    return REALISTIC_USER_AGENTS[Math.floor(Math.random() * REALISTIC_USER_AGENTS.length)] ||
+        REALISTIC_USER_AGENTS[0]!;
+}
+
+/**
+ * Chrome launch args that remove automation signals.
+ * Based on the well-known "undetectable chrome" arg list.
+ */
+const STEALTH_ARGS = [
+    // Remove "Chrome is being controlled by automated software" banner
+    '--disable-infobars',
+    // Disable automation flags
+    '--disable-blink-features=AutomationControlled',
+    // Make webdriver flag invisible
+    '--exclude-switches=enable-automation',
+    '--disable-extensions',
+    // Enable GPU (disabled in automation by default — a clear detection signal)
+    '--use-gl=swiftshader',
+    // Standard sandbox setup
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    // Realistic window / display settings
+    '--start-maximized',
+    '--window-size=1366,768',
+    // Disable various automation-hint APIs
+    '--disable-web-security=false',
+    '--allow-running-insecure-content',
+    // Disable save-password popup
+    '--disable-save-password-bubble',
+    // Clipboard etc. — avoid permission dialogs
+    '--disable-features=TranslateUI,BlinkGenPropertyTrees',
+    '--disable-ipc-flooding-protection',
+    // Prevent "restore session" dialogs
+    '--disable-session-crashed-bubble',
+    '--disable-restore-session-state',
+];
 
 export class BrowserManager {
     private contexts: Map<string, BrowserContext> = new Map();
@@ -25,54 +77,65 @@ export class BrowserManager {
     }
 
     private async launchProfile(name: string, pConfig: ProfileConfig, headless: boolean): Promise<BrowserContext> {
-        // If it's a remote CDP url (like browserless or chrome extension relay)
+        // --- Remote CDP (Chrome Extension relay or browserless) ---
         if (pConfig.cdpUrl) {
             console.log(`[BrowserManager] Connecting to remote profile '${name}' at ${pConfig.cdpUrl}...`);
-            const browser = await chromium.connectOverCDP(pConfig.cdpUrl, { timeout: 5000 });
+            const browser = await playwrightChromium.connectOverCDP(pConfig.cdpUrl, { timeout: 5000 });
             this.browsers.set(name, browser);
             return browser.contexts()[0] || await browser.newContext();
         }
 
-        // It is a local managed profile, launch Chromium with persistent context
-        console.log(`[BrowserManager] Launching local managed profile '${name}'...`);
+        // --- Local managed profile with full stealth ---
+        console.log(`[BrowserManager] Launching stealth local profile '${name}'...`);
         const userDataDir = path.join(process.cwd(), 'workspace', 'browser_profiles', name);
         if (!fs.existsSync(userDataDir)) {
             fs.mkdirSync(userDataDir, { recursive: true });
         }
 
         const executablePath = BrowserConfigManager.getExecutablePath();
-        const args = [];
+        const userAgent = pickUserAgent();
 
-        // Basic anti-ssrf for local navigations (basic defense, needs deeper proxy for true SSRF filtering)
-        args.push('--disable-web-security=false');
-
-        // Optional debugging port
-        if (pConfig.cdpPort) {
-            args.push(`--remote-debugging-port=${pConfig.cdpPort}`);
-        }
-
-        const context = await chromium.launchPersistentContext(userDataDir, {
+        // playwright-extra launchPersistentContext with stealth plugin applied
+        const context = await (stealthChromium as any).launchPersistentContext(userDataDir, {
             headless,
             ...(executablePath ? { executablePath } : {}),
-            ...(executablePath ? {} : { channel: 'chrome' }), // Fallback to installed chrome if no exec path
-            args
+            ...(executablePath ? {} : { channel: 'chrome' }),
+            args: [
+                ...STEALTH_ARGS,
+                ...(pConfig.cdpPort ? [`--remote-debugging-port=${pConfig.cdpPort}`] : []),
+            ],
+            // Realistic browser context config
+            userAgent,
+            locale: 'en-US',
+            timezoneId: 'America/Los_Angeles',
+            viewport: { width: 1366, height: 768 },
+            // Accept all the permissions a real user would have consented to
+            permissions: ['geolocation', 'notifications'],
+            // Realistic extra HTTP headers
+            extraHTTPHeaders: {
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
+            },
         });
 
-        // Set distinctive UI coloring via CDP if color is provided (basic visual indicator trick)
+        // Override navigator.webdriver via init script (belt-and-suspenders on top of stealth plugin)
+        await context.addInitScript(() => {
+            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+            Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+            Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+            // Remove playwright-specific chrome.runtime signals
+            // @ts-ignore
+            if (window.chrome) {
+                // @ts-ignore
+                window.chrome.runtime = {};
+            }
+        });
+
         if (pConfig.color) {
-            // Note: Playwright doesn't have a direct "theme color" API, but we can evaluate a script on new pages
             await context.addInitScript((color: string) => {
-                // Add a visual border to indicate which profile this is
                 window.addEventListener('DOMContentLoaded', () => {
                     const overlay = document.createElement('div');
-                    overlay.style.position = 'fixed';
-                    overlay.style.top = '0';
-                    overlay.style.left = '0';
-                    overlay.style.right = '0';
-                    overlay.style.height = '4px';
-                    overlay.style.backgroundColor = color;
-                    overlay.style.zIndex = '9999999';
-                    overlay.style.pointerEvents = 'none';
+                    overlay.style.cssText = `position:fixed;top:0;left:0;right:0;height:4px;background:${color};z-index:9999999;pointer-events:none;`;
                     document.body.appendChild(overlay);
                 });
             }, pConfig.color);
