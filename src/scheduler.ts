@@ -7,6 +7,23 @@ const JOBS_FILE = path.join(process.cwd(), 'workspace', 'cron_jobs.json');
 // Track active cron jobs so the WebSocket broadcast can suppress agent_flow events during cron runs
 export let activeCronJobs = 0;
 
+// MED-3: Simple write-lock flag to prevent TOCTOU races when multiple cron ticks
+// fire close together and both read/modify/write cron_jobs.json simultaneously.
+let fileLocked = false;
+
+function safeWriteJobs(jobs: CronJob[]) {
+    if (fileLocked) {
+        console.warn('[Scheduler] File write skipped — another write is in progress.');
+        return;
+    }
+    fileLocked = true;
+    try {
+        fs.writeFileSync(JOBS_FILE, JSON.stringify(jobs, null, 2));
+    } finally {
+        fileLocked = false;
+    }
+}
+
 interface CronJob {
     id: string;
     description: string;
@@ -139,7 +156,7 @@ async function checkAndExecuteJobs() {
         }
 
         if (jobsModified) {
-            fs.writeFileSync(JOBS_FILE, JSON.stringify(jobs, null, 2));
+            safeWriteJobs(jobs);
         }
 
     } catch (e) {
@@ -160,7 +177,7 @@ export async function runJobForcefully(jobId: string) {
 
     // Update timestamp
     job.lastRunTimestamp = Date.now();
-    fs.writeFileSync(JOBS_FILE, JSON.stringify(jobs, null, 2));
+    safeWriteJobs(jobs);
 
     const manager = new ManagerAgent();
     const cronPrompt = `[SYSTEM MANUAL TRIGGER] Wake up and execute your background task manually requested by the user. Do not ask me for permission. Just do it and summarize the results.\n\nTask: ${job.prompt}`;

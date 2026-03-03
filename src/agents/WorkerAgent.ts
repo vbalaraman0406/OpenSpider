@@ -176,8 +176,9 @@ ${context.join('\n')}
             }
 
             // Log the thought process (useful for the DB / Dashboard later)
-            console.log(`[Worker - ${this.role}] Thought: ${response.thought}`);
-            console.log(`[Worker - RAW RESPONSE]`, JSON.stringify(response));
+            console.log(`[Worker - ${this.role}] Thought: ${response.thought.substring(0, 200)}`);
+            // MED-4: Do NOT log raw LLM response to console — it may contain user PII,
+            // un-sanitized input data, or partial API key/credential content from tool outputs.
 
             // CRITICAL FIX: To prevent "This model does not support assistant message prefill" crashes on strict providers
             // We append previous actions as 'user' system logs rather than 'assistant' message prefills.
