@@ -2,6 +2,21 @@
 
 OpenSpider communicates with users through **WhatsApp** via the [Baileys](https://github.com/WhiskeySockets/Baileys) library. This page covers how to set up and configure the WhatsApp channel.
 
+## Voice Messages 🎤
+
+OpenSpider supports voice-in, voice-out interaction. Users send voice notes which are transcribed locally via Whisper, and agents can reply with ElevenLabs-powered voice notes.
+
+See [Voice Messages](/voice) for full setup and configuration.
+
+## Signal Session Management
+
+OpenSpider automatically manages WhatsApp's end-to-end encryption sessions:
+
+- **Stale session cleanup** — On each startup, all `session-*.json` files in `baileys_auth_info/` are deleted to force fresh E2E negotiation and prevent "Bad MAC" errors
+- **Cacheable key store** — Uses `makeCacheableSignalKeyStore` for proper session renegotiation
+- **Sent message store** — Caches outgoing message content so Baileys can re-relay messages on retry requests
+- **Lock management** — Processing locks are properly released on all early-return paths to prevent message drops
+
 ## WhatsApp Setup
 
 ### Initial Connection

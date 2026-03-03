@@ -10,17 +10,55 @@ openspider dashboard
 
 Or navigate to [http://localhost:4001](http://localhost:4001) in your browser.
 
+## Version Badge
+
+The dashboard displays the current OpenSpider version (e.g. **v2.0.0**) next to the logo in the sidebar. The version is fetched live from the `/api/health` endpoint and reflects what's in `package.json`.
+
+## Theme Toggle 🎨
+
+The sidebar includes a **3-way theme toggle** at the bottom:
+
+| Mode | Icon | Behavior |
+|---|---|---|
+| **Light** | ☀️ | Light backgrounds, dark text |
+| **Dark** | 🌙 | Dark backgrounds, light text (default) |
+| **Auto** | 💻 | Follows your OS `prefers-color-scheme` setting |
+
+The selected theme is persisted in `localStorage` and applied instantly via CSS custom properties.
+
+## Health Status Indicator 💚
+
+A real-time health indicator at the bottom of the sidebar shows system health at a glance:
+
+| Status | Color | Meaning |
+|---|---|---|
+| 🟢 **Healthy** | Green | All systems operational |
+| 🟡 **Degraded** | Amber | Some components unavailable (e.g. WhatsApp disconnected) |
+| 🔴 **Unreachable** | Red | Server not responding |
+
+**Hover** over the health indicator to see detailed component status:
+- WhatsApp connection status
+- LLM provider name
+- Server status
+- Memory usage (MB)
+- Uptime duration
+
+The indicator auto-polls `/api/health` every 30 seconds.
+
 ## Dashboard Tabs
 
 ### Agent Chat 💬
 
-A chat interface for communicating directly with your agents.
+A full chat interface for communicating directly with your agents.
 
 **Features:**
 - Send messages and see agent responses in real-time via WebSocket
+- **File attachments** — Click the 📎 paperclip to attach images, documents, or any file
 - **Input history** — Press `↑`/`↓` arrow keys to recall previous messages
 - **Agent emoji avatars** — Each agent displays its role emoji (🧠 Manager, ⚡ Coder, 🔮 Researcher)
-- Messages show which agent responded with timestamps
+- **Cron job results** — Scheduled task outputs display inline with a ⏰ Cron badge
+- **Verbose/Non-verbose toggle** — Switch between raw logs and clean chat bubbles
+- Messages show which agent responded with timestamps (visible on hover)
 
 ### Agent Flow 🔀
 
@@ -68,6 +106,7 @@ Visual interface for managing WhatsApp access controls:
 - **DM Allowlist** — Add/remove permitted phone numbers
 - **Group Allowlist** — Add/remove permitted groups
 - **Per-group mode toggles** — Switch each group between Mention and Listen mode
+- **Voice Settings** — Configure ElevenLabs voice responses (see [Voice Messages](/voice))
 - Changes save directly to `workspace/whatsapp_config.json`
 
 ### Cron Jobs ⏰
@@ -77,6 +116,19 @@ Manage scheduled tasks:
 - Enable/disable individual jobs
 - Manually trigger a job for immediate execution
 - Monitor last run timestamps
+- Cron results appear inline in the Agent Chat view
+
+### Process Monitor 🖥️
+
+Monitor running system processes and resource usage.
+
+### Overview 📈
+
+A high-level summary view of your OpenSpider instance.
+
+### Sessions 📋
+
+View and manage active agent sessions.
 
 ## Architecture
 
@@ -84,8 +136,9 @@ The dashboard is a single-page React application:
 
 | Component | File | Description |
 |---|---|---|
-| Main App | `dashboard/src/App.tsx` | All tabs and views (~2050 lines) |
+| Main App | `dashboard/src/App.tsx` | All tabs and views (~2300 lines) |
 | WhatsApp Security | `dashboard/src/components/WhatsAppSecurity.tsx` | Channel config UI |
+| Voice Settings | `dashboard/src/components/VoiceSettings.tsx` | ElevenLabs voice config |
 | Agent Flow Graph | `dashboard/src/components/AgentFlowGraph.tsx` | Mermaid flow visualization |
 | Usage View | `dashboard/src/components/UsageView.tsx` | Token usage analytics |
 
@@ -95,6 +148,22 @@ The dashboard connects to the server via WebSocket for:
 - Agent chat messages
 - Agent flow events (task_start, task_complete)
 - System log streaming
+- Chat response notifications (typing indicators)
+
+### API Endpoints
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/health` | GET | System health, version, uptime, component status |
+| `/api/config` | GET | Current LLM provider and connection status |
+| `/api/chat/history` | GET | Chat message history |
+| `/api/agents` | GET | Agent configurations |
+| `/api/skills` | GET | Available skills |
+| `/api/usage` | GET | Token usage data |
+| `/api/cron` | GET | Cron job configurations |
+| `/api/processes` | GET | Running processes |
+| `/api/whatsapp/config` | GET | WhatsApp security config |
+| `/api/voice/config` | GET | Voice response config |
 
 ### Build & Serve
 

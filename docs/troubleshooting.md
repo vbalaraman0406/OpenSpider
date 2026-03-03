@@ -105,6 +105,71 @@ cat workspace/whatsapp_config.json
 
 ---
 
+### Bad MAC Error (Encryption Issues)
+
+**Error:** `Bad MAC` or `Error: Unsupported state or unable to authenticate data` in logs
+
+This occurs when WhatsApp's end-to-end encryption session becomes stale or corrupted after a restart.
+
+**OpenSpider v2.0.0 handles this automatically:**
+- Stale session files are cleared on startup
+- `makeCacheableSignalKeyStore` enables proper session renegotiation
+- Sent messages are cached for Baileys retry re-relay
+
+**If the problem persists:**
+
+```bash
+# Force full session reset
+rm -rf baileys_auth_info/session-*.json
+pm2 restart all
+```
+
+::: tip
+You do NOT need to delete `creds.json` — only the `session-*.json` files. Your WhatsApp pairing is preserved.
+:::
+
+---
+
+### Messages Being Dropped Intermittently
+
+**Symptom:** The first message after restart fails, or messages are silently dropped.
+
+**Possible causes:**
+1. Processing lock not properly released — Fixed in v2.0.0 with lock cleanup on all early-return paths
+2. Stale encryption sessions — Fixed with automatic session cleanup on startup
+
+**Fix:** Upgrade to v2.0.0 and rebuild:
+
+```bash
+npm run build:backend
+pm2 restart all
+```
+
+---
+
+### Voice Notes Not Working
+
+**Symptom:** Agent doesn't respond with voice, or voice transcription fails.
+
+**Fix:**
+
+1. Verify dependencies are installed:
+```bash
+which ffmpeg      # Required for audio conversion
+which whisper     # Required for transcription
+```
+
+2. Check ElevenLabs API key in `voice_config.json` or dashboard (Channels → WhatsApp → Voice Settings)
+
+3. Check server logs for errors:
+```bash
+pm2 logs openspider-gateway --lines 50
+```
+
+See [Voice Messages](/voice) for full setup instructions.
+
+---
+
 ## Server Issues
 
 ### Port 4001 Already in Use
