@@ -70,7 +70,8 @@ Available tools you can request in your JSON response:
     - Navigate: { "action": "browse_web", "command": "navigate", "filename": "https://google.com" }
     - Click:    { "action": "browse_web", "command": "click", "args": "button.submit" }
     - Type:     { "action": "browse_web", "command": "type", "args": "input[name=q]", "content": "search query" }
-    - Read:     { "action": "browse_web", "command": "read_content" }
+    - Read:     { "action": "browse_web", "command": "read_content" }  ← reads full page (capped at 1500 chars)
+    - Read targeted section: { "action": "browse_web", "command": "read_content", "args": "main" }  ← CSS selector for focused extraction. Use this when you need specific data (e.g. "args": ".results", "args": "article", "args": "#contact", "args": "table"). PREFER targeted selectors over full-page reads to save tokens.
     - Scroll:   { "action": "browse_web", "command": "scroll", "args": "down" }
     - Close:    { "action": "browse_web", "command": "close" }
 - wait_for_user: { "message": "Please log in to your account" } (Pause and ask the user to do something in the browser, like logging in. Waits up to 120 seconds.)
