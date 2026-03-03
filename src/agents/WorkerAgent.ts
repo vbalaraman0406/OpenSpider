@@ -390,12 +390,14 @@ ${context.join('\n')}
                 toolOutput = `Tool execution failed: ${e.message}`;
             }
 
-            // [V3] High Token Usage Fix: Smart Head & Tail Truncation for massive scraping outputs
-            const MAX_LENGTH = 3000;
+            // [Token Optimization] Tighter output cap: browser page content is already
+            // capped at 1,500 chars in tool.ts, so most outputs are small. For any
+            // unexpected large output (e.g. script stdout), enforce a hard 1,500 char cap.
+            const MAX_LENGTH = 1500;
             if (toolOutput.length > MAX_LENGTH) {
-                const head = toolOutput.substring(0, 1500);
-                const tail = toolOutput.substring(toolOutput.length - 1500);
-                toolOutput = `${head}\n\n... [TRUNCATED ${toolOutput.length - 3000} characters. You must write scripts to parse/summarize if you need the middle data] ...\n\n${tail}`;
+                const head = toolOutput.substring(0, 800);
+                const tail = toolOutput.substring(toolOutput.length - 700);
+                toolOutput = `${head}\n\n... [TRUNCATED ${toolOutput.length - MAX_LENGTH} characters. Write a script to parse/summarize if you need the full data] ...\n\n${tail}`;
             }
 
             console.log(`[Worker - ${this.role}] Tool Output: ${toolOutput.substring(0, 200)}...`);
@@ -410,7 +412,7 @@ ${context.join('\n')}
             // We only trigger skeletal compaction if the envelope gets dangerous (e.g. > 12,000 chars roughly 3.5k tokens).
 
             const totalLength = messages.reduce((acc, m) => acc + (typeof m.content === 'string' ? m.content.length : 0), 0);
-            const DANGER_THRESHOLD = 12000;
+            const DANGER_THRESHOLD = 6000; // Lowered from 12000 — prune earlier to keep each LLM call under ~2k tokens
 
             if (totalLength > DANGER_THRESHOLD) {
                 console.log(`[Token Optimization] Context window dangerously large (${totalLength} chars). Triggering OpenSpider V3 Adaptive Pruning...`);

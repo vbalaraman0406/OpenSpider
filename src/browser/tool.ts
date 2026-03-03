@@ -215,12 +215,14 @@ export class BrowserTool {
             });
         }
 
-        // Truncate to prevent token explosion (keep head + tail for context)
-        const MAX = 4000;
+        // Truncate to prevent token explosion.
+        // 1,500 chars is enough to extract business names, addresses, phone numbers.
+        // The agent can navigate to specific pages if it needs deeper detail.
+        const MAX = 1500;
         if (content.length > MAX) {
-            const head = content.substring(0, 2000);
-            const tail = content.substring(content.length - 1500);
-            content = `${head}\n\n... [CONTENT TRUNCATED — ${content.length - 3500} chars removed] ...\n\n${tail}`;
+            const head = content.substring(0, 1000);
+            const tail = content.substring(content.length - 500);
+            content = `${head}\n\n... [CONTENT TRUNCATED — use a targeted selector or navigate to a specific page for more detail] ...\n\n${tail}`;
         }
 
         return `Page: "${title}" (${currentUrl})\n\n${content}`;
