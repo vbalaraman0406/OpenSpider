@@ -4,7 +4,7 @@ import { BrowserTool, BrowseAction } from '../browser/tool';
 import fs from 'node:fs';
 import path from 'node:path';
 import { PersonaShell } from './PersonaShell';
-import { sendWhatsAppMessage } from '../whatsapp';
+import { sendWhatsAppMessage, sendWhatsAppAudio } from '../whatsapp';
 
 export class WorkerAgent {
     private llm: LLMProvider;
@@ -76,6 +76,14 @@ Available tools you can request in your JSON response:
 - message_agent: { "target": "Role Name", "message": "Text to send" } (Delegate a sub-task to a specialized sub-agent)
 - send_email: { "to": "user@example.com", "subject": "Hello", "body": "My message here" } (Send an outbound email natively using OAuth.)
 - send_whatsapp: { "message": "Hello!" } (Send a WhatsApp message to the user. The system will automatically route to the configured user's WhatsApp number. Use this whenever the task requires sending results via WhatsApp.)
+- send_voice: { "message": "Hello, how are you?", "args": "voice_id" } (Send a voice note to the user via WhatsApp. The text in "message" will be converted to speech using ElevenLabs TTS and delivered as an audio message. Use "args" to optionally specify a voice ID. Available voices:
+  • "21m00Tcm4TlvDq8ikWAM" = Rachel (default, warm female)
+  • "EXAVITQu4vr4xnSDxMaL" = Bella (soft female)
+  • "ErXwobaYiN019PkySvjV" = Antoni (calm male)
+  • "VR6AewLTigWG4xSOukaG" = Arnold (deep male)
+  • "pNInz6obpgDQGcFmaJgB" = Adam (confident male)
+  • "yoZ06aMxZJJ28mfd3POQ" = Sam (clear male)
+  If the user asks for a specific voice style, pick the closest match. If no preference, omit "args" to use the default.)
 - final_answer: { "result": "The final output" } (CRITICAL: You MUST include the 'result' key containing your answer)
 
 BROWSER USAGE GUIDELINES:
@@ -109,7 +117,7 @@ ${context.join('\n')}
             let response;
             try {
                 response = await this.llm.generateStructuredOutputs<{
-                    action: 'run_command' | 'write_script' | 'execute_script' | 'browse_web' | 'wait_for_user' | 'schedule_task' | 'message_agent' | 'send_email' | 'send_whatsapp' | 'final_answer';
+                    action: 'run_command' | 'write_script' | 'execute_script' | 'browse_web' | 'wait_for_user' | 'schedule_task' | 'message_agent' | 'send_email' | 'send_whatsapp' | 'send_voice' | 'final_answer';
                     command?: string;
                     filename?: string;
                     content?: string;
@@ -125,7 +133,7 @@ ${context.join('\n')}
                 }>(messages, {
                     type: "object",
                     properties: {
-                        action: { type: "string", enum: ["run_command", "write_script", "execute_script", "browse_web", "wait_for_user", "schedule_task", "message_agent", "send_email", "send_whatsapp", "final_answer"] },
+                        action: { type: "string", enum: ["run_command", "write_script", "execute_script", "browse_web", "wait_for_user", "schedule_task", "message_agent", "send_email", "send_whatsapp", "send_voice", "final_answer"] },
                         thought: { type: "string" },
                         summary_of_findings: { type: "string", description: "A highly compressed, 1-2 sentence memory of what you learned in this step. Retained forever even if thoughts are pruned." },
                         command: { type: "string" },
@@ -296,6 +304,70 @@ ${context.join('\n')}
                         }
                     } catch (e: any) {
                         toolOutput = `Failed to send WhatsApp message: ${e.message}`;
+                    }
+                } else if (response.action === 'send_voice' && response.message) {
+                    console.log(`[Worker - ${this.role}] Generating voice message via ElevenLabs TTS...`);
+                    try {
+                        // Determine the user's WhatsApp JID from the config
+                        const configPath = path.join(process.cwd(), 'workspace', 'whatsapp_config.json');
+                        let userJid = '';
+                        if (fs.existsSync(configPath)) {
+                            const waConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+                            if (waConfig.allowedDMs && waConfig.allowedDMs.length > 0) {
+                                const rawNumber = waConfig.allowedDMs[0].replace(/\D/g, '');
+                                userJid = `${rawNumber}@s.whatsapp.net`;
+                            }
+                        }
+                        if (!userJid) {
+                            toolOutput = 'Error: No WhatsApp user configured. Add a phone number to the allowedDMs list in Channels > WhatsApp config.';
+                        } else {
+                            const rootDir = __dirname.endsWith('src') ? path.join(__dirname, '..', '..') : path.join(__dirname, '..', '..');
+                            const pythonScript = path.join(rootDir, 'skills', 'send_voice.py');
+                            const safeText = response.message.replace(/"/g, '\\"');
+
+                            const { execSync } = require('node:child_process');
+                            // Read voice config: use agent-specified voice_id, or fall back to dashboard config
+                            let voiceIdArg = '';
+                            if (response.args) {
+                                voiceIdArg = ` --voice_id "${response.args.replace(/"/g, '\\"')}"`;
+                            } else {
+                                const voiceConfigPath = path.join(process.cwd(), 'workspace', 'voice_config.json');
+                                if (fs.existsSync(voiceConfigPath)) {
+                                    try {
+                                        const voiceConfig = JSON.parse(fs.readFileSync(voiceConfigPath, 'utf-8'));
+                                        if (voiceConfig.voiceId) voiceIdArg = ` --voice_id "${voiceConfig.voiceId}"`;
+                                    } catch (e) { }
+                                }
+                            }
+                            const stdout = execSync(
+                                `python3 "${pythonScript}" --text "${safeText}"${voiceIdArg}`,
+                                { timeout: 60000 }
+                            ).toString();
+
+                            // Extract audio file path from script output
+                            const pathMatch = stdout.match(/AUDIO_FILE_PATH:(.+)/);
+                            if (pathMatch && pathMatch[1]) {
+                                const audioFilePath = pathMatch[1].trim();
+                                await sendWhatsAppAudio(userJid, audioFilePath);
+
+                                // Clean up temp audio file
+                                try { fs.unlinkSync(audioFilePath); } catch (e) { }
+
+                                // Get agent persona name
+                                let agentName = 'OpenSpider';
+                                try {
+                                    const persona = new PersonaShell('manager');
+                                    const caps = persona.getCapabilities();
+                                    if (caps && caps.name) agentName = caps.name;
+                                } catch (e) { }
+
+                                toolOutput = `✅ Voice message sent successfully to ${userJid} via ElevenLabs TTS.`;
+                            } else {
+                                toolOutput = `Failed to generate voice message. Script output: ${stdout}`;
+                            }
+                        }
+                    } catch (e: any) {
+                        toolOutput = `Failed to send voice message: ${e.message}\n${e.stdout?.toString() || ''}\n${e.stderr?.toString() || ''}`;
                     }
                 } else {
                     toolOutput = `Invalid action or missing parameters. You requested '${response.action}'. Check the schema. run_command needs 'command', write_script needs 'filename' and 'content', send_email needs 'to', 'subject', and 'body', send_whatsapp needs 'message'. You provided: ${JSON.stringify(response)}`;

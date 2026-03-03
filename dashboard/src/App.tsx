@@ -5,6 +5,7 @@ import remarkGfm from 'remark-gfm';
 import AgentFlowGraph, { AgentFlowEvent } from './components/AgentFlowGraph';
 import { UsageView } from './components/UsageView';
 import { WhatsAppSecurity } from './components/WhatsAppSecurity';
+import { VoiceSettings } from './components/VoiceSettings';
 import { ProcessMonitor } from './components/ProcessMonitor';
 
 const safeFormatTime = (ts: any) => {
@@ -2135,7 +2136,10 @@ export default function App() {
                                         </button>
 
                                         {configuredChannel === 'wa' && (
-                                            <WhatsAppSecurity isRunning={mockChannels.find(c => c.id === 'wa')?.status === 'running'} />
+                                            <>
+                                                <WhatsAppSecurity isRunning={mockChannels.find(c => c.id === 'wa')?.status === 'running'} />
+                                                <VoiceSettings />
+                                            </>
                                         )}
                                     </div>
                                 ) : (

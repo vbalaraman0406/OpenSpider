@@ -10,11 +10,47 @@
     "preferredTime": "07:00"
   },
   {
-    "id": "cron-tilekzruu",
-    "description": "Iran War & Market Update",
-    "prompt": "Search for the latest Iran war/conflict activity and military developments from the past 2 hours. Also search for stock market reactions to Iran tensions including S&P 500, Dow Jones, oil prices, gold, and defense stocks (LMT, RTX, NOC). Compile a short WhatsApp-friendly summary (max 300 words) with emojis, bold headers (*bold*), and bullet points. Send the summary to the user via WhatsApp.",
-    "intervalHours": 1,
-    "lastRunTimestamp": 1772473140358,
+    "id": "cron-rt2scsrxd",
+    "description": "Fantasy Baseball Heartbeat — Automated Lineup Optimizer",
+    "prompt": "Act as the Automated Baseball Operations Manager. Execute the following scan sequence:\n\n1. ROSTER SCAN: Use the browse_web skill to open https://baseball.fantasysports.yahoo.com/ using the default Chrome profile (to maintain session cookies and avoid 2FA). Take a DOM snapshot of the 'My Team' page. Identify all players with red injury icons (IL, IL10, IL15, IL60, DTD) or 'Not in Lineup' status. List each flagged player with their name, position, status, and today's opponent.\n\n2. EXTERNAL DATA: Use the browse_web skill to scrape https://www.rotowire.com/baseball/daily-lineups.php for today's confirmed starting lineups. Also use web_search to check BaseballSavant (https://baseballsavant.mlb.com/) for any late scratches or lineup changes for today's date. Additionally, search for today's MLB game weather forecasts to identify any games with >50% rain probability.\n\n3. EXECUTION LOGIC: Compare the roster scan against external data. For each player on the starting roster who is: (a) confirmed 'Out', 'IL', or scratched from today's lineup per Rotowire/Savant, OR (b) playing in a city with >50% rain probability — move them to the bench on Yahoo Fantasy and start the highest-ranked available bench player eligible for that position. Use the browse_web skill to navigate Yahoo Fantasy and click 'Edit Lineup' to make the swap.\n\n4. ALERTING: If any lineup change was made, send a WhatsApp message summarizing: 'Lineup Updated: Swapped [Player A] for [Player B] due to [Reason].' If no changes were needed, do NOT send any alert (silent pass).",
+    "intervalHours": 4,
+    "lastRunTimestamp": 1772505358169,
+    "agentId": "manager",
+    "status": "enabled"
+  },
+  {
+    "id": "cron-1zt6zd4a5",
+    "description": "Fantasy Baseball Morning Brief — Daily 9 AM Email",
+    "prompt": "Act as the Fantasy Baseball Morning Brief generator. Execute the following:\n\n1. Use the browse_web skill to open https://baseball.fantasysports.yahoo.com/ using the default Chrome profile. Scrape the full 'My Team' roster including all starters and bench players. For each player, capture: name, position, today's opponent, projected points (if shown), and injury status.\n\n2. Use web_search and browse_web to check https://www.rotowire.com/baseball/daily-lineups.php for today's confirmed lineups. Cross-reference with BaseballSavant for any late scratches.\n\n3. Use web_search to find today's MLB weather forecasts for all game cities. Flag any games with >50% rain/postponement risk.\n\n4. Compile a 'Morning Brief' email with: (a) Full roster table with projected points per player, (b) Total predicted team point output for today, (c) Any injury/weather flags, (d) Recommended lineup changes if any.\n\n5. Send this Morning Brief email to coolvishnu@gmail.com with subject line '⚾ Fantasy Baseball Morning Brief — [Today's Date]' using the send_email skill.",
+    "intervalHours": 24,
+    "lastRunTimestamp": 1772476510356,
+    "agentId": "manager",
+    "status": "enabled"
+  },
+  {
+    "id": "cron-lvoem5try",
+    "description": "Daily S&P 500 & NASDAQ Market Snapshot",
+    "prompt": "Perform the Daily S&P 500 & NASDAQ Market Snapshot. Search the web for today's S&P 500 (^GSPC) and NASDAQ Composite (^IXIC) closing prices, daily change (points and %), YTD performance, top 5 gainers, top 5 losers, sector performance breakdown by GICS sector, key market-moving news headlines, VIX/fear index level, and any Fed or macro announcements. Format as a comprehensive markdown report with tables using 🟢🔴🟡 indicators. Send the report via email to coolvishnu@gmail.com with subject line '📈 Daily Market Snapshot — [today's date]' and also send a condensed summary via WhatsApp.",
+    "intervalHours": 24,
+    "lastRunTimestamp": 1772489957932,
+    "agentId": "manager",
+    "status": "enabled"
+  },
+  {
+    "id": "cron-uqf91a91j",
+    "description": "Pre-Market Morning Brief - S&P 500 & NASDAQ",
+    "prompt": "Perform the Pre-Market Morning Brief for S&P 500 and NASDAQ. Search the web for: (1) S&P 500 and NASDAQ futures prices and overnight change, (2) overnight global market performance — Asia (Nikkei, Hang Seng, Shanghai) and Europe (FTSE, DAX, CAC 40), (3) top pre-market movers in US stocks, (4) any breaking macro news (Fed announcements, economic data releases like CPI/PPI/jobs, geopolitical events), (5) VIX futures level. Format as a concise markdown morning brief with tables. Send via email to coolvishnu@gmail.com with subject '🌅 Pre-Market Brief — [today's date]' and send a condensed summary via WhatsApp.",
+    "intervalHours": 24,
+    "lastRunTimestamp": 1772489966887,
+    "agentId": "manager",
+    "status": "enabled"
+  },
+  {
+    "id": "cron-mzyrevand",
+    "description": "Iran War Update",
+    "prompt": "Fetch the latest updates on the Iran-US war/conflict, including military developments, diplomatic actions, and market impact (oil prices, gold, stock indices, defense stocks). Write a concise summary and send it to the user via WhatsApp.",
+    "intervalHours": 6,
+    "lastRunTimestamp": 1772505950018,
     "agentId": "manager",
     "status": "enabled"
   }

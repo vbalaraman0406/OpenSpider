@@ -1,0 +1,6 @@
+{
+    "name": "Send Voice Message",
+    "description": "Generate a voice message using ElevenLabs text-to-speech and send it as a WhatsApp voice note to the user.",
+    "instructions": "Use the send_voice action with a 'message' field containing the text you want to convert to speech. The system will generate audio via ElevenLabs TTS and deliver it as a WhatsApp voice note.",
+    "category": "communication"
+}
