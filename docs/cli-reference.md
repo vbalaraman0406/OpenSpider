@@ -78,6 +78,29 @@ Opens `http://localhost:4001` automatically.
 
 ---
 
+### `openspider status`
+
+Show the current gateway status, version, provider, and PM2 uptime.
+
+```bash
+openspider status
+```
+
+**Example output:**
+
+```
+🕷️  OpenSpider Status
+──────────────────────────────────────────────────
+Version:          v2.0.2
+Provider:         anthropic
+API Port:         4001
+Dashboard:        http://localhost:4001
+──────────────────────────────────────────────────
+Gateway:          ✅ online  (uptime: 142 min, restarts: 0)
+```
+
+---
+
 ### `openspider tui`
 
 Launch the Terminal User Interface for chatting with the agent directly in your terminal.
@@ -190,7 +213,7 @@ openspider webhooks gmail run
 
 ### `openspider models list`
 
-Display the currently configured LLM provider and models.
+Display the currently configured LLM provider and all available models.
 
 ```bash
 openspider models list
@@ -199,13 +222,21 @@ openspider models list
 **Example output:**
 
 ```
-🕷️ OpenSpider Configure Models:
----------------------------------
-Default Provider:   antigravity
-Primary Model:      gemini-2.5-pro
+🕷️  OpenSpider Model Configuration:
+──────────────────────────────────────────────────
+Default Provider:   anthropic
+Primary Model:      claude-opus-4-5
 Fallback Model:     None
----------------------------------
+──────────────────────────────────────────────────
+
+All configured providers:
+  ✅ anthropic    (model: claude-opus-4-5)
+  ✅ openai       (model: gpt-4o)
+
+Config file: /Users/name/OpenSpider/.env
 ```
+
+The config file path is shown so you can quickly find and edit your settings.
 
 ---
 
@@ -232,6 +263,7 @@ openspider <command> --help
 | `gateway` | Start server (foreground) |
 | `start` | Start daemon (background) |
 | `stop` | Stop daemon |
+| `status` | Show gateway status and uptime |
 | `logs` | Stream daemon logs |
 | `dashboard` | Open web dashboard |
 | `tui` | Terminal chat UI |
