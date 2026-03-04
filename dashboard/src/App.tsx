@@ -1755,8 +1755,9 @@ export default function App() {
         }), 120_000);
     };
 
-    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === 'Enter') {
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
             sendChatMessage();
         } else if (e.key === 'ArrowUp') {
             e.preventDefault();
@@ -1942,22 +1943,22 @@ export default function App() {
                         <div className="flex items-center justify-between cursor-pointer">
                             <div className="flex items-center gap-2.5">
                                 <div className={`relative flex items-center justify-center w-8 h-8 rounded-lg ${health?.status === 'green' ? 'bg-emerald-500/10 border border-emerald-500/30' :
-                                        health?.status === 'amber' ? 'bg-amber-500/10 border border-amber-500/30' :
-                                            'bg-red-500/10 border border-red-500/30'
+                                    health?.status === 'amber' ? 'bg-amber-500/10 border border-amber-500/30' :
+                                        'bg-red-500/10 border border-red-500/30'
                                     }`}>
                                     <Heart className={`w-4 h-4 ${health?.status === 'green' ? 'text-emerald-400' :
-                                            health?.status === 'amber' ? 'text-amber-400' :
-                                                'text-red-400'
+                                        health?.status === 'amber' ? 'text-amber-400' :
+                                            'text-red-400'
                                         }`} />
                                     <span className={`absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-slate-900 ${health?.status === 'green' ? 'bg-emerald-400 health-pulse shadow-[0_0_8px_rgba(52,211,153,0.6)]' :
-                                            health?.status === 'amber' ? 'bg-amber-400 health-pulse shadow-[0_0_8px_rgba(251,191,36,0.6)]' :
-                                                'bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.6)]'
+                                        health?.status === 'amber' ? 'bg-amber-400 health-pulse shadow-[0_0_8px_rgba(251,191,36,0.6)]' :
+                                            'bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.6)]'
                                         }`}></span>
                                 </div>
                                 <div className="flex flex-col">
                                     <span className={`text-xs font-semibold ${health?.status === 'green' ? 'text-emerald-400' :
-                                            health?.status === 'amber' ? 'text-amber-400' :
-                                                'text-red-400'
+                                        health?.status === 'amber' ? 'text-amber-400' :
+                                            'text-red-400'
                                         }`}>
                                         {health?.status === 'green' ? 'All Systems Healthy' :
                                             health?.status === 'amber' ? 'Degraded' :
@@ -2229,7 +2230,8 @@ export default function App() {
                                     </div>
                                 )}
 
-                                <div className="p-4 flex items-center gap-3">
+                                {/* Chat input bar — Gemini-style: auto-expands from 3 to 8 lines, Enter sends, Shift+Enter adds newline */}
+                                <div className="px-4 pt-3 pb-4">
                                     <input
                                         ref={fileInputRef}
                                         type="file"
@@ -2238,34 +2240,48 @@ export default function App() {
                                         className="hidden"
                                         onChange={handleFileSelect}
                                     />
-                                    <button
-                                        title="Attach File"
-                                        type="button"
-                                        onClick={() => fileInputRef.current?.click()}
-                                        disabled={config.status !== 'connected' || isTyping}
-                                        className="p-2.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors shrink-0"
-                                    >
-                                        <Paperclip className="w-5 h-5" />
-                                    </button>
-                                    <input
-                                        title="Chat Input"
-                                        type="text"
-                                        value={chatInput}
-                                        onChange={(e) => setChatInput(e.target.value)}
-                                        onKeyDown={handleKeyDown}
-                                        placeholder="Assign a task to OpenSpider..."
-                                        className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-4 py-2.5 text-sm font-medium text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
-                                        disabled={config.status !== 'connected' || isTyping}
-                                    />
-                                    <button
-                                        title="Send Message"
-                                        type="button"
-                                        onClick={sendChatMessage}
-                                        disabled={(!chatInput.trim() && attachments.length === 0) || config.status !== 'connected' || isTyping}
-                                        className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white p-2.5 rounded-lg transition-colors flex items-center justify-center shrink-0"
-                                    >
-                                        <Send className="w-5 h-5" />
-                                    </button>
+                                    <div className="flex items-end gap-3 bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 focus-within:ring-2 focus-within:ring-blue-500/50 focus-within:border-blue-500/50 transition-all">
+                                        {/* Attach button — anchored to bottom-left */}
+                                        <button
+                                            title="Attach File"
+                                            type="button"
+                                            onClick={() => fileInputRef.current?.click()}
+                                            disabled={config.status !== 'connected' || isTyping}
+                                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors shrink-0 mb-0.5"
+                                        >
+                                            <Paperclip className="w-5 h-5" />
+                                        </button>
+
+                                        {/* Auto-growing textarea */}
+                                        <textarea
+                                            title="Chat Input"
+                                            rows={3}
+                                            value={chatInput}
+                                            onChange={(e) => {
+                                                setChatInput(e.target.value);
+                                                // Auto-resize: reset height then expand to scrollHeight, capped at ~8 lines
+                                                e.target.style.height = 'auto';
+                                                e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
+                                            }}
+                                            onKeyDown={handleKeyDown}
+                                            placeholder="Assign a task to OpenSpider...  (Shift+Enter for new line)"
+                                            className="flex-1 bg-transparent text-sm font-medium text-slate-200 placeholder-slate-500 focus:outline-none resize-none leading-relaxed min-h-[72px] max-h-[200px] overflow-y-auto"
+                                            disabled={config.status !== 'connected' || isTyping}
+                                            style={{ height: '72px' }}
+                                        />
+
+                                        {/* Send button — anchored to bottom-right */}
+                                        <button
+                                            title="Send Message"
+                                            type="button"
+                                            onClick={sendChatMessage}
+                                            disabled={(!chatInput.trim() && attachments.length === 0) || config.status !== 'connected' || isTyping}
+                                            className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white p-2 rounded-xl transition-colors flex items-center justify-center shrink-0 mb-0.5"
+                                        >
+                                            <Send className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                    <p className="text-[10px] text-slate-600 mt-1.5 text-right">Enter to send · Shift+Enter for new line</p>
                                 </div>
                             </div>
                         </section >
