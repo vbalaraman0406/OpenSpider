@@ -2230,8 +2230,8 @@ export default function App() {
                                     </div>
                                 )}
 
-                                {/* Chat input bar — Gemini-style: auto-expands from 3 to 8 lines, Enter sends, Shift+Enter adds newline */}
-                                <div className="px-4 pt-3 pb-4">
+                                {/* Chat input bar — Gemini-style layout */}
+                                <div className="px-4 pt-2 pb-3">
                                     <input
                                         ref={fileInputRef}
                                         type="file"
@@ -2240,48 +2240,69 @@ export default function App() {
                                         className="hidden"
                                         onChange={handleFileSelect}
                                     />
-                                    <div className="flex items-end gap-3 bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 focus-within:ring-2 focus-within:ring-blue-500/50 focus-within:border-blue-500/50 transition-all">
-                                        {/* Attach button — anchored to bottom-left */}
-                                        <button
-                                            title="Attach File"
-                                            type="button"
-                                            onClick={() => fileInputRef.current?.click()}
-                                            disabled={config.status !== 'connected' || isTyping}
-                                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors shrink-0 mb-0.5"
-                                        >
-                                            <Paperclip className="w-5 h-5" />
-                                        </button>
 
-                                        {/* Auto-growing textarea */}
+                                    {/*
+                                        Gemini layout: pill container with two rows
+                                        Row 1 – textarea (full width, no icons)
+                                        Row 2 – bottom toolbar: [📎 attach]  ·····  [Send ▶]
+                                    */}
+                                    <div className="flex flex-col bg-slate-900 border border-slate-700/60 rounded-2xl focus-within:ring-1 focus-within:ring-blue-500/60 focus-within:border-blue-500/40 transition-all overflow-hidden">
+
+                                        {/* Row 1: textarea */}
                                         <textarea
                                             title="Chat Input"
                                             rows={3}
                                             value={chatInput}
                                             onChange={(e) => {
                                                 setChatInput(e.target.value);
-                                                // Auto-resize: reset height then expand to scrollHeight, capped at ~8 lines
                                                 e.target.style.height = 'auto';
                                                 e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
                                             }}
                                             onKeyDown={handleKeyDown}
-                                            placeholder="Assign a task to OpenSpider...  (Shift+Enter for new line)"
-                                            className="flex-1 bg-transparent text-sm font-medium text-slate-200 placeholder-slate-500 focus:outline-none resize-none leading-relaxed min-h-[72px] max-h-[200px] overflow-y-auto"
+                                            placeholder="Assign a task to OpenSpider..."
+                                            className="w-full bg-transparent px-4 pt-4 pb-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none resize-none leading-relaxed min-h-[80px] max-h-[200px] overflow-y-auto font-medium"
                                             disabled={config.status !== 'connected' || isTyping}
-                                            style={{ height: '72px' }}
+                                            style={{ height: '80px' }}
                                         />
 
-                                        {/* Send button — anchored to bottom-right */}
-                                        <button
-                                            title="Send Message"
-                                            type="button"
-                                            onClick={sendChatMessage}
-                                            disabled={(!chatInput.trim() && attachments.length === 0) || config.status !== 'connected' || isTyping}
-                                            className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white p-2 rounded-xl transition-colors flex items-center justify-center shrink-0 mb-0.5"
-                                        >
-                                            <Send className="w-4 h-4" />
-                                        </button>
+                                        {/* Row 2: bottom toolbar — mirrors Gemini exactly */}
+                                        <div className="flex items-center justify-between px-3 pb-3 pt-1">
+                                            {/* Left: attach + future action icons */}
+                                            <div className="flex items-center gap-1">
+                                                <button
+                                                    title="Attach file"
+                                                    type="button"
+                                                    onClick={() => fileInputRef.current?.click()}
+                                                    disabled={config.status !== 'connected' || isTyping}
+                                                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-slate-400 hover:text-slate-200 hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-xs font-medium"
+                                                >
+                                                    <Paperclip className="w-4 h-4" />
+                                                    <span>Attach</span>
+                                                </button>
+                                                {attachments.length > 0 && (
+                                                    <span className="text-[10px] text-blue-400 font-semibold px-2 py-0.5 bg-blue-500/10 rounded-full border border-blue-500/20">
+                                                        {attachments.length} file{attachments.length > 1 ? 's' : ''}
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            {/* Right: hint + send button */}
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-[10px] text-slate-600 hidden sm:block">⏎ send · ⇧⏎ newline</span>
+                                                <button
+                                                    title="Send Message"
+                                                    type="button"
+                                                    onClick={sendChatMessage}
+                                                    disabled={(!chatInput.trim() && attachments.length === 0) || config.status !== 'connected' || isTyping}
+                                                    className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-white px-3 py-1.5 rounded-full text-xs font-semibold transition-all flex items-center gap-1.5"
+                                                >
+                                                    <Send className="w-3.5 h-3.5" />
+                                                    Send
+                                                </button>
+                                            </div>
+                                        </div>
+
                                     </div>
-                                    <p className="text-[10px] text-slate-600 mt-1.5 text-right">Enter to send · Shift+Enter for new line</p>
                                 </div>
                             </div>
                         </section >
