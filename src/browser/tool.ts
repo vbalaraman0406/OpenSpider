@@ -221,9 +221,12 @@ export class BrowserTool {
         const page = await this.ensurePage();
 
         try {
+            // Wait for element to be visible before clicking (vital for SPAs)
+            await page.waitForSelector(selector, { state: 'visible', timeout: 8000 });
+
             // Use ghost-cursor to execute a human-like point and click
             if (this.cursor) {
-                await this.cursor.actions.click({ target: selector });
+                await this.cursor.actions.click({ target: selector }, { waitForSelector: 5000 });
             } else {
                 // Fallback to robotic click
                 await page.hover(selector, { timeout: 5000 });
@@ -232,20 +235,32 @@ export class BrowserTool {
             }
             await humanDelay(400, 1000);
             return `Clicked on element matching "${selector}". Page may have updated.`;
-        } catch {
-            // Try text-based selector as fallback
+        } catch (e1: any) {
+            // Try text-based selector as fallback if it's not a complex CSS selector
+            const isComplex = selector.includes('.') || selector.includes('[') || selector.includes('#') || selector.includes('>');
+            const fallbackSelector = isComplex ? selector : `text="${selector}"`;
+
             try {
+                await page.waitForSelector(fallbackSelector, { state: 'visible', timeout: 5000 });
+
                 if (this.cursor) {
-                    await this.cursor.actions.click({ target: `text="${selector}"` });
+                    await this.cursor.actions.click({ target: fallbackSelector }, { waitForSelector: 5000 });
                 } else {
-                    await page.hover(`text="${selector}"`, { timeout: 3000 }).catch(() => { });
+                    await page.hover(fallbackSelector, { timeout: 3000 }).catch(() => { });
                     await humanDelay(100, 300);
-                    await page.click(`text="${selector}"`, { timeout: 5000 });
+                    await page.click(fallbackSelector, { timeout: 5000 });
                 }
                 await humanDelay(400, 1000);
-                return `Clicked on text "${selector}". Page may have updated.`;
-            } catch (e: any) {
-                return `Could not find element to click: "${selector}". Error: ${e.message}. Try using a different selector or reading the page content first.`;
+                return `Clicked on element "${fallbackSelector}". Page may have updated.`;
+            } catch (e2: any) {
+                // One final try with force Playwright click in case ghost-cursor can't calculate element bounds (e.g. elements with 0 height but visual overflow)
+                try {
+                    await page.click(selector, { timeout: 3000, force: true });
+                    await humanDelay(400, 1000);
+                    return `Force clicked on element "${selector}". Page may have updated.`;
+                } catch {
+                    return `Could not find element to click: "${selector}". Error: ${e1.message}. Try using a different selector or reading the page content first.`;
+                }
             }
         }
     }
@@ -257,9 +272,11 @@ export class BrowserTool {
         const page = await this.ensurePage();
 
         try {
+            await page.waitForSelector(selector, { state: 'visible', timeout: 8000 });
+
             // Use ghost-cursor to click the input field first
             if (this.cursor) {
-                await this.cursor.actions.click({ target: selector });
+                await this.cursor.actions.click({ target: selector }, { waitForSelector: 5000 });
             } else {
                 await page.click(selector, { timeout: 5000 });
             }
@@ -268,10 +285,10 @@ export class BrowserTool {
             await page.fill(selector, '', { timeout: 3000 });
             await page.type(selector, text, { delay: 50 + Math.floor(Math.random() * 70) });
             return `Typed "${text.substring(0, 80)}${text.length > 80 ? '...' : ''}" into element "${selector}".`;
-        } catch {
+        } catch (e1: any) {
             try {
                 const input = page.locator(selector).first();
-                await input.click({ timeout: 3000 });
+                await input.click({ timeout: 3000, force: true });
                 await humanDelay(150, 400);
                 await input.type(text, { delay: 60 + Math.floor(Math.random() * 60) });
                 return `Typed "${text.substring(0, 80)}" into element "${selector}".`;
@@ -280,7 +297,7 @@ export class BrowserTool {
                     await page.keyboard.type(text, { delay: 70 });
                     return `Typed "${text.substring(0, 80)}" using keyboard input (no specific element targeted).`;
                 } catch (e2: any) {
-                    return `Failed to type into "${selector}": ${e2.message}`;
+                    return `Failed to type into "${selector}": ${e1.message}`;
                 }
             }
         }
