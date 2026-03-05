@@ -77,7 +77,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 path: c.path,
                 secure: c.secure,
                 httpOnly: c.httpOnly,
-                sameSite: c.sameSite === 'unspecified' || c.sameSite === 'no_restriction' ? 'None' : c.sameSite,
+                sameSite: ['unspecified', 'no_restriction'].includes(c.sameSite)
+                    ? 'None'
+                    : (c.sameSite === 'lax' ? 'Lax' : 'Strict'),
                 expires: c.expirationDate || -1
             }));
 
