@@ -35,6 +35,18 @@ Agents can navigate to any URL and extract page content using a headless Playwri
 - Headless Chromium via Playwright Core
 - Configurable via `workspace/browser.json`
 
+#### Bypassing Bot Detection (Cookie Injection)
+
+For websites with strict bot protection (like Cloudflare) or sites requiring manual login, OpenSpider includes a Chrome Extension that can sync your personal browser session into the agent's headless browser.
+
+1. Install the OpenSpider Browser Relay extension in Google Chrome.
+2. Get your securely generated API token by running `openspider token`.
+3. Paste the token into the Extension popup's **Gateway Token** field.
+4. Log into the protected website normally as a human in Chrome.
+5. Click **"Export Cookies to OpenSpider"** in the extension popup.
+
+The agent will now bypass login screens and Cloudflare blocks because it is authenticated using your exact session!
+
 ---
 
 ### File Operations

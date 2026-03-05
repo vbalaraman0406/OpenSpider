@@ -1,0 +1,10 @@
+[
+  {
+    "name": "Daily S&P 500 & NASDAQ Market Snapshot",
+    "intervalHours": 24,
+    "preferredTime": "06:00",
+    "prompt": "Fetch the latest S&P 500 and NASDAQ market data and send a Daily S&P 500 & NASDAQ Market Snapshot email to BOTH coolvishnu@gmail.com AND cskums@gmail.com. Include key indices, top movers, and market summary.",
+    "lastRun": null,
+    "enabled": true
+  }
+]

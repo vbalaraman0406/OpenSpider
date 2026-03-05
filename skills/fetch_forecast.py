@@ -1,68 +1,64 @@
-import urllib.request
-from html.parser import HTMLParser
-import re
+import json, requests
 
-url = 'https://forecast.weather.gov/MapClick.php?CityName=Vancouver&state=WA&site=PQR&textField1=45.6387&textField2=-122.6615'
-req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-resp = urllib.request.urlopen(req, timeout=15)
-html = resp.read().decode('utf-8', errors='replace')
+url = 'https://api.weather.gov/gridpoints/PQR/100,120/forecast'
+headers = {'User-Agent': 'OpenSpider/1.0 (weather@openspider.ai)', 'Accept': 'application/geo+json'}
+resp = requests.get(url, headers=headers, timeout=15)
+data = resp.json()
 
-# Extract the 7-day forecast tombstone section
-import re
+periods = data['properties']['periods']
 
-# Get forecast icons/periods from tombstone
-periods = re.findall(r'<p class="period-name">(.*?)</p>', html, re.DOTALL)
-short_desc = re.findall(r'<p class="short-desc">(.*?)</p>', html, re.DOTALL)
-temps = re.findall(r'<p class="temp temp-(high|low)">(.*?)</p>', html, re.DOTALL)
+# Check for alerts
+alerts_url = 'https://api.weather.gov/alerts/active?point=45.6387,-122.6615'
+try:
+    resp2 = requests.get(alerts_url, headers=headers, timeout=15)
+    alerts_data = resp2.json()
+    alerts = alerts_data.get('features', [])
+    alert_texts = []
+    for a in alerts:
+        props = a.get('properties', {})
+        alert_texts.append(f"{props.get('event','Unknown')}: {props.get('headline','No details')}")
+except:
+    alert_texts = []
 
-print('=== PERIODS ===')
-for i, p in enumerate(periods):
-    p_clean = re.sub(r'<.*?>', ' ', p).strip()
-    print(f'{i}: {p_clean}')
+rows = []
+for p in periods:
+    name = p['name']
+    temp = p['temperature']
+    unit = p['temperatureUnit']
+    is_day = p['isDaytime']
+    high_low = f"{'High' if is_day else 'Low'}: {temp}°{unit}"
+    precip = p['probabilityOfPrecipitation']['value']
+    precip_str = f"{precip}%" if precip is not None else 'N/A'
+    wind = f"{p['windSpeed']} {p['windDirection']}"
+    short = p['shortForecast']
+    detailed = p['detailedForecast']
+    rows.append({'name': name, 'high_low': high_low, 'conditions': short, 'precip': precip_str, 'wind': wind, 'detailed': detailed})
 
-print('\n=== SHORT DESC ===')
-for i, s in enumerate(short_desc):
-    s_clean = re.sub(r'<.*?>', ' ', s).strip()
-    print(f'{i}: {s_clean}')
-
-print('\n=== TEMPS ===')
-for i, t in enumerate(temps):
-    print(f'{i}: {t[0]} - {t[1]}')
-
-# Extract detailed forecast
-detailed = re.findall(r'<div class="col-sm-10 forecast-text">(.*?)</div>', html, re.DOTALL)
-print('\n=== DETAILED FORECAST ===')
-for i, d in enumerate(detailed):
-    d_clean = re.sub(r'<.*?>', '', d).strip()
-    print(f'{i}: {d_clean}')
-
-# Extract alerts
-alerts_section = re.findall(r'<div[^>]*class="[^"]*alert[^"]*"[^>]*>(.*?)</div>', html, re.DOTALL | re.IGNORECASE)
-print('\n=== ALERTS ===')
-if alerts_section:
-    for a in alerts_section:
-        a_clean = re.sub(r'<.*?>', '', a).strip()
-        if a_clean:
-            print(a_clean)
+# WhatsApp summary
+wa_lines = ['🌦️ Vancouver, WA 5-Day Forecast\n']
+for r in rows:
+    wa_lines.append(f"*{r['name']}*: {r['conditions']}, {r['high_low']}, Precip: {r['precip']}, Wind: {r['wind']}")
+if alert_texts:
+    wa_lines.append('\n⚠️ ACTIVE ALERTS:')
+    for at in alert_texts:
+        wa_lines.append(f"  • {at}")
 else:
-    # Try another pattern for hazards
-    hazards = re.findall(r'<div[^>]*id="[^"]*hazard[^"]*"[^>]*>(.*?)</div>', html, re.DOTALL | re.IGNORECASE)
-    if hazards:
-        for h in hazards:
-            h_clean = re.sub(r'<.*?>', '', h).strip()
-            if h_clean:
-                print(h_clean)
-    else:
-        # Search for any watches/warnings/advisories text
-        alert_matches = re.findall(r'((?:Watch|Warning|Advisory|Alert|Hazard)[^<]{0,200})', html, re.IGNORECASE)
-        if alert_matches:
-            for m in alert_matches[:5]:
-                print(m.strip())
-        else:
-            print('No active alerts found.')
+    wa_lines.append('\n✅ No active weather alerts.')
+wa_summary = '\n'.join(wa_lines)
 
-# Extract precip percentages from icon URLs
-precip = re.findall(r'forecast-icon.*?src="[^"]*?(\d+\.png|[^"]*?)"[^>]*alt="([^"]*?)"', html, re.DOTALL)
-print('\n=== ICON ALT TEXT ===')
-for i, p in enumerate(precip):
-    print(f'{i}: {p}')
+# Markdown table for email
+alert_cell = '; '.join(alert_texts) if alert_texts else 'None'
+md_lines = ['## 🌦️ Vancouver, WA — 5-Day Weather Forecast', '', '*Generated from National Weather Service (weather.gov)*', '']
+md_lines.append('| Period | Conditions | High/Low | Precip % | Wind | Alerts |')
+md_lines.append('|--------|-----------|----------|----------|------|--------|')
+for r in rows:
+    md_lines.append(f"| {r['name']} | {r['conditions']} | {r['high_low']} | {r['precip']} | {r['wind']} | {alert_cell} |")
+md_lines.append('')
+md_lines.append('### Detailed Forecasts')
+md_lines.append('')
+for r in rows:
+    md_lines.append(f"**{r['name']}**: {r['detailed']}\n")
+md_table = '\n'.join(md_lines)
+
+output = {'wa_summary': wa_summary, 'md_table': md_table, 'alert_count': len(alert_texts)}
+print(json.dumps(output))

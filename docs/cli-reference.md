@@ -78,6 +78,16 @@ Opens `http://localhost:4001` automatically.
 
 ---
 
+### `openspider token`
+
+Print the secure Gateway Token required to authenticate the OpenSpider Browser Relay Chrome Extension.
+
+```bash
+openspider token
+```
+
+---
+
 ### `openspider status`
 
 Show the current gateway status, version, provider, and PM2 uptime.

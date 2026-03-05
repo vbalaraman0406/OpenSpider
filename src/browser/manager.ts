@@ -146,9 +146,30 @@ export class BrowserManager {
         }
     }
 
+    async injectCookies(profileName: string, cookies: any[]) {
+        try {
+            const context = await this.getProfileContext(profileName);
+            await context.addCookies(cookies);
+            console.log(`[BrowserManager] Successfully injected ${cookies.length} cookies into profile '${profileName}'`);
+        } catch (e) {
+            console.error(`[BrowserManager] Failed to inject cookies:`, e);
+            throw e;
+        }
+    }
+
     async closeAll() {
         for (const name of this.contexts.keys()) {
             await this.closeProfile(name);
         }
     }
+}
+
+// Singleton browser manager
+let sharedManager: BrowserManager | null = null;
+
+export function getManager(): BrowserManager {
+    if (!sharedManager) {
+        sharedManager = new BrowserManager();
+    }
+    return sharedManager;
 }

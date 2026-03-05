@@ -99,7 +99,7 @@ export class BrowserRelay {
 // Auto-start if run directly for standalone usage, or wait to be imported by the orchestrator
 if (require.main === module) {
     const port = parseInt(process.env.OPENSPIDER_RELAY_PORT || '18792', 10);
-    const token = process.env.OPENSPIDER_GATEWAY_TOKEN;
+    const token = process.env.DASHBOARD_API_KEY;
     const relay = new BrowserRelay({ port, ...(token ? { gatewayToken: token } : {}) });
     relay.start();
 }
