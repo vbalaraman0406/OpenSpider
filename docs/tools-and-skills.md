@@ -128,15 +128,39 @@ openspider tools email setup
 openspider tools email test --to your@email.com
 ```
 
-**Prerequisites:**
-1. A Google Cloud project with Gmail API enabled
-2. An OAuth 2.0 Client ID (Desktop application type)
-3. Download the client secret JSON from [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
+**Prerequisites — Google Cloud Setup:**
 
-The setup wizard will:
-1. Copy your credentials to `workspace/gmail_credentials.json`
-2. Open a browser for Google OAuth authentication
-3. Save the token to `workspace/gmail_token.json`
+OpenSpider agents require an OAuth token with both `gmail.send` and `gmail.readonly` scopes to act autonomously on your behalf. Since this token grants access to your personal inbox, you must generate it securely via your own Google Cloud project.
+
+1. Go to the [Google Cloud Console](https://console.cloud.google.com/).
+2. Click the project dropdown in the top left and create a **New Project** (e.g. "OpenSpider Mail").
+3. Go to **APIs & Services > Library**.
+4. Search for "**Gmail API**" and click **Enable**.
+5. Go to **APIs & Services > OAuth consent screen**.
+   - Choose **External** user type and click Create.
+   - Fill in App Name ("OpenSpider"), user support email, and developer contact information.
+   - Click **Save and Continue** until you reach the **Test Users** screen.
+   - Click **Add Users** and add your own personal Gmail address. Click Save.
+6. Go to **APIs & Services > Credentials**.
+7. Click **+ Create Credentials > OAuth client ID**.
+8. Select **Desktop app** as the Application type. Name it "OpenSpider Desktop" and click Create.
+9. An overlay will appear. Click **Download JSON** to save the `client_secret_xyz.json` file to your computer.
+
+#### Running the Setup Wizard
+
+Once you have downloaded the JSON file, configure OpenSpider:
+
+1. Run the setup wizard in your terminal:
+   ```bash
+   openspider tools email setup
+   ```
+2. Paste the **absolute path** to the downloaded JSON file (e.g. `/Users/YourName/Downloads/client_secret_xyz.json`).
+3. The wizard will copy this file to `workspace/gmail_credentials.json`.
+4. A browser window will automatically open asking you to log into Google and grant permissions.
+5. Click **Continue**, select the test user email you added earlier, and check both the "Send" and "Read" boxes.
+6. Once you see "Authentication flows completed," OpenSpider saves the access token to `workspace/gmail_token.json`.
+
+Your agents can now autonomously read and send emails without needing to re-authenticate!
 
 ---
 
