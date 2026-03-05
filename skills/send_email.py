@@ -11,6 +11,7 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+from google.auth.exceptions import RefreshError
 
 # If modifying these scopes, delete the file token.json.
 SCOPES = [
@@ -226,8 +227,16 @@ def load_credentials():
 
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
+            try:
+                creds.refresh(Request())
+            except RefreshError:
+                # Scopes likely changed or token revoked. Delete stale token and force re-auth.
+                print("Token refresh failed (likely due to expanded scopes). Forcing re-authentication...")
+                if os.path.exists(token_path):
+                    os.remove(token_path)
+                creds = None
+
+        if not creds:
             if not os.path.exists(creds_path):
                 print(f"Error: Missing {creds_path}.")
                 print("Please run `openspider tools email setup` to configure OAuth credentials.")
