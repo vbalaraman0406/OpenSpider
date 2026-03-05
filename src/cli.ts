@@ -458,7 +458,8 @@ program
     .command('status')
     .description('Show current OpenSpider gateway status and configuration')
     .action(() => {
-        const rootDir = __dirname.endsWith('src') ? path.join(__dirname, '..') : path.join(__dirname, '..');
+        // Handle both dev mode (src) and compiled mode (dist)
+        const rootDir = __dirname.endsWith('src') || __dirname.endsWith('dist') ? path.join(__dirname, '..') : __dirname;
         const envPath = path.join(rootDir, '.env');
         require('dotenv').config({ path: envPath });
 
