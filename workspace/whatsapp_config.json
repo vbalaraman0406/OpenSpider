@@ -20,6 +20,10 @@
     {
       "jid": "120363023776108773@g.us",
       "mode": "mention"
+    },
+    {
+      "jid": "120363423852747118@g.us",
+      "mode": "mention"
     }
   ],
   "botMode": "mention"

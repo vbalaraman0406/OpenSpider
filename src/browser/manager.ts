@@ -51,8 +51,6 @@ const STEALTH_ARGS = [
     '--start-maximized',
     '--window-size=1366,768',
     // Disable various automation-hint APIs
-    '--disable-web-security=false',
-    '--allow-running-insecure-content',
     // Disable save-password popup
     '--disable-save-password-bubble',
     // Clipboard etc. — avoid permission dialogs
@@ -119,24 +117,6 @@ export class BrowserManager {
             viewport: { width: 1366, height: 768 },
             // Accept all the permissions a real user would have consented to
             permissions: ['geolocation', 'notifications'],
-            // Realistic extra HTTP headers
-            extraHTTPHeaders: {
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Accept-Encoding': 'gzip, deflate, br',
-            },
-        });
-
-        // Override navigator.webdriver via init script (belt-and-suspenders on top of stealth plugin)
-        await context.addInitScript(() => {
-            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-            Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
-            Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
-            // Remove playwright-specific chrome.runtime signals
-            // @ts-ignore
-            if (window.chrome) {
-                // @ts-ignore
-                window.chrome.runtime = {};
-            }
         });
 
         if (pConfig.color) {
