@@ -8,7 +8,7 @@ OpenSpider is an open-source, self-hosted AI agent system that connects to Whats
 - **Worker agents** (⚡ Cipher the Coder, 🔮 Oracle the Researcher, 🌐 Browser Specialist) execute specific tasks using specialized tools
 - Results flow back through the Manager for a polished final response
 
-📖 **Full Documentation**: [https://openspider.dev](https://openspider.dev) *(or run the docs site locally)*
+📖 **Full Documentation**: [https://vish-cloud.wl.r.appspot.com](https://vish-cloud.wl.r.appspot.com) *(or run the docs site locally)*
 
 ---
 
@@ -118,7 +118,7 @@ Each agent has 4 **pillar files** in `workspace/agents/<agent-id>/`:
 
 On **first run**, defaults from `workspace-defaults/` are automatically copied to `workspace/`. Edit the files in `workspace/agents/` to customize — changes take effect **immediately** (no rebuild needed).
 
-See [Agent Configuration](https://openspider.dev/agents) for detailed docs.
+See [Agent Configuration](https://vish-cloud.wl.r.appspot.com/agents) for detailed docs.
 
 ## Cron Scheduling
 
