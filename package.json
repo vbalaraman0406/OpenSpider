@@ -7,6 +7,7 @@
     "openspider": "./dist/cli.js"
   },
   "scripts": {
+    "postinstall": "cd dashboard && npm install --no-fund --no-audit",
     "start": "ts-node src/index.ts",
     "dev:backend": "nodemon src/index.ts",
     "dev:frontend": "cd dashboard && npm run dev",
