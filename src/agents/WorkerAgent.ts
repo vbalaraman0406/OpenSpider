@@ -111,8 +111,8 @@ ${context.join('\n')}
             { role: 'user', content: instruction }
         ];
 
-        const maxLoops = 40; // Raised from 25 — research tasks need: navigate→read→click→read×N
-        const warnAtIteration = 32; // Inject wrap-up warning when 8 iterations remain
+        const maxLoops = 80; // Raised from 40 — deeply nested SPAs like F1 Fantasy need many steps (navigate→read→click→read×N)
+        const warnAtIteration = 70; // Inject wrap-up warning when 10 iterations remain
 
         // Autonomy Loop
         for (let i = 0; i < maxLoops; i++) {
