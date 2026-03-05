@@ -1,0 +1,10 @@
+{
+    "name": "Browser Specialist",
+    "role": "Advanced Headless Navigation",
+    "emoji": "🕸️",
+    "allowedTools": [
+        "browse_web"
+    ],
+    "maxDelegationDepth": 0,
+    "budgetTokens": 100000
+}
