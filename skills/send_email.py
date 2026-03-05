@@ -13,7 +13,10 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 # If modifying these scopes, delete the file token.json.
-SCOPES = ['https://www.googleapis.com/auth/gmail.send']
+SCOPES = [
+    'https://www.googleapis.com/auth/gmail.send',
+    'https://www.googleapis.com/auth/gmail.readonly'
+]
 
 # ──────────────────────────────────────────────────
 # Markdown → HTML converter (no external dependencies)
@@ -229,6 +232,8 @@ def load_credentials():
                 print(f"Error: Missing {creds_path}.")
                 print("Please run `openspider tools email setup` to configure OAuth credentials.")
                 return None
+            
+            # Since scopes changed, we must force a new browser login if the token got invalid/refused
             flow = InstalledAppFlow.from_client_secrets_file(creds_path, SCOPES)
             creds = flow.run_local_server(port=0)
         with open(token_path, 'w') as token:
