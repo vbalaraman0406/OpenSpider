@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { PersonaShell } from './PersonaShell';
-import { sendWhatsAppMessage, sendWhatsAppAudio } from '../whatsapp';
+import { sendWhatsAppMessage, sendWhatsAppAudio, getParticipatingGroups } from '../whatsapp';
 
 export class WorkerAgent {
     private llm: LLMProvider;
@@ -75,10 +75,10 @@ Available tools you can request in your JSON response:
     - Scroll:   { "action": "browse_web", "command": "scroll", "args": "down" }
     - Close:    { "action": "browse_web", "command": "close" }
 - wait_for_user: { "message": "Please log in to your account" } (Pause and ask the user to do something in the browser, like logging in. Waits up to 120 seconds.)
-- schedule_task: { "command": "24", "content": "Fetch Vancouver WA weather and send to user via WhatsApp", "filename": "Daily Weather Brief" } (Schedule a recurring task that runs automatically. "command" = interval in hours, "content" = the prompt/task to execute, "filename" = short name for the job. The scheduler will auto-execute this task at the specified interval using the Manager Agent.)
+- schedule_task: { "command": "24", "content": "Fetch Vancouver WA weather and send to user via WhatsApp", "filename": "Daily Weather Brief" } (Schedule OR UPDATE a recurring task. If a job with the same "filename" already exists it will be UPDATED in place — use this when the user asks to change/modify an existing job. To create or update an interval-based job: "command" = interval in hours (e.g. "24"). To create or update a time-of-day job (runs once daily at a fixed time): "command" = "preferredTime:HH:MM" (e.g. "preferredTime:07:00"). "content" = the prompt/task to execute, "filename" = short name for the job (must match exactly to update).)
 - message_agent: { "target": "Role Name", "message": "Text to send" } (Delegate a sub-task to a specialized sub-agent)
 - send_email: { "to": "user@example.com", "subject": "Hello", "body": "My message here" } (Send an outbound email natively using OAuth.)
-- send_whatsapp: { "message": "Hello!" } (Send a WhatsApp message to the user. The system will automatically route to the configured user's WhatsApp number. Use this whenever the task requires sending results via WhatsApp.)
+- send_whatsapp: { "message": "Hello!", "to": "Engineering Team" } (Send a WhatsApp message. "to" is optional – if omitted, the message goes to the default configured owner. You can provide a comma-separated list of phone numbers, the word "default", OR the exact name of a WhatsApp Group the bot is in to route to multiple destinations at once.)
 - send_voice: { "message": "Hello, how are you?", "args": "voice_id" } (Send a voice note to the user via WhatsApp. The text in "message" will be converted to speech using ElevenLabs TTS and delivered as an audio message. Use "args" to optionally specify a voice ID. Available voices:
   • "21m00Tcm4TlvDq8ikWAM" = Rachel (default, warm female)
   • "EXAVITQu4vr4xnSDxMaL" = Bella (soft female)
@@ -155,7 +155,7 @@ ${context.join('\n')}
                         args: { type: "string" },
                         target: { type: "string" },
                         message: { type: "string" },
-                        to: { type: "string" },
+                        to: { type: "string", description: "Optional email address or phone number target." },
                         subject: { type: "string" },
                         body: { type: "string" },
                         result: { type: "string", description: "The final answer or result string when action is final_answer" },
@@ -239,10 +239,22 @@ ${context.join('\n')}
                     console.log(`[Worker - ${this.role}] Requesting user interaction: ${waitMessage}`);
                     toolOutput = await this.browserTool.execute({ action: 'wait_for_user', message: waitMessage });
                 } else if (response.action === 'schedule_task') {
-                    // command = interval in hours, content = the prompt, filename = job name
-                    const rawInterval = parseFloat(response.command || '24');
+                    // command = interval in hours OR "preferredTime:HH:MM" for time-of-day scheduling
+                    // content = the prompt, filename = job name (used as upsert key)
+                    const rawCommand = (response.command || '24').trim();
                     const MIN_INTERVAL_HOURS = 0.25; // 15 minutes minimum to prevent LLM spam
-                    const intervalHours = (!rawInterval || rawInterval < MIN_INTERVAL_HOURS) ? 24 : rawInterval;
+
+                    // Parse preferredTime syntax: "preferredTime:07:00"
+                    let preferredTime: string | undefined;
+                    let intervalHours = 24;
+                    const preferredTimeMatch = rawCommand.match(/^preferredTime:(\d{1,2}:\d{2})$/i);
+                    if (preferredTimeMatch && preferredTimeMatch[1]) {
+                        preferredTime = preferredTimeMatch[1];
+                    } else {
+                        const rawInterval = parseFloat(rawCommand);
+                        intervalHours = (!rawInterval || rawInterval < MIN_INTERVAL_HOURS) ? 24 : rawInterval;
+                    }
+
                     const taskPrompt = (response.content || response.message || '').substring(0, 2000);
                     const jobName = (response.filename || 'Scheduled Task').substring(0, 200);
 
@@ -255,23 +267,48 @@ ${context.join('\n')}
                             if (fs.existsSync(cronPath)) {
                                 jobs = JSON.parse(fs.readFileSync(cronPath, 'utf-8'));
                             }
-                            // SECURITY: Cap at 20 jobs max even from agent-scheduled tasks
-                            if (jobs.length >= 20) {
-                                toolOutput = 'Error: Maximum of 20 cron jobs reached. Delete an existing job before scheduling a new one.';
-                            } else {
-                                const newJob = {
-                                    id: 'cron-' + Math.random().toString(36).substr(2, 9),
-                                    description: jobName,
-                                    prompt: taskPrompt,
-                                    intervalHours,
-                                    lastRunTimestamp: Date.now(),
-                                    agentId: 'manager',
-                                    status: 'enabled'
-                                };
-                                jobs.push(newJob);
+
+                            // Upsert: check for existing job with the same name (case-insensitive)
+                            const existingIndex = jobs.findIndex(
+                                (j: any) => j.description.toLowerCase() === jobName.toLowerCase()
+                            );
+
+                            if (existingIndex !== -1) {
+                                // UPDATE existing job in-place
+                                const existing = jobs[existingIndex];
+                                existing.prompt = taskPrompt;
+                                existing.intervalHours = intervalHours;
+                                if (preferredTime) {
+                                    existing.preferredTime = preferredTime;
+                                } else {
+                                    delete existing.preferredTime; // Clear time-of-day if switching back to interval
+                                }
                                 fs.writeFileSync(cronPath, JSON.stringify(jobs, null, 2));
-                                console.log(`[Worker - ${this.role}] Scheduled recurring task: "${jobName}" every ${intervalHours}h`);
-                                toolOutput = `✅ Successfully scheduled recurring task!\n- Name: ${jobName}\n- Interval: Every ${intervalHours} hours\n- Task: ${taskPrompt.substring(0, 100)}...\n- Status: Enabled\n- ID: ${newJob.id}`;
+                                const scheduleStr = preferredTime ? `daily at ${preferredTime}` : `every ${intervalHours}h`;
+                                console.log(`[Worker - ${this.role}] Updated existing cron job: "${jobName}" → ${scheduleStr}`);
+                                toolOutput = `✅ Successfully updated existing cron job!\n- Name: ${jobName}\n- Schedule: ${scheduleStr}\n- New Task: ${taskPrompt.substring(0, 100)}...\n- Status: ${existing.status || 'enabled'}\n- ID: ${existing.id}`;
+                            } else {
+                                // CREATE new job (only if under the cap)
+                                // SECURITY: Cap at 20 jobs max even from agent-scheduled tasks
+                                if (jobs.length >= 20) {
+                                    toolOutput = 'Error: Maximum of 20 cron jobs reached. Delete an existing job before scheduling a new one.';
+                                } else {
+                                    const newJob: any = {
+                                        id: 'cron-' + Math.random().toString(36).substr(2, 9),
+                                        description: jobName,
+                                        prompt: taskPrompt,
+                                        intervalHours,
+                                        lastRunTimestamp: 0, // Run on next heartbeat
+                                        agentId: 'manager',
+                                        status: 'enabled'
+                                    };
+                                    if (preferredTime) newJob.preferredTime = preferredTime;
+                                    jobs.push(newJob);
+                                    fs.writeFileSync(cronPath, JSON.stringify(jobs, null, 2));
+                                    const scheduleStr = preferredTime ? `daily at ${preferredTime}` : `every ${intervalHours}h`;
+                                    console.log(`[Worker - ${this.role}] Scheduled new recurring task: "${jobName}" ${scheduleStr}`);
+                                    toolOutput = `✅ Successfully scheduled recurring task!\n- Name: ${jobName}\n- Schedule: ${scheduleStr}\n- Task: ${taskPrompt.substring(0, 100)}...\n- Status: Enabled\n- ID: ${newJob.id}`;
+                                }
                             }
                         } catch (e: any) {
                             toolOutput = `Failed to schedule task: ${e.message}`;
@@ -301,18 +338,95 @@ ${context.join('\n')}
                 } else if (response.action === 'send_whatsapp' && response.message) {
                     console.log(`[Worker - ${this.role}] Sending WhatsApp message...`);
                     try {
-                        // Determine the user's WhatsApp JID from the config
+                        let targetJids: string[] = [];
+
+                        // Determine the user's default WhatsApp JID and group policies from the config
                         const configPath = path.join(process.cwd(), 'workspace', 'whatsapp_config.json');
-                        let userJid = '';
+                        let defaultJid = '';
+                        let groupPolicy = 'disabled';
+                        let allowedGroupJids: string[] = [];
+
                         if (fs.existsSync(configPath)) {
                             const waConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
                             if (waConfig.allowedDMs && waConfig.allowedDMs.length > 0) {
                                 const rawNumber = waConfig.allowedDMs[0].replace(/\D/g, '');
-                                userJid = `${rawNumber}@s.whatsapp.net`;
+                                defaultJid = `${rawNumber}@s.whatsapp.net`;
+                            }
+                            if (waConfig.groupPolicy) groupPolicy = waConfig.groupPolicy;
+                            if (waConfig.allowedGroups && Array.isArray(waConfig.allowedGroups)) {
+                                allowedGroupJids = waConfig.allowedGroups.map((g: any) => g.jid);
                             }
                         }
-                        if (!userJid) {
-                            toolOutput = 'Error: No WhatsApp user configured. Add a phone number to the allowedDMs list in Channels > WhatsApp config.';
+
+                        // If the agent explicitly provided a 'to' string, parse it for numbers, keywords, or group names
+                        if (response.to && response.to.trim().length > 0) {
+                            // Fetch groups once just in case we need them
+                            let participatingGroups: Array<{ id: string, subject: string }> = [];
+                            try {
+                                if (groupPolicy !== 'disabled') {
+                                    const allGroups = await getParticipatingGroups();
+                                    if (groupPolicy === 'allowlist') {
+                                        participatingGroups = allGroups.filter((g: any) => allowedGroupJids.includes(g.id));
+                                    } else {
+                                        participatingGroups = allGroups; // open policy
+                                    }
+                                }
+                            } catch (e) {
+                                console.error('[Worker] Failed to fetch participating groups:', e);
+                            }
+
+                            // Split by commas or semicolons
+                            const recipients = response.to.split(/[,;]/);
+                            for (let r of recipients) {
+                                r = r.trim();
+                                if (!r) continue;
+                                const lowerR = r.toLowerCase();
+
+                                if (lowerR === 'me' || lowerR === 'default' || lowerR === 'owner' || lowerR === 'user') {
+                                    if (defaultJid) targetJids.push(defaultJid);
+                                } else if (r.trim().endsWith('@g.us') || r.trim().endsWith('@s.whatsapp.net')) {
+                                    // Raw JID passthrough — support direct group/DM JIDs
+                                    const cleanJid = r.trim();
+                                    if (cleanJid.endsWith('@g.us')) {
+                                        if (groupPolicy === 'disabled') {
+                                            console.warn(`[Worker - ${this.role}] Warning: Group routing is disabled by policy. Skipping ${cleanJid}`);
+                                        } else if (groupPolicy === 'allowlist' && !allowedGroupJids.includes(cleanJid)) {
+                                            console.warn(`[Worker - ${this.role}] Warning: Group ${cleanJid} is not in the Allowlist. Skipping.`);
+                                        } else {
+                                            targetJids.push(cleanJid);
+                                        }
+                                    } else {
+                                        targetJids.push(cleanJid);
+                                    }
+                                } else {
+                                    // See if it has digits, treat as phone number
+                                    const rawNumber = r.replace(/\D/g, '');
+                                    if (rawNumber.length > 5 && /^\+?\d+$/.test(r.replace(/\s/g, ''))) {
+                                        targetJids.push(`${rawNumber}@s.whatsapp.net`);
+                                    } else {
+                                        // Assume it's a group name — case-insensitive match
+                                        const matchedGroup = participatingGroups.find(g => g.subject.toLowerCase() === lowerR || g.subject.toLowerCase().includes(lowerR));
+                                        if (matchedGroup) {
+                                            targetJids.push(matchedGroup.id);
+                                        } else {
+                                            console.warn(`[Worker - ${this.role}] Warning: Could not resolve WhatsApp target "${r}" to a known format or Group Name. Evaluated against ${participatingGroups.length} groups.`);
+                                        }
+                                    }
+                                }
+                            }
+                            // Also if the agent gave nothing extractable, try falling back
+                            if (targetJids.length === 0 && defaultJid) {
+                                targetJids.push(defaultJid);
+                            }
+                        } else {
+                            if (defaultJid) targetJids.push(defaultJid);
+                        }
+
+                        // Remove duplicates
+                        targetJids = [...new Set(targetJids)];
+
+                        if (targetJids.length === 0) {
+                            toolOutput = 'Error: No WhatsApp target resolved! Could not map "' + response.to + '" to a known group name or phone number. Add a phone number to allowedDMs or ensure the exact group name is used.';
                         } else {
                             // Get agent persona name for the header
                             let agentName = 'OpenSpider';
@@ -323,8 +437,23 @@ ${context.join('\n')}
                             } catch (e) { }
 
                             const formattedMsg = `✨ *${agentName}*\n\n${response.message}`;
-                            await sendWhatsAppMessage(userJid, formattedMsg);
-                            toolOutput = `✅ WhatsApp message sent successfully to ${userJid}.`;
+                            let sentCount = 0;
+                            const failedJids: string[] = [];
+                            for (const jid of targetJids) {
+                                try {
+                                    await sendWhatsAppMessage(jid, formattedMsg);
+                                    sentCount++;
+                                } catch (e: any) {
+                                    console.error(`Failed to send to ${jid}:`, e);
+                                    failedJids.push(`${jid}: ${e.message}`);
+                                }
+                            }
+
+                            if (failedJids.length > 0) {
+                                toolOutput = `⚠️ Partial success or complete failure. Sent to ${sentCount} recipient(s). Failed to send to ${failedJids.length} recipient(s): \n${failedJids.join('\n')}`;
+                            } else {
+                                toolOutput = `✅ WhatsApp message sent successfully to ${sentCount} recipient(s): ${targetJids.join(', ')}.`;
+                            }
                         }
                     } catch (e: any) {
                         toolOutput = `Failed to send WhatsApp message: ${e.message}`;

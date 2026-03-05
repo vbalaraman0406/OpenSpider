@@ -87,15 +87,22 @@ print(json.dumps({'text': result['text'].strip()}))
 }
 
 export async function getParticipatingGroups(): Promise<Array<{ id: string, subject: string }>> {
-    if (!globalSocket) return [];
+    if (!globalSocket) {
+        console.warn("[WhatsApp] Cannot fetch groups: Socket not connected");
+        return [];
+    }
     try {
+        console.log("[WhatsApp] Fetching all participating groups...");
         const groups = await globalSocket.groupFetchAllParticipating();
-        return Object.values(groups).map((g: any) => ({
+        console.log("[DEBUG] Raw groups object keys count:", Object.keys(groups || {}).length);
+        const groupList = Object.values(groups).map((g: any) => ({
             id: g.id,
             subject: g.subject || 'Unknown Group'
         }));
-    } catch (e) {
-        console.error("[WhatsApp] Failed to fetch participating groups", e);
+        console.log(`[WhatsApp] Successfully fetched ${groupList.length} participating groups.`);
+        return groupList;
+    } catch (e: any) {
+        console.error("[WhatsApp] Failed to fetch participating groups:", e.message);
         return [];
     }
 }

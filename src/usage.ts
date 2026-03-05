@@ -74,8 +74,8 @@ export function logUsage(entry: UsageEntry): { isAlert: boolean, message?: strin
     try {
         fs.appendFileSync(USAGE_FILE, JSON.stringify(entry) + '\n', 'utf-8');
 
-        // Threshold check: alert if a single hit exceeds 5,000 tokens
-        if (entry.usage && entry.usage.totalTokens > 5000) {
+        // Threshold check: alert if a single hit exceeds 25,000 tokens
+        if (entry.usage && entry.usage.totalTokens > 25000) {
             return {
                 isAlert: true,
                 message: `⚠️ High Token Usage Alert: ${entry.agentId || 'Agent'} consumed ${entry.usage.totalTokens.toLocaleString()} tokens using ${entry.model}.`
