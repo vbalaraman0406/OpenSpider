@@ -1,6 +1,6 @@
 import { BrowserManager, getManager } from './manager';
 import { Page, BrowserContext } from 'playwright-core';
-import { createCursor, GhostCursor } from 'ghost-cursor';
+import { createCursor, Cursor } from 'ghost-cursor-playwright';
 
 /**
  * BrowserTool: Agent-friendly wrapper around BrowserManager.
@@ -105,7 +105,7 @@ export interface BrowseAction {
 export class BrowserTool {
     private page: Page | null = null;
     private context: BrowserContext | null = null;
-    private cursor: GhostCursor | null = null;
+    private cursor: Cursor | null = null;
 
     /**
      * Execute a browser action. Returns a text description of the result.
@@ -169,7 +169,7 @@ export class BrowserTool {
 
         // Initialize ghost cursor if not already attached
         if (!this.cursor) {
-            this.cursor = createCursor(this.page!);
+            this.cursor = await createCursor(this.page!);
         }
 
         return this.page!;
@@ -202,9 +202,8 @@ export class BrowserTool {
         if (this.cursor) {
             try {
                 // Initialize the cursor at a random top starting position
-                this.cursor.toggleRandomMove(true);
-                await humanDelay(1500, 3000);
-                this.cursor.toggleRandomMove(false);
+                await this.cursor.actions.randomMove(3);
+                await humanDelay(1000, 2000);
             } catch (e) {
                 console.warn("[BrowserTool] Initial ghost cursor movement error:", e);
             }
@@ -224,7 +223,7 @@ export class BrowserTool {
         try {
             // Use ghost-cursor to execute a human-like point and click
             if (this.cursor) {
-                await this.cursor.click(selector);
+                await this.cursor.actions.click({ target: selector });
             } else {
                 // Fallback to robotic click
                 await page.hover(selector, { timeout: 5000 });
@@ -237,7 +236,7 @@ export class BrowserTool {
             // Try text-based selector as fallback
             try {
                 if (this.cursor) {
-                    await this.cursor.click(`text="${selector}"`);
+                    await this.cursor.actions.click({ target: `text="${selector}"` });
                 } else {
                     await page.hover(`text="${selector}"`, { timeout: 3000 }).catch(() => { });
                     await humanDelay(100, 300);
@@ -260,7 +259,7 @@ export class BrowserTool {
         try {
             // Use ghost-cursor to click the input field first
             if (this.cursor) {
-                await this.cursor.click(selector);
+                await this.cursor.actions.click({ target: selector });
             } else {
                 await page.click(selector, { timeout: 5000 });
             }
