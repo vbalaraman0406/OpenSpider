@@ -263,6 +263,30 @@ export class BrowserTool {
                     await humanDelay(400, 1000);
                     return `Force clicked on element "${selector}". Page may have updated.`;
                 } catch {
+                    // Final absolute fallback: try injecting raw JS to dispatch synthetic pointer and mouse events directly on the DOM node.
+                    // This bypasses Playwright's actionability checks entirely and forcefully resolves issues with React synthetic event listeners on complex SPAs.
+                    try {
+                        const success = await page.evaluate((sel) => {
+                            const el = document.querySelector(sel);
+                            if (el) {
+                                // Simulate full interaction sequence for React 18+
+                                el.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, cancelable: true }));
+                                el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+                                el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+                                el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
+                                el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+                                (el as HTMLElement).click();
+                                return true;
+                            }
+                            return false;
+                        }, selector);
+
+                        if (success) {
+                            await humanDelay(400, 1000);
+                            return `DOM script synthetically clicked element "${selector}". Page may have updated.`;
+                        }
+                    } catch (jsError) { }
+
                     return `Could not find element to click: "${selector}". Error: ${e1.message}. Try using a different selector or reading the page content first.`;
                 }
             }
