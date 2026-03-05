@@ -130,7 +130,7 @@ ${context.join('\n')}
             let response;
             try {
                 response = await this.llm.generateStructuredOutputs<{
-                    action: 'run_command' | 'write_script' | 'execute_script' | 'browse_web' | 'wait_for_user' | 'schedule_task' | 'message_agent' | 'send_email' | 'send_whatsapp' | 'send_voice' | 'final_answer';
+                    action: 'run_command' | 'write_script' | 'execute_script' | 'browse_web' | 'wait_for_user' | 'schedule_task' | 'message_agent' | 'send_email' | 'read_emails' | 'send_whatsapp' | 'send_voice' | 'final_answer';
                     command?: string;
                     filename?: string;
                     content?: string;
@@ -146,7 +146,7 @@ ${context.join('\n')}
                 }>(messages, {
                     type: "object",
                     properties: {
-                        action: { type: "string", enum: ["run_command", "write_script", "execute_script", "browse_web", "wait_for_user", "schedule_task", "message_agent", "send_email", "send_whatsapp", "send_voice", "final_answer"] },
+                        action: { type: "string", enum: ["run_command", "write_script", "execute_script", "browse_web", "wait_for_user", "schedule_task", "message_agent", "send_email", "read_emails", "send_whatsapp", "send_voice", "final_answer"] },
                         thought: { type: "string" },
                         summary_of_findings: { type: "string", description: "A highly compressed, 1-2 sentence memory of what you learned in this step. Retained forever even if thoughts are pruned." },
                         command: { type: "string" },
@@ -335,6 +335,24 @@ ${context.join('\n')}
                         toolOutput = `Email sent successfully:\n${result.stdout}`;
                     } catch (e: any) {
                         toolOutput = `Failed to send email. Ensure OAuth is configured via 'openspider tools email setup'. Error: ${e.message}`;
+                    }
+                } else if (response.action === 'read_emails') {
+                    console.log(`[Worker - ${this.role}] Scanning Gmail Inbox...`);
+                    // Support optional search queries via args or content, and maxResults via target (stringified number)
+                    const query = response.args || response.content || 'is:unread';
+                    const maxResults = response.target ? parseInt(response.target, 10) : 5;
+
+                    const scanResult = await require('../services/GmailService').GmailService.getInstance().readEmails({ query, maxResults });
+
+                    if (!scanResult.success) {
+                        toolOutput = `Failed to read emails: ${scanResult.error}. Ensure OAuth is configured via 'openspider tools email setup'.`;
+                    } else if (!scanResult.emails || scanResult.emails.length === 0) {
+                        toolOutput = `Inbox Scan Complete: No emails found matching query "${query}".`;
+                    } else {
+                        toolOutput = `Inbox Scan Complete. Found ${scanResult.emails.length} emails matching "${query}":\n\n`;
+                        scanResult.emails.forEach((email: any, index: number) => {
+                            toolOutput += `[${index + 1}] Date: ${email.date}\n    From: ${email.from}\n    Subject: ${email.subject}\n    Snippet: ${email.snippet}\n\n`;
+                        });
                     }
                 } else if (response.action === 'send_whatsapp' && response.message) {
                     console.log(`[Worker - ${this.role}] Sending WhatsApp message...`);

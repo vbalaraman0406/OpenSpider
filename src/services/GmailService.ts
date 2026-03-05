@@ -6,7 +6,7 @@ export class GmailService {
   private gmail: any;
   private initialized = false;
 
-  private constructor() {}
+  private constructor() { }
 
   static getInstance(): GmailService {
     if (!GmailService.instance) {
@@ -57,6 +57,69 @@ export class GmailService {
       .replace(/\+/g, '-')
       .replace(/\//g, '_')
       .replace(/=+$/, '');
+  }
+
+  async readEmails(params?: { maxResults?: number; query?: string }): Promise<{ success: boolean; emails?: any[]; error?: string }> {
+    try {
+      this.init();
+
+      const maxResults = params?.maxResults || 5;
+      const q = params?.query || 'is:unread'; // Default to unread if no query is provided
+
+      const res = await this.gmail.users.messages.list({
+        userId: 'me',
+        maxResults,
+        q,
+      });
+
+      const messages = res.data.messages;
+      if (!messages || messages.length === 0) {
+        return { success: true, emails: [] };
+      }
+
+      const emailDetails = await Promise.all(
+        messages.map(async (msg: any) => {
+          const detail = await this.gmail.users.messages.get({
+            userId: 'me',
+            id: msg.id,
+            format: 'full'
+          });
+
+          const headers = detail.data.payload.headers;
+          const subjectHeader = headers.find((h: any) => h.name.toLowerCase() === 'subject');
+          const fromHeader = headers.find((h: any) => h.name.toLowerCase() === 'from');
+          const dateHeader = headers.find((h: any) => h.name.toLowerCase() === 'date');
+
+          return {
+            id: detail.data.id,
+            threadId: detail.data.threadId,
+            snippet: detail.data.snippet,
+            subject: subjectHeader ? subjectHeader.value : 'No Subject',
+            from: fromHeader ? fromHeader.value : 'Unknown',
+            date: dateHeader ? dateHeader.value : 'Unknown'
+          };
+        })
+      );
+
+      return {
+        success: true,
+        emails: emailDetails,
+      };
+    } catch (err: any) {
+      const status = err?.response?.status || err?.code;
+      const message = err?.response?.data?.error?.message || err?.message || String(err);
+
+      if (status === 403) {
+        return {
+          success: false,
+          error: `Gmail API 403 Forbidden — OAuth token likely missing gmail.readonly scope. Re-authorize with expanded scopes. Detail: ${message}`,
+        };
+      }
+      return {
+        success: false,
+        error: `Gmail API error (${status || 'unknown'}): ${message}`,
+      };
+    }
   }
 
   async sendEmail(params: {
