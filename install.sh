@@ -5,7 +5,7 @@
 
 set -e
 
-REPO_URL="https://github.com/vbalaraman/OpenSpider.git"
+REPO_URL="https://github.com/vbalaraman0406/OpenSpider.git"
 INSTALL_DIR="$HOME/.openspider"
 
 # Colors for output
