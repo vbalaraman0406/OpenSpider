@@ -1,6 +1,6 @@
 import { google } from 'googleapis';
-
-export class GmailService {
+import * as fs from 'fs';
+import * as path from 'path'; export class GmailService {
   private static instance: GmailService;
   private oauth2Client: any;
   private gmail: any;
@@ -18,20 +18,45 @@ export class GmailService {
   private init(): void {
     if (this.initialized) return;
 
-    const clientId = process.env.GMAIL_CLIENT_ID;
-    const clientSecret = process.env.GMAIL_CLIENT_SECRET;
-    const refreshToken = process.env.GMAIL_REFRESH_TOKEN;
+    const workspaceDir = __dirname.endsWith('src') || __dirname.endsWith('dist')
+      ? path.join(__dirname, '..', '..', 'workspace')
+      : path.join(__dirname, '..', '..', '..', 'workspace');
 
-    if (!clientId || !clientSecret || !refreshToken) {
+    const credsPath = path.join(workspaceDir, 'gmail_credentials.json');
+    const tokenPath = path.join(workspaceDir, 'gmail_token.json');
+
+    if (!fs.existsSync(credsPath) || !fs.existsSync(tokenPath)) {
       throw new Error(
-        'Missing Gmail OAuth2 credentials. Set GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, and GMAIL_REFRESH_TOKEN in .env'
+        `Missing Gmail OAuth JSON credentials. Please run 'openspider tools email setup' to authenticate.`
       );
     }
 
-    this.oauth2Client = new google.auth.OAuth2(clientId, clientSecret, 'urn:ietf:wg:oauth:2.0:oob');
-    this.oauth2Client.setCredentials({ refresh_token: refreshToken });
-    this.gmail = google.gmail({ version: 'v1', auth: this.oauth2Client });
-    this.initialized = true;
+    try {
+      const creds = JSON.parse(fs.readFileSync(credsPath, 'utf-8'));
+      const token = JSON.parse(fs.readFileSync(tokenPath, 'utf-8'));
+
+      const clientInfo = creds.installed || creds.web;
+      if (!clientInfo || !clientInfo.client_id || !clientInfo.client_secret) {
+        throw new Error('Invalid format in gmail_credentials.json.');
+      }
+
+      this.oauth2Client = new google.auth.OAuth2(
+        clientInfo.client_id,
+        clientInfo.client_secret,
+        'urn:ietf:wg:oauth:2.0:oob'
+      );
+
+      this.oauth2Client.setCredentials({
+        access_token: token.token,
+        refresh_token: token.refresh_token,
+        expiry_date: token.expiry ? new Date(token.expiry).getTime() : undefined,
+      });
+
+      this.gmail = google.gmail({ version: 'v1', auth: this.oauth2Client });
+      this.initialized = true;
+    } catch (err: any) {
+      throw new Error(`Failed to parse Gmail OAuth files: ${err.message}`);
+    }
   }
 
   private buildRawMessage(params: {
