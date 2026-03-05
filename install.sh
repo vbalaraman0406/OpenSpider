@@ -65,9 +65,9 @@ npm run build
 
 echo ""
 
-# 4. Link the command globally
-echo -e "${GREEN}Linking the 'openspider' global command...${NC}"
-# Use sudo if running into permission issues, but try without first
+# 4. Link the command globally and install PM2
+echo -e "${GREEN}Installing PM2 (process manager) and linking 'openspider' globally...${NC}"
+npm install -g pm2 || sudo npm install -g pm2
 npm link || sudo npm link
 
 echo -e "\n${GREEN}==========================================${NC}"
