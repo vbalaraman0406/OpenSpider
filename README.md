@@ -2,20 +2,41 @@
 
 **Autonomous Multi-Agent System for WhatsApp**
 
-OpenSpider is an open-source, self-hosted AI agent system that connects to WhatsApp, email, and a web dashboard. It uses a hierarchical multi-agent architecture where a Manager agent orchestrates specialized Worker agents (Coder, Researcher) to fulfill complex tasks autonomously.
+OpenSpider is an open-source, self-hosted AI agent system that connects to WhatsApp, email, and a web dashboard. It uses a hierarchical multi-agent architecture where a Manager agent orchestrates specialized Worker agents to fulfill complex tasks autonomously.
+
+- A **Manager agent** (🧠 Ananta) receives your request, creates a plan, and delegates tasks
+- **Worker agents** (⚡ Cipher the Coder, 🔮 Oracle the Researcher, 🌐 Browser Specialist) execute specific tasks using specialized tools
+- Results flow back through the Manager for a polished final response
 
 📖 **Full Documentation**: [https://openspider.dev](https://openspider.dev) *(or run the docs site locally)*
 
 ---
 
+### Key Capabilities
+
+| Capability | Description |
+|---|---|
+| **Multi-agent orchestration** | Manager delegates to workers with parallel task execution |
+| **WhatsApp messaging** | DM and group chat support with security controls |
+| **Voice messages** | Voice-in (Whisper) and voice-out (ElevenLabs) via WhatsApp |
+| **Stealth Web browsing** | Playwright with human-like cursor injection `ghost-cursor` |
+| **Email automation** | Gmail OAuth for sending styling HTML and reading the inbox natively |
+| **Task scheduling** | Cron-style scheduled tasks managed by agents |
+| **Web dashboard** | Real-time monitoring, chat, and configuration UI |
+| **Theme support** | Dark, light, and system-follow theme modes |
+| **Health monitoring** | Green/amber/red health indicator with component status |
+| **Multiple LLMs** | Google, Anthropic, OpenAI, Ollama, and custom providers |
+| **CLI management** | Full CLI for setup, daemon control, and tooling |
+
 ## Features
 
-- 🤖 **Multi-Agent System** — Manager + Coder + Researcher agents with automatic task delegation
+- 🤖 **Multi-Agent System** — Manager + Coder + Researcher + Browser Specialist agents with automatic task delegation
 - 📱 **WhatsApp Integration** — Full WhatsApp bot with DM/group support, mention detection, and media handling
 - 🌐 **Web Dashboard** — Real-time agent chat, system telemetry, usage analytics, agent management
 - ⏰ **Cron Scheduler** — Interval-based or time-of-day scheduling for autonomous tasks
 - 🔌 **6 LLM Providers** — Google Gemini, Anthropic, OpenAI, Ollama (local), and custom endpoints
-- 📧 **Email** — Gmail OAuth integration for sending formatted emails
+- 📧 **Email (Send & Read)** — Gmail OAuth integration for full inbox polling and sending formatted emails
+- 🕵️ **Browser Stealth** — Headless Playwright with human-like `ghost-cursor` injection for navigating complex SPAs and bypassing bot protection
 - 🛠️ **Dynamic Skills** — Create and assign custom Python tools to agents
 - 🔒 **Security** — Allowlist-based access control for WhatsApp DMs and groups
 
@@ -72,10 +93,12 @@ OpenSpider/
 │   │   └── PersonaShell.ts       # Reads agent persona from filesystem
 │   └── llm/                      # LLM provider implementations
 ├── dashboard/                    # React + Vite web dashboard
+├── chrome-extension/             # Playwright cookie injection extension
 ├── workspace-defaults/           # Default agent configs (shipped with repo)
 │   ├── agents/manager/           # Manager agent pillar files
 │   ├── agents/coder/             # Coder agent pillar files
 │   ├── agents/researcher/        # Researcher agent pillar files
+│   ├── agents/browser-specialist/# Web navigation agent pillar files
 │   └── memory.md                 # Long-term memory template
 ├── workspace/                    # Runtime data (auto-created on first run)
 ├── skills/                       # Custom Python tools
