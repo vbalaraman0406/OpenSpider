@@ -1,0 +1,50 @@
+## 🌦️ Vancouver, WA — 5-Day Weather Forecast
+
+*Generated from National Weather Service (weather.gov)*
+
+| Period | Conditions | High/Low | Precip % | Wind | Alerts |
+|--------|-----------|----------|----------|------|--------|
+| Today | Showers And Thunderstorms Likely then Light Rain | High: 49°F | 96% | 7 mph WSW | None |
+| Tonight | Light Rain Likely then Rain Showers | Low: 38°F | 86% | 6 mph WNW | None |
+| Thursday | Rain Showers | High: 46°F | 93% | 5 mph W | None |
+| Thursday Night | Rain Showers | Low: 39°F | 90% | 3 mph SSW | None |
+| Friday | Light Rain | High: 48°F | 93% | 2 mph S | None |
+| Friday Night | Light Rain | Low: 43°F | 82% | 2 mph S | None |
+| Saturday | Light Rain Likely | High: 52°F | 60% | 3 mph SSW | None |
+| Saturday Night | Light Rain Likely | Low: 41°F | 58% | 3 mph WSW | None |
+| Sunday | Light Rain | High: 52°F | 77% | 2 to 6 mph SSW | None |
+| Sunday Night | Light Rain | Low: 36°F | 82% | 6 mph W | None |
+| Monday | Light Rain | High: 45°F | 82% | 5 to 9 mph WNW | None |
+| Monday Night | Rain And Snow Likely | Low: 31°F | 73% | 2 to 9 mph W | None |
+| Tuesday | Light Snow Likely then Light Rain Likely | High: 45°F | 73% | 2 to 6 mph WSW | None |
+| Tuesday Night | Rain Likely | Low: 33°F | 71% | 6 mph SW | None |
+
+### Detailed Forecasts
+
+**Today**: Showers and thunderstorms likely before 7am, then rain. Mostly cloudy. High near 49, with temperatures falling to around 47 in the afternoon. West southwest wind around 7 mph, with gusts as high as 20 mph. Chance of precipitation is 100%. New rainfall amounts between a tenth and quarter of an inch possible.
+
+**Tonight**: Rain likely before 10pm, then rain showers. Mostly cloudy, with a low around 38. West northwest wind around 6 mph, with gusts as high as 18 mph. Chance of precipitation is 90%.
+
+**Thursday**: Rain showers. Cloudy. High near 46, with temperatures falling to around 43 in the afternoon. West wind around 5 mph. Chance of precipitation is 90%.
+
+**Thursday Night**: Rain showers. Mostly cloudy, with a low around 39. South southwest wind around 3 mph. Chance of precipitation is 90%. New rainfall amounts between a tenth and quarter of an inch possible.
+
+**Friday**: Rain. Cloudy, with a high near 48. South wind around 2 mph. Chance of precipitation is 90%. New rainfall amounts between a tenth and quarter of an inch possible.
+
+**Friday Night**: Rain. Cloudy, with a low around 43. Chance of precipitation is 80%.
+
+**Saturday**: Rain likely. Mostly cloudy, with a high near 52.
+
+**Saturday Night**: Rain likely. Mostly cloudy, with a low around 41.
+
+**Sunday**: Rain. Mostly cloudy, with a high near 52.
+
+**Sunday Night**: Rain. Mostly cloudy, with a low around 36.
+
+**Monday**: Rain. Mostly cloudy, with a high near 45.
+
+**Monday Night**: Rain likely before 8pm, then rain and snow likely. Mostly cloudy, with a low around 31. New snow accumulation of less than half an inch possible.
+
+**Tuesday**: Snow likely before 11am, then rain likely. Mostly cloudy, with a high near 45. New snow accumulation of less than half an inch possible.
+
+**Tuesday Night**: Rain likely. Mostly cloudy, with a low around 33.

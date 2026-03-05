@@ -412,27 +412,27 @@ modelsMenu
         // and require('dotenv').config() without a path defaults to process.cwd()/.env
         // which fails unless the user happens to be in the project root.
         const rootDir = __dirname.endsWith('src') ? path.join(__dirname, '..') : path.join(__dirname, '..');
-        const envPath  = path.join(rootDir, '.env');
+        const envPath = path.join(rootDir, '.env');
         require('dotenv').config({ path: envPath });
 
         const provider = process.env.DEFAULT_PROVIDER || 'Not Set';
 
         // Pick the primary model based on the active provider
         const primaryModel =
-            provider === 'antigravity'          ? (process.env.GEMINI_MODEL      || 'Not Set') :
-            provider === 'antigravity-internal' ? (process.env.GEMINI_MODEL      || 'Not Set') :
-            provider === 'ollama'               ? (process.env.OLLAMA_MODEL      || 'Not Set') :
-            provider === 'openai'               ? (process.env.OPENAI_MODEL      || 'Not Set') :
-            provider === 'anthropic'            ? (process.env.ANTHROPIC_MODEL   || 'Not Set') :
-            provider === 'custom'               ? (process.env.CUSTOM_MODEL      || 'Not Set') : 'Unknown';
+            provider === 'antigravity' ? (process.env.GEMINI_MODEL || 'Not Set') :
+                provider === 'antigravity-internal' ? (process.env.GEMINI_MODEL || 'Not Set') :
+                    provider === 'ollama' ? (process.env.OLLAMA_MODEL || 'Not Set') :
+                        provider === 'openai' ? (process.env.OPENAI_MODEL || 'Not Set') :
+                            provider === 'anthropic' ? (process.env.ANTHROPIC_MODEL || 'Not Set') :
+                                provider === 'custom' ? (process.env.CUSTOM_MODEL || 'Not Set') : 'Unknown';
 
         // Build list of all configured providers
         const configured: string[] = [];
-        if (process.env.GEMINI_API_KEY)    configured.push(`antigravity  (model: ${process.env.GEMINI_MODEL    || 'gemini-2.0-flash'})`);
-        if (process.env.OLLAMA_HOST)        configured.push(`ollama       (model: ${process.env.OLLAMA_MODEL       || 'llama3'}, host: ${process.env.OLLAMA_HOST})`);
-        if (process.env.OPENAI_API_KEY)    configured.push(`openai       (model: ${process.env.OPENAI_MODEL    || 'gpt-4o'})`);
+        if (process.env.GEMINI_API_KEY) configured.push(`antigravity  (model: ${process.env.GEMINI_MODEL || 'gemini-2.0-flash'})`);
+        if (process.env.OLLAMA_HOST) configured.push(`ollama       (model: ${process.env.OLLAMA_MODEL || 'llama3'}, host: ${process.env.OLLAMA_HOST})`);
+        if (process.env.OPENAI_API_KEY) configured.push(`openai       (model: ${process.env.OPENAI_MODEL || 'gpt-4o'})`);
         if (process.env.ANTHROPIC_API_KEY) configured.push(`anthropic    (model: ${process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet'})`);
-        if (process.env.CUSTOM_BASE_URL)   configured.push(`custom       (model: ${process.env.CUSTOM_MODEL   || 'N/A'}, url: ${process.env.CUSTOM_BASE_URL})`);
+        if (process.env.CUSTOM_BASE_URL) configured.push(`custom       (model: ${process.env.CUSTOM_MODEL || 'N/A'}, url: ${process.env.CUSTOM_BASE_URL})`);
         // antigravity-internal is the managed cloud mode (no separate key env var)
         if (provider === 'antigravity-internal' && configured.length === 0) {
             configured.push(`antigravity-internal  (model: ${process.env.GEMINI_MODEL || 'claude-opus-4-6-thinking'})`);
@@ -470,6 +470,7 @@ program
         console.log(`Provider:         ${process.env.DEFAULT_PROVIDER || '⚠️  Not configured (run: openspider onboard)'}`);
         console.log(`API Port:         ${process.env.PORT || '4001'}`);
         console.log(`Dashboard:        http://localhost:${process.env.PORT || '4001'}`);
+        console.log(`Gateway Token:    ${process.env.DASHBOARD_API_KEY || '⚠️  Not generated'}`);
         console.log('─'.repeat(50));
 
         // Check if PM2 process is running
@@ -505,6 +506,23 @@ program
     .description('Launch the Terminal User Interface to chat with the agent')
     .action(async () => {
         await startTUI();
+    });
+program
+    .command('token')
+    .description('Print the secure Gateway Token for use in the Chrome Extension')
+    .action(() => {
+        const rootDir = __dirname.endsWith('src') ? path.join(__dirname, '..') : path.join(__dirname, '..');
+        const envPath = path.join(rootDir, '.env');
+        require('dotenv').config({ path: envPath });
+
+        const token = process.env.DASHBOARD_API_KEY;
+        if (!token) {
+            console.log('\n⚠️  No Gateway Token configured in .env yet.');
+        } else {
+            console.log(`\n🔑 OpenSpider Gateway Token:\n${token}\n`);
+            console.log('Copy and paste this into the OpenSpider Browser Relay Chrome Extension.');
+        }
+        process.exit(0);
     });
 
 program.parse(process.argv);

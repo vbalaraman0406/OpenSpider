@@ -1,68 +1,79 @@
-import requests
-from bs4 import BeautifulSoup
+import yfinance as yf
 
-headers = {
-    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-}
+# Fetch S&P 500 and NASDAQ data
+sp500 = yf.Ticker('^GSPC')
+nasdaq = yf.Ticker('^IXIC')
+vix = yf.Ticker('^VIX')
+tny = yf.Ticker('^TNX')
 
-# Try Google News RSS for market reactions
-print('=== Market Reaction News ===')
-try:
-    rss_url = 'https://news.google.com/rss/search?q=stock+market+Iran+war+oil+prices&hl=en-US&gl=US&ceid=US:en'
-    resp = requests.get(rss_url, headers=headers, timeout=10)
-    soup = BeautifulSoup(resp.text, 'xml')
-    items = soup.find_all('item')[:8]
-    for item in items:
-        title = item.find('title').get_text() if item.find('title') else ''
-        pub = item.find('pubDate').get_text() if item.find('pubDate') else ''
-        print(f'  - [{pub}] {title}')
-except Exception as e:
-    print(f'  Error: {e}')
+end_date = '2026-03-05'
+start_date = '2026-02-01'
 
-# Try to get stock quotes from Yahoo Finance
-print('\n=== Stock/Market Data ===')
-tickers = {
-    'S&P 500': '%5EGSPC',
-    'Dow Jones': '%5EDJI',
-    'Crude Oil': 'CL%3DF',
-    'Gold': 'GC%3DF',
-    'LMT': 'LMT',
-    'RTX': 'RTX',
-    'NOC': 'NOC'
-}
+sp_hist = sp500.history(start=start_date, end=end_date)
+nq_hist = nasdaq.history(start=start_date, end=end_date)
+vix_hist = vix.history(start=start_date, end=end_date)
+tny_hist = tny.history(start=start_date, end=end_date)
 
-for name, ticker in tickers.items():
-    try:
-        url = f'https://finance.yahoo.com/quote/{ticker}/'
-        resp = requests.get(url, headers=headers, timeout=10)
-        soup = BeautifulSoup(resp.text, 'html.parser')
-        # Try to find price data
-        price_el = soup.find('fin-streamer', {'data-field': 'regularMarketPrice'})
-        change_el = soup.find('fin-streamer', {'data-field': 'regularMarketChange'})
-        pct_el = soup.find('fin-streamer', {'data-field': 'regularMarketChangePercent'})
-        price = price_el.get_text(strip=True) if price_el else 'N/A'
-        change = change_el.get_text(strip=True) if change_el else 'N/A'
-        pct = pct_el.get_text(strip=True) if pct_el else 'N/A'
-        if price == 'N/A':
-            # Try alternate: look for data-value attribute
-            price_el2 = soup.find('fin-streamer', {'data-field': 'regularMarketPrice'})
-            if price_el2 and price_el2.has_attr('data-value'):
-                price = price_el2['data-value']
-        print(f'  {name}: ${price} (Change: {change}, {pct})')
-    except Exception as e:
-        print(f'  {name}: Error - {e}')
+print('=== S&P 500 Last 5 Days ===')
+if len(sp_hist) > 0:
+    print(sp_hist.tail(5).to_string())
+else:
+    print('No data available')
 
-# Also try Google Finance for quick data
-print('\n=== Google Finance Fallback ===')
-gf_tickers = ['LMT', 'RTX', 'NOC', '.INX', '.DJI']
-for t in gf_tickers:
-    try:
-        url = f'https://www.google.com/finance/quote/{t}:NYSE' if t[0] != '.' else f'https://www.google.com/finance/quote/{t}:INDEXSP' if t == '.INX' else f'https://www.google.com/finance/quote/{t}:INDEXDJX'
-        resp = requests.get(url, headers=headers, timeout=10)
-        soup = BeautifulSoup(resp.text, 'html.parser')
-        # Find price
-        price_div = soup.find('div', class_='YMlKec fxKbKc')
-        price = price_div.get_text(strip=True) if price_div else 'N/A'
-        print(f'  {t}: {price}')
-    except Exception as e:
-        print(f'  {t}: Error - {e}')
+print('\n=== NASDAQ Last 5 Days ===')
+if len(nq_hist) > 0:
+    print(nq_hist.tail(5).to_string())
+else:
+    print('No data available')
+
+print('\n=== VIX Last 3 Days ===')
+if len(vix_hist) > 0:
+    print(vix_hist.tail(3).to_string())
+else:
+    print('No data available')
+
+print('\n=== 10Y Treasury Last 3 Days ===')
+if len(tny_hist) > 0:
+    print(tny_hist.tail(3).to_string())
+else:
+    print('No data available')
+
+# Volume stats
+if len(sp_hist) >= 20:
+    sp_vol_20avg = sp_hist['Volume'].tail(20).mean()
+    sp_vol_today = sp_hist['Volume'].iloc[-1]
+    print(f'\nS&P 500 Volume Today: {sp_vol_today:,.0f}, 20-day avg: {sp_vol_20avg:,.0f}')
+else:
+    print(f'\nS&P 500 data points: {len(sp_hist)}')
+
+if len(nq_hist) >= 20:
+    nq_vol_20avg = nq_hist['Volume'].tail(20).mean()
+    nq_vol_today = nq_hist['Volume'].iloc[-1]
+    print(f'NASDAQ Volume Today: {nq_vol_today:,.0f}, 20-day avg: {nq_vol_20avg:,.0f}')
+else:
+    print(f'NASDAQ data points: {len(nq_hist)}')
+
+# Calculate daily changes
+if len(sp_hist) >= 2:
+    sp_close = sp_hist['Close'].iloc[-1]
+    sp_prev = sp_hist['Close'].iloc[-2]
+    sp_chg = sp_close - sp_prev
+    sp_pct = (sp_chg / sp_prev) * 100
+    print(f'\nS&P 500 Close: {sp_close:.2f}, Change: {sp_chg:+.2f} ({sp_pct:+.2f}%)')
+
+if len(nq_hist) >= 2:
+    nq_close = nq_hist['Close'].iloc[-1]
+    nq_prev = nq_hist['Close'].iloc[-2]
+    nq_chg = nq_close - nq_prev
+    nq_pct = (nq_chg / nq_prev) * 100
+    print(f'NASDAQ Close: {nq_close:.2f}, Change: {nq_chg:+.2f} ({nq_pct:+.2f}%)')
+
+if len(vix_hist) >= 2:
+    vix_close = vix_hist['Close'].iloc[-1]
+    vix_prev = vix_hist['Close'].iloc[-2]
+    vix_chg = vix_close - vix_prev
+    print(f'VIX Close: {vix_close:.2f}, Change: {vix_chg:+.2f}')
+
+if len(tny_hist) >= 1:
+    tny_close = tny_hist['Close'].iloc[-1]
+    print(f'10Y Treasury Yield: {tny_close:.3f}%')

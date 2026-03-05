@@ -132,7 +132,7 @@ interface LogMessage {
 function OverviewView() {
     return (
         <div className="flex-1 p-10 overflow-y-auto fade-in">
-            <div className="max-w-6xl mx-auto">
+            <div className="w-full">
                 <header className="mb-10">
                     <h2 className="text-3xl font-bold text-white tracking-tight">System Overview</h2>
                     <p className="text-slate-400 mt-2 text-sm max-w-2xl leading-relaxed">
@@ -231,7 +231,7 @@ function OverviewView() {
 function SessionsView({ provider }: { provider: string }) {
     return (
         <div className="flex-1 p-10 overflow-y-auto fade-in">
-            <div className="max-w-6xl mx-auto">
+            <div className="w-full">
                 <header className="mb-8 flex justify-between items-end">
                     <div>
                         <h2 className="text-3xl font-bold text-white tracking-tight">Active Sessions</h2>
@@ -879,7 +879,7 @@ function SkillsView({ skills, onRefresh, isGenerating, setIsGenerating }: Skills
 
     return (
         <div className="flex-1 p-10 overflow-y-auto fade-in relative">
-            <div className="max-w-6xl mx-auto h-full flex flex-col">
+            <div className="w-full h-full flex flex-col">
                 <header className="mb-8 flex justify-between items-end shrink-0">
                     <div>
                         <h2 className="text-3xl font-bold text-white tracking-tight">Dynamic Skills</h2>
@@ -1345,7 +1345,7 @@ function CronView({ agents }: { agents: any[] }) {
 
     return (
         <div className="flex-1 p-10 overflow-y-auto fade-in">
-            <div className="max-w-5xl mx-auto">
+            <div className="w-full">
                 <header className="mb-10 flex justify-between items-center">
                     <div>
                         <h2 className="text-3xl font-bold text-white tracking-tight flex items-center gap-3">
@@ -2025,7 +2025,7 @@ export default function App() {
             {/* Main Content Area */}
             <main className="flex-1 flex flex-col h-screen overflow-hidden relative bg-slate-950/50">
                 {activeTab === 'chat' && (
-                    <div className="flex-1 p-8 flex gap-8 overflow-hidden max-w-[1600px] w-full mx-auto h-full fade-in">
+                    <div className="flex-1 p-8 flex gap-8 overflow-hidden w-full h-full fade-in">
 
                         {/* Left Column: Logs */}
                         <section className="flex-1 flex flex-col bg-slate-900/50 rounded-xl border border-slate-800/60 overflow-hidden shadow-lg backdrop-blur-sm">
@@ -2105,7 +2105,7 @@ export default function App() {
 
                                     return (
                                         <div key={i} className={`flex w-full mb-6 ${isUser ? 'justify-end' : 'justify-start'}`}>
-                                            <div className={`max-w-[85%] sm:max-w-[75%] rounded-2xl px-5 py-3.5 shadow-md relative group ${isUser
+                                            <div className={`max-w-[95%] xl:max-w-[85%] 2xl:max-w-[75%] rounded-2xl px-5 py-3.5 shadow-md relative group ${isUser
                                                 ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-br-sm shadow-blue-900/20'
                                                 : isCronResult
                                                     ? 'bg-gradient-to-br from-indigo-950/90 to-purple-950/80 backdrop-blur-md border border-indigo-700/50 text-slate-200 rounded-bl-sm shadow-indigo-900/30'
@@ -2313,7 +2313,7 @@ export default function App() {
                 {
                     activeTab === 'channels' && (
                         <div className="flex-1 p-10 overflow-y-auto fade-in">
-                            <div className="max-w-6xl mx-auto">
+                            <div className="w-full">
                                 <header className="mb-10">
                                     <h2 className="text-3xl font-bold text-white tracking-tight">Channels Management</h2>
                                     <p className="text-slate-400 mt-2 text-sm max-w-2xl leading-relaxed">

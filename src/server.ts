@@ -15,6 +15,7 @@ import { logUsage, getUsageSummary } from './usage';
 import { PersonaShell } from './agents/PersonaShell';
 import gmailWebhookRouter from './webhooks/gmail';
 import { apiKeyAuth, validateWsConnection } from './middleware/auth';
+import { getManager } from './browser/manager';
 
 export function startServer() {
     const app = express();
@@ -41,8 +42,8 @@ export function startServer() {
     // SECURITY: Restrict CORS to localhost only — dashboard is local-only.
     app.use(cors({
         origin: (origin, callback) => {
-            // Allow same-origin requests (no Origin header) and localhost origins
-            if (!origin || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+            // Allow same-origin requests (no Origin header), localhost, and chrome extensions
+            if (!origin || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin) || /^chrome-extension:\/\//.test(origin)) {
                 callback(null, true);
             } else {
                 callback(new Error('CORS: origin not allowed'));
@@ -649,6 +650,25 @@ Return ONLY the raw Python code.`;
 
         } catch (e: any) {
             console.error('[Server] Error generating skill:', e.message);
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    // API Route to inject cookies into the OpenSpider browser
+    app.post('/api/v1/browser/cookies', apiKeyAuth, async (req, res) => {
+        try {
+            const { cookies } = req.body;
+            if (!cookies || !Array.isArray(cookies)) {
+                return res.status(400).json({ error: "Invalid cookies array provided." });
+            }
+
+            // Get the browser manager and inject into the default profile
+            const manager = getManager();
+            await manager.injectCookies('default', cookies);
+
+            res.json({ success: true, count: cookies.length });
+        } catch (e: any) {
+            console.error('[Server] Failed to inject cookies:', e);
             res.status(500).json({ error: e.message });
         }
     });

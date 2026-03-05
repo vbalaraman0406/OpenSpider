@@ -1,5 +1,6 @@
-import { BrowserManager } from './manager';
+import { BrowserManager, getManager } from './manager';
 import { Page, BrowserContext } from 'playwright-core';
+import { createCursor, GhostCursor } from 'ghost-cursor';
 
 /**
  * BrowserTool: Agent-friendly wrapper around BrowserManager.
@@ -8,16 +9,6 @@ import { Page, BrowserContext } from 'playwright-core';
  *   2. read_content sanitization — scrubs prompt injection patterns before returning to the LLM
  *   3. Human-like timing on all interactions (see manager.ts for stealth anti-detection)
  */
-
-// Singleton browser manager
-let sharedManager: BrowserManager | null = null;
-
-function getManager(): BrowserManager {
-    if (!sharedManager) {
-        sharedManager = new BrowserManager();
-    }
-    return sharedManager;
-}
 
 /** Random delay between min and max milliseconds — mimics human reaction time */
 const humanDelay = (min = 300, max = 900) =>
@@ -114,6 +105,7 @@ export interface BrowseAction {
 export class BrowserTool {
     private page: Page | null = null;
     private context: BrowserContext | null = null;
+    private cursor: GhostCursor | null = null;
 
     /**
      * Execute a browser action. Returns a text description of the result.
@@ -153,17 +145,32 @@ export class BrowserTool {
         const manager = getManager();
         this.context = await manager.getProfileContext('default');
 
-        // Get existing pages or create a new one
-        const pages = this.context.pages();
-        const lastPage = pages.length > 0 ? pages[pages.length - 1] : undefined;
-        if (lastPage) {
-            this.page = lastPage;
-        } else {
-            this.page = await this.context.newPage();
+        try {
+            // Get existing pages or create a new one
+            const pages = this.context.pages();
+            const lastPage = pages.length > 0 ? pages[pages.length - 1] : undefined;
+            if (lastPage && !lastPage.isClosed()) {
+                this.page = lastPage;
+            } else {
+                this.page = await this.context.newPage();
+            }
+        } catch (e: any) {
+            // Context was closed unexpectedly (crashed or killed)
+            console.warn(`[BrowserTool] Context is dead (${e.message}). Re-initializing...`);
+            this.context = null;
+            this.page = null;
+            this.cursor = null;
+            // Recursively call ensurePage to get a fresh context
+            return this.ensurePage();
         }
 
         // Set a reasonable viewport
         await this.page!.setViewportSize({ width: 1280, height: 900 });
+
+        // Initialize ghost cursor if not already attached
+        if (!this.cursor) {
+            this.cursor = createCursor(this.page!);
+        }
 
         return this.page!;
     }
@@ -191,14 +198,16 @@ export class BrowserTool {
         try { await page.waitForLoadState('networkidle', { timeout: 5000 }); } catch { }
         await humanDelay(800, 1800);
 
-        // Move mouse to a random position on the page to trigger hover events
-        const viewport = page.viewportSize();
-        if (viewport) {
-            await page.mouse.move(
-                200 + Math.floor(Math.random() * (viewport.width - 400)),
-                200 + Math.floor(Math.random() * (viewport.height - 400)),
-                { steps: 5 }
-            );
+        // Make some initial meandering movements using ghost-cursor
+        if (this.cursor) {
+            try {
+                // Initialize the cursor at a random top starting position
+                this.cursor.toggleRandomMove(true);
+                await humanDelay(1500, 3000);
+                this.cursor.toggleRandomMove(false);
+            } catch (e) {
+                console.warn("[BrowserTool] Initial ghost cursor movement error:", e);
+            }
         }
 
         const title = await page.title();
@@ -213,18 +222,27 @@ export class BrowserTool {
         const page = await this.ensurePage();
 
         try {
-            // Human-like: hover first, then pause, then click
-            await page.hover(selector, { timeout: 5000 });
-            await humanDelay(150, 400);
-            await page.click(selector, { timeout: 5000, delay: 50 + Math.floor(Math.random() * 80) });
+            // Use ghost-cursor to execute a human-like point and click
+            if (this.cursor) {
+                await this.cursor.click(selector);
+            } else {
+                // Fallback to robotic click
+                await page.hover(selector, { timeout: 5000 });
+                await humanDelay(150, 400);
+                await page.click(selector, { timeout: 5000, delay: 50 + Math.floor(Math.random() * 80) });
+            }
             await humanDelay(400, 1000);
             return `Clicked on element matching "${selector}". Page may have updated.`;
         } catch {
             // Try text-based selector as fallback
             try {
-                await page.hover(`text="${selector}"`, { timeout: 3000 }).catch(() => {});
-                await humanDelay(100, 300);
-                await page.click(`text="${selector}"`, { timeout: 5000 });
+                if (this.cursor) {
+                    await this.cursor.click(`text="${selector}"`);
+                } else {
+                    await page.hover(`text="${selector}"`, { timeout: 3000 }).catch(() => { });
+                    await humanDelay(100, 300);
+                    await page.click(`text="${selector}"`, { timeout: 5000 });
+                }
                 await humanDelay(400, 1000);
                 return `Clicked on text "${selector}". Page may have updated.`;
             } catch (e: any) {
@@ -240,8 +258,12 @@ export class BrowserTool {
         const page = await this.ensurePage();
 
         try {
-            // Human-like: click first, small pause, then type with realistic WPM delay
-            await page.click(selector, { timeout: 5000 });
+            // Use ghost-cursor to click the input field first
+            if (this.cursor) {
+                await this.cursor.click(selector);
+            } else {
+                await page.click(selector, { timeout: 5000 });
+            }
             await humanDelay(200, 500);
             // Clear existing value then type with per-character delay (50–120ms ≈ 80–120 WPM)
             await page.fill(selector, '', { timeout: 3000 });
@@ -416,6 +438,7 @@ export class BrowserTool {
 
     private async doClose(): Promise<string> {
         if (this.page && !this.page.isClosed()) {
+            this.cursor = null;
             await this.page.close();
             this.page = null;
         }

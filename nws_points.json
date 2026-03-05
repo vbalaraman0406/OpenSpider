@@ -1,0 +1,112 @@
+{
+    "@context": [
+        "https://geojson.org/geojson-ld/geojson-context.jsonld",
+        {
+            "@version": "1.1",
+            "wx": "https://api.weather.gov/ontology#",
+            "s": "https://schema.org/",
+            "geo": "http://www.opengis.net/ont/geosparql#",
+            "unit": "http://codes.wmo.int/common/unit/",
+            "@vocab": "https://api.weather.gov/ontology#",
+            "geometry": {
+                "@id": "s:GeoCoordinates",
+                "@type": "geo:wktLiteral"
+            },
+            "city": "s:addressLocality",
+            "state": "s:addressRegion",
+            "distance": {
+                "@id": "s:Distance",
+                "@type": "s:QuantitativeValue"
+            },
+            "bearing": {
+                "@type": "s:QuantitativeValue"
+            },
+            "value": {
+                "@id": "s:value"
+            },
+            "unitCode": {
+                "@id": "s:unitCode",
+                "@type": "@id"
+            },
+            "forecastOffice": {
+                "@type": "@id"
+            },
+            "forecastGridData": {
+                "@type": "@id"
+            },
+            "publicZone": {
+                "@type": "@id"
+            },
+            "county": {
+                "@type": "@id"
+            }
+        }
+    ],
+    "id": "https://api.weather.gov/points/45.6387,-122.6615",
+    "type": "Feature",
+    "geometry": {
+        "type": "Point",
+        "coordinates": [
+            -122.6615,
+            45.6387
+        ]
+    },
+    "properties": {
+        "@id": "https://api.weather.gov/points/45.6387,-122.6615",
+        "@type": "wx:Point",
+        "cwa": "PQR",
+        "type": "land",
+        "forecastOffice": "https://api.weather.gov/offices/PQR",
+        "gridId": "PQR",
+        "gridX": 114,
+        "gridY": 109,
+        "forecast": "https://api.weather.gov/gridpoints/PQR/114,109/forecast",
+        "forecastHourly": "https://api.weather.gov/gridpoints/PQR/114,109/forecast/hourly",
+        "forecastGridData": "https://api.weather.gov/gridpoints/PQR/114,109",
+        "observationStations": "https://api.weather.gov/gridpoints/PQR/114,109/stations",
+        "relativeLocation": {
+            "type": "Feature",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    -122.61789,
+                    45.656517
+                ]
+            },
+            "properties": {
+                "city": "Minnehaha",
+                "state": "WA",
+                "distance": {
+                    "unitCode": "wmoUnit:m",
+                    "value": 3926.4101929151
+                },
+                "bearing": {
+                    "unitCode": "wmoUnit:degree_(angle)",
+                    "value": 239
+                }
+            }
+        },
+        "forecastZone": "https://api.weather.gov/zones/forecast/WAZ206",
+        "county": "https://api.weather.gov/zones/county/WAC011",
+        "fireWeatherZone": "https://api.weather.gov/zones/fire/WAZ633",
+        "timeZone": "America/Los_Angeles",
+        "radarStation": "KRTX",
+        "astronomicalData": {
+            "sunrise": "2026-03-04T06:41:21-08:00",
+            "sunset": "2026-03-04T18:03:09-08:00",
+            "transit": "2026-03-04T12:22:15-08:00",
+            "civilTwilightBegin": "2026-03-04T06:13:12-08:00",
+            "civilTwilightEnd": "2026-03-04T18:31:17-08:00",
+            "nauticalTwilightBegin": "2026-03-04T05:38:52-08:00",
+            "nauticalTwilightEnd": "2026-03-04T19:05:38-08:00",
+            "astronomicalTwilightBegin": "2026-03-04T05:04:17-08:00",
+            "astronomicalTwilightEnd": "2026-03-04T19:40:12-08:00"
+        },
+        "nwr": {
+            "transmitter": "WNG604",
+            "sameCode": "053011",
+            "areaBroadcast": "https://api.weather.gov/radio/WNG604/broadcast",
+            "pointBroadcast": "https://api.weather.gov/points/45.6387,-122.6615/radio"
+        }
+    }
+}
