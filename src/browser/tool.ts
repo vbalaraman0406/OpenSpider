@@ -89,7 +89,7 @@ function sanitizePageContent(content: string): string {
 
 export interface BrowseAction {
     /** The sub-action to perform */
-    action: 'navigate' | 'click' | 'type' | 'read_content' | 'screenshot' | 'wait_for_user' | 'scroll' | 'close';
+    action: 'navigate' | 'click' | 'type' | 'read_content' | 'screenshot' | 'wait_for_user' | 'scroll' | 'close' | 'execute_js';
     /** URL to navigate to (for 'navigate') */
     url?: string | undefined;
     /** CSS selector for click/type targets */
@@ -100,6 +100,8 @@ export interface BrowseAction {
     message?: string | undefined;
     /** Direction for scroll: 'up' or 'down' */
     direction?: 'up' | 'down' | undefined;
+    /** JavaScript code to execute inside the browser context */
+    script?: string | undefined;
 }
 
 export class BrowserTool {
@@ -129,6 +131,8 @@ export class BrowserTool {
                     return await this.doScroll(action.direction || 'down');
                 case 'close':
                     return await this.doClose();
+                case 'execute_js':
+                    return await this.doExecuteJs(action.script || '');
                 default:
                     return `Unknown browser action: ${action.action}`;
             }
@@ -454,10 +458,47 @@ export class BrowserTool {
 
     private async doClose(): Promise<string> {
         if (this.page && !this.page.isClosed()) {
-            this.cursor = null;
-            await this.page.close();
+            await this.page.close().catch(() => { });
             this.page = null;
+            return "Browser tab closed successfully.";
         }
-        return 'Browser tab closed.';
+        return "No active browser tab to close.";
+    }
+
+    private async doExecuteJs(script: string): Promise<string> {
+        if (!script) return 'Error: No script provided for execute_js action.';
+        const page = await this.ensurePage();
+
+        try {
+            console.log(`[BrowserTool] Executing custom JS snippet.`);
+            // Run the script in the page context
+            const result = await page.evaluate(async (scriptContent) => {
+                // If the script contains an explicit return or await, try wrapping it in an async IIFE
+                const isAsync = scriptContent.includes('await');
+                try {
+                    const func = new Function(`
+                        return (async () => { 
+                            try {
+                                ${scriptContent} 
+                            } catch (e) {
+                                return "JS Error: " + e.message;
+                            }
+                        })();
+                    `);
+                    return await func();
+                } catch (e: any) {
+                    return `Evaluation failed to parse: ${e.message}`;
+                }
+            }, script);
+
+            await humanDelay(300, 800); // Give the DOM a moment to settle if the JS triggered mutations
+
+            // Format the result nicely
+            if (result === undefined) return `JavaScript executed successfully with no return value.`;
+            if (typeof result === 'object') return `JavaScript executed successfully. Result: ${JSON.stringify(result, null, 2)}`;
+            return `JavaScript executed successfully. Result: ${result}`;
+        } catch (e: any) {
+            return `JavaScript execution failed: ${e.message}`;
+        }
     }
 }

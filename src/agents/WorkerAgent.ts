@@ -219,16 +219,17 @@ ${context.join('\n')}
 
                     toolOutput = `Response from ${response.target}:\n${subResult}`;
                 } else if (response.action === 'browse_web') {
-                    // command = sub-action (navigate/click/type/read_content/scroll/close)
+                    // command = sub-action (navigate/click/type/read_content/scroll/close/execute_js)
                     // filename = URL (for navigate)
                     // args = CSS selector (for click/type) or direction (for scroll)
-                    // content = text to type (for type)
+                    // content = text to type, or raw script payload for execute_js
                     const subAction = (response.command || 'navigate') as BrowseAction['action'];
                     const browseAction: BrowseAction = {
                         action: subAction,
                         url: response.filename,
                         selector: response.args,
                         text: response.content,
+                        script: response.content,
                         message: response.message,
                         direction: response.args as 'up' | 'down',
                     };
