@@ -11,17 +11,43 @@ This guide walks you through installing and running OpenSpider for the first tim
 | **Python 3** | ≥ 3.8 | Required for the email skill (`send_email.py`) |
 | **Git** | Latest | Cloning the repository |
 
-Verify your environment:
+### Detailed Prerequisite Setup
+
+If you do not have these installed already, follow these steps based on your operating system:
+
+#### macOS / Linux
+We recommend using **Homebrew** (macOS) or your distro's package manager. For Node.js, we strongly recommend `nvm`.
+
+1. **Install Git & Python:**
+   - macOS: `brew install git python` (Requires [Homebrew](https://brew.sh/))
+   - Ubuntu/Debian: `sudo apt update && sudo apt install git python3 python3-pip`
+2. **Install Node.js 22 via NVM:**
+   ```bash
+   curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+   # Restart your terminal, then:
+   nvm install 22
+   nvm use 22
+   ```
+
+#### Windows
+We strongly recommend running OpenSpider inside **WSL2 (Windows Subsystem for Linux)**.
+1. Open PowerShell as Administrator and run: `wsl --install`
+2. Restart your computer and open the new "Ubuntu" terminal.
+3. Follow the Linux instructions above inside that terminal.
+
+---
+
+Verify your environment is ready:
 
 ```bash
-node --version    # Should be v22.x or higher
-npm --version     # Should be v10.x or higher
-python3 --version # Should be 3.8+
+node --version    # Should output v22.x.x
+npm --version     # Should output v10.x.x
+python3 --version # Should output Python 3.8+
 git --version
 ```
 
-::: tip No Node.js 22?
-The one-line installer will attempt to install it automatically via [NVM](https://github.com/nvm-sh/nvm).
+::: tip Automated Node.js Install
+The one-line `curl` installer below will attempt to automatically install `nvm` and Node.js 22 if it detects they are missing.
 :::
 
 ---
