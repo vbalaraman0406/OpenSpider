@@ -276,8 +276,6 @@ export async function startWhatsApp() {
         const { connection, lastDisconnect, qr } = update;
 
         if (qr) {
-            console.log("\n🕷️ [WhatsApp] Scan this QR code to connect OpenSpider:");
-            qrcode.generate(qr, { small: true });
             try {
                 const qrPath = path.join(__dirname, '..', '.latest_qr.txt');
                 fs.writeFileSync(qrPath, qr, 'utf-8');
