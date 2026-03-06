@@ -108,6 +108,60 @@ program
     });
 
 program
+    .command('update')
+    .description('Update OpenSpider to the latest version or publish a new release')
+    .option('--bump <type>', 'Release a new version (patch, minor, major) and push to GitHub')
+    .action((options) => {
+        const { execSync } = require('child_process');
+        const path = require('path');
+        const rootDir = __dirname.endsWith('src') ? path.join(__dirname, '..') : path.join(__dirname, '..');
+
+        try {
+            if (options.bump) {
+                console.log(`\n📦 Bumping version (${options.bump}) and publishing to GitHub...`);
+                // Add all changes
+                execSync('git add .', { stdio: 'inherit', cwd: rootDir });
+
+                // Commit changes if any exist
+                try {
+                    execSync('git commit -m "chore: save work before release"', { stdio: 'ignore', cwd: rootDir });
+                } catch (e) { /* Ignore if no changes to commit */ }
+
+                // Bump version (this creates a commit and a tag)
+                execSync(`npm version ${options.bump}`, { stdio: 'inherit', cwd: rootDir });
+
+                console.log('\n🚀 Pushing to GitHub...');
+                execSync('git push origin main --tags', { stdio: 'inherit', cwd: rootDir });
+                console.log('\n✅ Release successfully pushed to GitHub!\n');
+                return;
+            }
+
+            console.log('\n🕷️ Updating OpenSpider to the latest version...\n');
+
+            console.log('🔄 1. Pulling latest code from GitHub...');
+            execSync('git pull origin main', { stdio: 'inherit', cwd: rootDir });
+
+            console.log('\n📦 2. Installing dependencies...');
+            execSync('npm install', { stdio: 'inherit', cwd: rootDir });
+
+            console.log('\n🔨 3. Building project...');
+            execSync('npm run build', { stdio: 'inherit', cwd: rootDir });
+
+            console.log('\n🔗 4. Updating global CLI...');
+            execSync('npm install -g .', { stdio: 'inherit', cwd: rootDir });
+
+            console.log('\n♻️  5. Restarting engine...');
+            execSync('openspider stop && openspider start', { stdio: 'inherit', cwd: rootDir });
+
+            console.log('\n🌟 OpenSpider is now fully up to date!\n');
+
+        } catch (error: any) {
+            console.error('\n❌ Update failed:', error.message);
+            process.exit(1);
+        }
+    });
+
+program
     .command('logs')
     .description('View real-time logs from the background OpenSpider gateway')
     .action(() => {

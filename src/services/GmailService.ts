@@ -18,9 +18,18 @@ import * as path from 'path'; export class GmailService {
   private init(): void {
     if (this.initialized) return;
 
-    const workspaceDir = __dirname.endsWith('src') || __dirname.endsWith('dist')
-      ? path.join(__dirname, '..', '..', 'workspace')
-      : path.join(__dirname, '..', '..', '..', 'workspace');
+    // Determine the workspace directory relative to the project root
+    let workspaceDir;
+
+    // Check if we are running from a compiled binary that bundles assets differently, or typical process.cwd()
+    if (fs.existsSync(path.join(process.cwd(), 'workspace'))) {
+      workspaceDir = path.join(process.cwd(), 'workspace');
+    } else {
+      // Fallback for deeply nested runtime logic if process.cwd() isn't the root
+      workspaceDir = __dirname.includes('dist')
+        ? path.join(__dirname, '..', '..', 'workspace')
+        : path.join(__dirname, '..', '..', 'workspace');
+    }
 
     const credsPath = path.join(workspaceDir, 'gmail_credentials.json');
     const tokenPath = path.join(workspaceDir, 'gmail_token.json');
