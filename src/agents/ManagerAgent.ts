@@ -87,6 +87,7 @@ Examples of requests you SHOULD schedule (NOT refuse):
 - "Check my email every hour" → schedule_task with command "1" (interval in hours)
 - "Remind me about X every week" → schedule_task with command "168"
 CRITICAL UPDATE RULE: If the user says "update", "change", "modify", or "edit" an existing cron job, tell the Worker to use schedule_task with the EXACT SAME "filename" (job name) as the existing job. The system will automatically update it in place instead of creating a new one. Never create a new job when the user explicitly wants to modify an existing one.
+FORBIDDEN ACTION: NEVER instruct a worker to write a Python script (e.g. update_cron.py) or bash script to modify workspace/cron_jobs.json manually. You MUST ALWAYS use the native schedule_task tool. Manual python scripting of cron jobs causes memory corruption.
 The scheduler runs on a 60-second heartbeat and will auto-execute the task via the Manager Agent.
 NEVER tell the user you cannot schedule tasks. You absolutely can.
 
