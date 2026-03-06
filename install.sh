@@ -65,9 +65,14 @@ npm run build
 
 echo ""
 
-# 4. Link the command globally and install PM2
-echo -e "${GREEN}Installing PM2 (process manager) and linking 'openspider' globally...${NC}"
+# 4. Install PM2 process manager
+echo -e "${GREEN}Installing PM2 (process manager)...${NC}"
 npm install -g pm2 --unsafe-perm || sudo npm install -g pm2 --unsafe-perm
+
+echo ""
+
+# 5. Link the command globally
+echo -e "${GREEN}Linking the 'openspider' global command...${NC}"
 npm link --unsafe-perm || sudo npm link --unsafe-perm
 
 echo -e "\n${GREEN}==========================================${NC}"
@@ -76,4 +81,3 @@ echo -e "${GREEN}==========================================${NC}"
 echo -e "\n${YELLOW}To get started, run the following command in your terminal:${NC}"
 echo -e "  openspider onboard\n"
 echo -e "If you installed NVM during this script, you may need to restart your terminal first."
-
