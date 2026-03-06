@@ -68,6 +68,11 @@ openspider gateway
 
 The gateway starts on `http://localhost:4001` with the web dashboard included.
 
+> **Note on Cloud Deployments**: If installing on a headless remote server (Ubuntu, VPS, AWS), use **Tailscale** for free, perfectly secure VPN dashboard access without exposing public ports. 
+> 1. Server: `curl -fsSL https://tailscale.com/install.sh | sh` then `sudo tailscale up`
+> 2. Laptop: Download the Tailscale app and log in globally.
+> 3. Go to `http://<SERVER_TAILSCALE_IP>:4001` in your browser!
+
 ### 4. (Optional) Development Mode
 
 ```bash
