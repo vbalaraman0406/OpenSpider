@@ -249,7 +249,6 @@ export async function startWhatsApp() {
 
     const sock = makeWASocket({
         version,
-        printQRInTerminal: true,
         auth: {
             creds: state.creds,
             keys: makeCacheableSignalKeyStore(state.keys, baileysLogger)
@@ -763,7 +762,6 @@ export async function onboardWhatsApp(): Promise<void> {
         const { version } = await fetchLatestBaileysVersion();
         const sock = makeWASocket({
             version,
-            printQRInTerminal: true,
             auth: state,
         });
 
