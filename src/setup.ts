@@ -25,7 +25,8 @@ export async function runSetup() {
   await setTimeout(1000);
   s.stop('Environment checked.');
 
-  const envPath = path.join(process.cwd(), '.env');
+  const rootDir = __dirname.endsWith('src') || __dirname.endsWith('dist') ? path.join(__dirname, '..') : __dirname;
+  const envPath = path.join(rootDir, '.env');
   if (fs.existsSync(envPath)) {
     const override = await p.confirm({
       message: 'A .env file already exists. Do you want to overwrite it?',
@@ -293,6 +294,14 @@ export async function runSetup() {
   }
 
   envContent += `ENABLE_WHATSAPP = ${scanQr}\n`;
+
+  // Auto-generate secure tokens for dashboard and webhook if not already set
+  const crypto = require('node:crypto');
+  const dashboardKey = process.env.DASHBOARD_API_KEY || crypto.randomBytes(32).toString('hex');
+  const hookToken = process.env.OPENSPIDER_HOOK_TOKEN || crypto.randomBytes(32).toString('hex');
+
+  envContent += `DASHBOARD_API_KEY = ${dashboardKey}\n`;
+  envContent += `OPENSPIDER_HOOK_TOKEN = ${hookToken}\n\n`;
 
   s.start('Writing configuration to .env');
   fs.writeFileSync(envPath, envContent);

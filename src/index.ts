@@ -10,7 +10,8 @@ export async function bootstrap() {
     console.clear();
     console.log("🕷️ Starting OpenSpider Engine...");
 
-    const envPath = path.join(process.cwd(), '.env');
+    const rootDir = __dirname.endsWith('src') || __dirname.endsWith('dist') ? path.join(__dirname, '..') : __dirname;
+    const envPath = path.join(rootDir, '.env');
 
     // 1. Run Setup Wizard if no configuration exists
     if (!fs.existsSync(envPath)) {
