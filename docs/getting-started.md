@@ -162,6 +162,29 @@ Opens `http://localhost:4001` in your browser. The dashboard includes:
 
 The dashboard authenticates automatically using the `DASHBOARD_API_KEY` from your `.env`. No login screen — it just works locally.
 
+### Remote Server Access via Tailscale (Cloud Deployments)
+
+If you installed OpenSpider on a remote cloud server (like Ubuntu on DigitalOcean, AWS, or an old laptop in a closet), you should **not** expose port `4001` to the public internet for security reasons.
+
+Instead, use **[Tailscale](https://tailscale.com)** to create a free, private VPN tunnel directly to your dashboard.
+
+**1. Install Tailscale on your server:**
+```bash
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
+```
+*(Copy the generated link into your browser to authenticate).*
+
+**2. Install Tailscale on your physical computer:**
+Download the app for Mac/Windows from the [Tailscale Download Page](https://tailscale.com/download) and log in with the exact same account.
+
+**3. Connect Securely:**
+Find your server's magical private IP by running `tailscale ip -4` on your server.
+Open your local computer's browser and go directly to:
+`http://<YOUR_TAILSCALE_IP>:4001`
+
+*(Tailscale's default ACLs allow all connected devices to talk, so no complex firewall rules are needed!)*
+
 ---
 
 ## Step 5: Connect WhatsApp (Optional)
