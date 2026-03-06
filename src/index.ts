@@ -26,12 +26,27 @@ export async function bootstrap() {
     console.log("Initializing Dashboard API Server...");
     startServer();
 
-    // 3. Start the WhatsApp Gateway
-    if (process.env.ENABLE_WHATSAPP !== 'false') {
+    // 3. Start the WhatsApp Gateway conditionally
+    let enableWhatsApp = process.env.ENABLE_WHATSAPP !== 'false'; // Default true unless env overrides
+    try {
+        const configPath = path.join(process.cwd(), 'workspace', 'whatsapp_config.json');
+        if (fs.existsSync(configPath)) {
+            const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+            if (config.enabled === false) {
+                enableWhatsApp = false;
+            }
+        } else {
+            // New installations without a config file yet shouldn't crash loop on QR timeouts.
+            // Require explicit enablement via dashboard first.
+            enableWhatsApp = false;
+        }
+    } catch (e) { }
+
+    if (enableWhatsApp) {
         console.log("Initializing WhatsApp Baileys Client...");
         startWhatsApp();
     } else {
-        console.log("WhatsApp Channel Disabled via .env configuration.");
+        console.log("WhatsApp Channel Disabled or Not Configured. Skipping Baileys initialization.");
     }
 }
 
