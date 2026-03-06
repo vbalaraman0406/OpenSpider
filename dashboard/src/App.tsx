@@ -1935,90 +1935,105 @@ export default function App() {
                     <div className="h-px w-full bg-slate-800/60"></div>
 
                     {/* Health Status */}
-                    <div
-                        className="relative"
-                        onMouseEnter={() => setIsHealthHovered(true)}
-                        onMouseLeave={() => setIsHealthHovered(false)}
-                    >
-                        <div className="flex items-center justify-between cursor-pointer">
-                            <div className="flex items-center gap-2.5">
-                                <div className={`relative flex items-center justify-center w-8 h-8 rounded-lg ${health?.status === 'green' ? 'bg-emerald-500/10 border border-emerald-500/30' :
-                                    health?.status === 'amber' ? 'bg-amber-500/10 border border-amber-500/30' :
-                                        'bg-red-500/10 border border-red-500/30'
-                                    }`}>
-                                    <Heart className={`w-4 h-4 ${health?.status === 'green' ? 'text-emerald-400' :
-                                        health?.status === 'amber' ? 'text-amber-400' :
-                                            'text-red-400'
-                                        }`} />
-                                    <span className={`absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-slate-900 ${health?.status === 'green' ? 'bg-emerald-400 health-pulse shadow-[0_0_8px_rgba(52,211,153,0.6)]' :
-                                        health?.status === 'amber' ? 'bg-amber-400 health-pulse shadow-[0_0_8px_rgba(251,191,36,0.6)]' :
-                                            'bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.6)]'
-                                        }`}></span>
-                                </div>
-                                <div className="flex flex-col">
-                                    <span className={`text-xs font-semibold ${health?.status === 'green' ? 'text-emerald-400' :
-                                        health?.status === 'amber' ? 'text-amber-400' :
-                                            'text-red-400'
-                                        }`}>
-                                        {health?.status === 'green' ? 'All Systems Healthy' :
-                                            health?.status === 'amber' ? 'Degraded' :
-                                                'Unreachable'}
-                                    </span>
-                                    <span className="text-[10px] text-slate-500 font-medium">
-                                        {health ? `Uptime: ${formatUptime(health.uptime)}` : 'Connecting...'}
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
+                    {(() => {
+                        const isConnected = config.status === 'connected';
+                        const isGreen = isConnected && health?.status === 'green';
+                        const isAmber = isConnected && health?.status === 'amber';
 
-                        {/* Health Detail Tooltip */}
-                        {isHealthHovered && health && (
-                            <div className="absolute bottom-full left-0 right-0 mb-3 bg-slate-900/95 backdrop-blur-xl border border-slate-700/60 rounded-xl shadow-2xl p-4 z-50">
-                                <div className="absolute bottom-[-6px] left-6 w-3 h-3 bg-slate-900/95 border-r border-b border-slate-700/60 rotate-45"></div>
-                                <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">System Health</div>
-                                <div className="space-y-2.5">
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-xs text-slate-400 flex items-center gap-2">
-                                            <Smartphone className="w-3 h-3" /> WhatsApp
-                                        </span>
-                                        <span className={`text-xs font-semibold flex items-center gap-1.5 ${health.components.whatsapp === 'connected' ? 'text-emerald-400' : 'text-amber-400'
+                        const statusLabel = !isConnected ? 'Disconnected' : isGreen ? 'All Systems Healthy' : isAmber ? 'Degraded' : 'Unreachable';
+
+                        return (
+                            <div
+                                className="relative"
+                                onMouseEnter={() => setIsHealthHovered(true)}
+                                onMouseLeave={() => setIsHealthHovered(false)}
+                            >
+                                <div className="flex items-center justify-between cursor-pointer">
+                                    <div className="flex items-center gap-2.5">
+                                        <div className={`relative flex items-center justify-center w-8 h-8 rounded-lg ${isGreen ? 'bg-emerald-500/10 border border-emerald-500/30' :
+                                                isAmber ? 'bg-amber-500/10 border border-amber-500/30' :
+                                                    'bg-red-500/10 border border-red-500/30'
                                             }`}>
-                                            <span className={`w-1.5 h-1.5 rounded-full ${health.components.whatsapp === 'connected' ? 'bg-emerald-400' : 'bg-amber-400'
+                                            <Heart className={`w-4 h-4 ${isGreen ? 'text-emerald-400' :
+                                                    isAmber ? 'text-amber-400' :
+                                                        'text-red-400'
+                                                }`} />
+                                            <span className={`absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-slate-900 ${isGreen ? 'bg-emerald-400 health-pulse shadow-[0_0_8px_rgba(52,211,153,0.6)]' :
+                                                    isAmber ? 'bg-amber-400 health-pulse shadow-[0_0_8px_rgba(251,191,36,0.6)]' :
+                                                        'bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.6)]'
                                                 }`}></span>
-                                            {health.components.whatsapp}
-                                        </span>
-                                    </div>
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-xs text-slate-400 flex items-center gap-2">
-                                            <Bot className="w-3 h-3" /> LLM
-                                        </span>
-                                        <span className="text-xs font-semibold text-emerald-400 flex items-center gap-1.5">
-                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                                            {health.components.llm}
-                                        </span>
-                                    </div>
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-xs text-slate-400 flex items-center gap-2">
-                                            <Server className="w-3 h-3" /> Server
-                                        </span>
-                                        <span className="text-xs font-semibold text-emerald-400 flex items-center gap-1.5">
-                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                                            running
-                                        </span>
-                                    </div>
-                                    <div className="h-px w-full bg-slate-800/60 my-1"></div>
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-[10px] text-slate-500">Memory</span>
-                                        <span className="text-[10px] font-mono text-slate-300">{health.memory} MB</span>
-                                    </div>
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-[10px] text-slate-500">Uptime</span>
-                                        <span className="text-[10px] font-mono text-slate-300">{formatUptime(health.uptime)}</span>
+                                        </div>
+                                        <div className="flex flex-col">
+                                            <span className={`text-xs font-semibold ${isGreen ? 'text-emerald-400' :
+                                                    isAmber ? 'text-amber-400' :
+                                                        'text-red-400'
+                                                }`}>
+                                                {statusLabel}
+                                            </span>
+                                            <span className="text-[10px] text-slate-500 font-medium">
+                                                {!isConnected ? 'Offline' : health ? `Uptime: ${formatUptime(health.uptime)}` : 'Connecting...'}
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
+
+                                {/* Health Detail Tooltip */}
+                                {isHealthHovered && (
+                                    <div className="absolute bottom-full left-0 right-0 mb-3 bg-slate-900/95 backdrop-blur-xl border border-slate-700/60 rounded-xl shadow-2xl p-4 z-50">
+                                        <div className="absolute bottom-[-6px] left-6 w-3 h-3 bg-slate-900/95 border-r border-b border-slate-700/60 rotate-45"></div>
+                                        <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">System Health</div>
+
+                                        {!isConnected ? (
+                                            <div className="text-xs text-red-400 mb-2 font-medium leading-relaxed">
+                                                WebSocket Disconnected. Attempting to reconnect or the gateway engine is offline...
+                                            </div>
+                                        ) : health ? (
+                                            <div className="space-y-2.5">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-xs text-slate-400 flex items-center gap-2">
+                                                        <Smartphone className="w-3 h-3" /> WhatsApp
+                                                    </span>
+                                                    <span className={`text-xs font-semibold flex items-center gap-1.5 ${health.components.whatsapp === 'connected' ? 'text-emerald-400' : 'text-amber-400'}`}>
+                                                        <span className={`w-1.5 h-1.5 rounded-full ${health.components.whatsapp === 'connected' ? 'bg-emerald-400' : 'bg-amber-400'}`}></span>
+                                                        {health.components.whatsapp}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-xs text-slate-400 flex items-center gap-2">
+                                                        <Bot className="w-3 h-3" /> LLM
+                                                    </span>
+                                                    <span className="text-xs font-semibold text-emerald-400 flex items-center gap-1.5">
+                                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                                                        {health.components.llm}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-xs text-slate-400 flex items-center gap-2">
+                                                        <Server className="w-3 h-3" /> Server
+                                                    </span>
+                                                    <span className="text-xs font-semibold text-emerald-400 flex items-center gap-1.5">
+                                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                                                        running
+                                                    </span>
+                                                </div>
+                                                <div className="h-px w-full bg-slate-800/60 my-1"></div>
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-[10px] text-slate-500">Memory</span>
+                                                    <span className="text-[10px] font-mono text-slate-300">{health.memory} MB</span>
+                                                </div>
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-[10px] text-slate-500">Uptime</span>
+                                                    <span className="text-[10px] font-mono text-slate-300">{formatUptime(health.uptime)}</span>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="text-xs text-slate-400">Loading components...</div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
-                        )}
-                    </div>
+                        );
+                    })()}
                 </div>
             </aside>
 
