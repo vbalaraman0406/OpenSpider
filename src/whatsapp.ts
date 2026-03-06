@@ -257,6 +257,7 @@ export async function startWhatsApp() {
         markOnlineOnConnect: true,
         syncFullHistory: false,
         msgRetryCounterCache,
+        qrTimeout: 60000, // Increase QR timeout to 60s to prevent rapid crash loops on headless servers
         retryRequestDelayMs: 250,
         getMessage: async (key) => {
             // Look up the original sent message content so Baileys can re-relay it on retry.
