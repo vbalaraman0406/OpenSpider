@@ -138,7 +138,10 @@ program
 
             console.log('\n🕷️ Updating OpenSpider to the latest version...\n');
 
-            console.log('🔄 1. Pulling latest code from GitHub...');
+            console.log('🔄 0. Resetting local file changes (e.g. package-lock conflicts)...');
+            execSync('git reset --hard HEAD', { stdio: 'inherit', cwd: rootDir });
+
+            console.log('\n⬇️  1. Pulling latest code from GitHub...');
             execSync('git pull origin main', { stdio: 'inherit', cwd: rootDir });
 
             console.log('\n📦 2. Installing dependencies...');
