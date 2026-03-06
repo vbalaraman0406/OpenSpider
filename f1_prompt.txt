@@ -1,0 +1,1 @@
+Go to F1 Fantasy and build a team. DO NOT click elements one-by-one. Use the execute_js command to instantly batch-add Piastri, Sainz, Bearman, Hadjar, Perez, Ferrari, and Aston Martin. After that, click Continue, select Piastri as the Turbo Driver, and click Save Team.

@@ -1,0 +1,1 @@
+grep -i GMAIL .env 2>/dev/null || echo 'NO_GMAIL_VARS_FOUND'

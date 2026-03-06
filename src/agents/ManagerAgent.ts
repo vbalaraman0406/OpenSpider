@@ -58,7 +58,22 @@ export class ManagerAgent {
         const isCronTriggered = prompt.includes('[SYSTEM CRON TRIGGER]') || prompt.includes('[SYSTEM MANUAL TRIGGER]');
         const memorySection = isCronTriggered ? '' : `\n\n[MEMORY CONTEXT]\n${readMemoryContext()}`;
 
-        const systemPrompt = `${compiledPersonaPrompt}\n\n[SYSTEM CONTEXT]\nCurrent Local Time: ${new Date().toLocaleString()}\nTimezone Name: ${Intl.DateTimeFormat().resolvedOptions().timeZone}${memorySection}\n\n[TASK INSTRUCTIONS]
+        // Inject active cron jobs list so the agent knows what's already running
+        let cronJobsSection = "";
+        try {
+            const cronPath = path.join(process.cwd(), 'workspace', 'cron_jobs.json');
+            if (fs.existsSync(cronPath)) {
+                const jobs = JSON.parse(fs.readFileSync(cronPath, 'utf-8'));
+                if (jobs.length > 0) {
+                    cronJobsSection = "\n\n[ACTIVE CRON JOBS]\nThe following scheduled cron jobs are currently mapped in the system:\n";
+                    for (const job of jobs) {
+                        cronJobsSection += `- Job ID: ${job.id} | Name: ${job.name || job.description}\n  Schedule: Every ${job.intervalHours || 24} hours${job.preferredTime ? ` at ${job.preferredTime}` : ''}\n  Prompt Text: ${job.prompt}\n\n`;
+                    }
+                }
+            }
+        } catch (e) { }
+
+        const systemPrompt = `${compiledPersonaPrompt}\n\n[SYSTEM CONTEXT]\nCurrent Local Time: ${new Date().toLocaleString()}\nTimezone Name: ${Intl.DateTimeFormat().resolvedOptions().timeZone}${memorySection}${cronJobsSection}\n\n[TASK INSTRUCTIONS]
 Your job is to break down the user's complex request into a sequential plan of sub-tasks.
 Each sub-task MUST be assigned to one of the EXISTING Worker Agents listed above. Use their exact Role name (e.g. "${existingRoles[0] || 'Researcher'}", "${existingRoles[1] || 'Coder'}").
 CRITICAL: DO NOT invent new agent roles! If a task doesn't perfectly match any agent, assign it to the closest matching existing agent. The Coder agent is your general-purpose workhorse for any file/script/implementation work.

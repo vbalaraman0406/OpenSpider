@@ -54,12 +54,20 @@ export function readMemoryContext(): string {
         const ltm = fs.readFileSync(path.join(WORKSPACE_DIR, 'memory.md'), 'utf-8');
         context += `## memory.md (Long Term Key Information)\n${ltm}\n\n`;
 
-        // Read today's short-term daily log
-        const todayStr = new Date().toISOString().split('T')[0];
-        const todayPath = path.join(MEMORY_DIR, `${todayStr}.md`);
+        // Read recent short-term daily logs (up to 3 days to prevent amnesia across midnight)
+        let recentLogs = '';
+        for (let i = 2; i >= 0; i--) {
+            const date = new Date();
+            date.setDate(date.getDate() - i);
+            const dateStr = date.toISOString().split('T')[0];
+            const logPath = path.join(MEMORY_DIR, `${dateStr}.md`);
+            if (fs.existsSync(logPath)) {
+                recentLogs += `## Conversation Log (${dateStr})\n${fs.readFileSync(logPath, 'utf-8')}\n\n`;
+            }
+        }
 
-        if (fs.existsSync(todayPath)) {
-            let todayLog = fs.readFileSync(todayPath, 'utf-8');
+        if (recentLogs) {
+            let todayLog = recentLogs;
 
             // --- OpenClaw Cognitive Compaction ---
             // Prevent runaway token bloat by applying a strict sliding window on raw transcripts.
@@ -71,8 +79,9 @@ export function readMemoryContext(): string {
                     (truncatedIndex !== -1 ? todayLog.substring(truncatedIndex) : todayLog.substring(todayLog.length - MAX_MEMORY_CHARS));
             }
 
-            context += `## Today's Conversation Log (${todayStr})\n${todayLog}\n\n`;
+            context += `${todayLog}\n\n`;
         } else {
+            const todayStr = new Date().toISOString().split('T')[0];
             context += `## Today's Conversation Log (${todayStr})\n(No prior interactions today.)\n\n`;
         }
 
