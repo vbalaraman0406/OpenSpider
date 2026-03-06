@@ -66,17 +66,19 @@ program
                 script: scriptPath,
                 name: 'openspider-gateway',
                 cwd: rootDir
-                // You can add environment variables if needed
-                // env: { NODE_ENV: "production" }
             }, (err, apps) => {
                 pm2.disconnect();
                 if (err) {
                     console.error('Failed to start background process:', err);
                     process.exit(2);
                 }
+                console.log('\n==================================================');
                 console.log('✅ OpenSpider is now running in the background!');
-                console.log('To view the WhatsApp QR code or logs, run: openspider logs');
-                console.log('To start chatting, run: openspider tui');
+                console.log('==================================================');
+                console.log('\n🧭 Dashboard:   http://localhost:4001');
+                console.log('📜 View Logs:   openspider logs');
+                console.log('🛑 Stop Engine: openspider stop\n');
+                process.exit(0);
             });
         });
     });
@@ -458,7 +460,8 @@ program
     .command('status')
     .description('Show current OpenSpider gateway status and configuration')
     .action(() => {
-        // Handle both dev mode (src) and compiled mode (dist)
+        // Handle both dev mode (src) and compiled mode (dist). 
+        // When running via `npm link` (global bin), __dirname is effectively where the executing script lives.
         const rootDir = __dirname.endsWith('src') || __dirname.endsWith('dist') ? path.join(__dirname, '..') : __dirname;
         const envPath = path.join(rootDir, '.env');
         require('dotenv').config({ path: envPath });
