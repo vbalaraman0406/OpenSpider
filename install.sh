@@ -67,8 +67,8 @@ echo ""
 
 # 4. Link the command globally and install PM2
 echo -e "${GREEN}Installing PM2 (process manager) and linking 'openspider' globally...${NC}"
-npm install -g pm2 || sudo npm install -g pm2
-npm link || sudo npm link
+npm install -g pm2 --unsafe-perm || sudo npm install -g pm2 --unsafe-perm
+npm link --unsafe-perm || sudo npm link --unsafe-perm
 
 echo -e "\n${GREEN}==========================================${NC}"
 echo -e "${GREEN}🕷️ OpenSpider installed successfully! 🎉${NC}"
