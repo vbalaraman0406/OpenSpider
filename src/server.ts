@@ -44,9 +44,10 @@ export function startServer() {
     // SECURITY: Restrict CORS to localhost, private/Tailscale network IPs, and extensions
     app.use(cors({
         origin: (origin, callback) => {
-            // Allow same-origin requests (no Origin header), localhost, private IPs (Tailscale 100.x, 192.168, etc), and chrome extensions
+            // Allow same-origin requests (no Origin header), localhost, private IPs (Tailscale 100.x, 192.168, etc), Tailscale MagicDNS, and chrome extensions
             if (!origin ||
                 /^https?:\/\/(localhost|127\.0\.0\.1|100\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2[0-9]|3[0-1])\.\d+\.\d+)(:\d+)?$/.test(origin) ||
+                /^https?:\/\/([a-zA-Z0-9.-]+)\.ts\.net(:\d+)?$/.test(origin) ||
                 /^chrome-extension:\/\//.test(origin)) {
                 callback(null, true);
             } else {
