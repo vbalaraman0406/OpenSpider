@@ -533,6 +533,15 @@ export async function startWhatsApp() {
                     if (!hasMatch) {
                         return; // Block, sender not whitelisted
                     }
+
+                    // If DM sender is allowed, enforce the global botMode mention requirement
+                    // (Just like in groups, the agent should not eagerly jump into human DMs unless tagged)
+                    if (config.botMode === 'mention') {
+                        const isMentionedViaText = textMessage.toLowerCase().includes(`@${agentName.toLowerCase()}`);
+                        if (!isMentionedViaText) {
+                            return;
+                        }
+                    }
                 }
             }
         }
@@ -716,6 +725,9 @@ export async function startWhatsApp() {
                     }
                 }
             }
+
+            // Filter out system routing logs that the LLM occasionally leak back into the chat
+            cleanResponse = cleanResponse.replace(/WhatsApp message delivered to.*$/gim, '').trim();
 
             if (cleanResponse.length > 0) {
                 // Broadcast to Web Dashboard UI!
