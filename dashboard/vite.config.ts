@@ -8,7 +8,6 @@ export default defineConfig({
         tailwindcss(),
         react(),
     ],
-    envDir: '../', // CRITICAL: This allows Vite to see the .env file in the OpenSpider root directory
     server: {
         port: 5173,
         proxy: {

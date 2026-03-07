@@ -147,7 +147,19 @@ program
             console.log('\n📦 2. Installing dependencies...');
             execSync('npm install', { stdio: 'inherit', cwd: rootDir });
 
-            console.log('\n🔨 3. Building project...');
+            console.log('\n🔐 3. Preparing Dashboard Authentication...');
+            const envPath = require('path').join(rootDir, '.env');
+            const dashEnvPath = require('path').join(rootDir, 'dashboard', '.env');
+            if (require('fs').existsSync(envPath)) {
+                const envContent = require('fs').readFileSync(envPath, 'utf8');
+                const keyMatch = envContent.match(/DASHBOARD_API_KEY=(.*)/);
+                if (keyMatch && keyMatch[1]) {
+                    require('fs').writeFileSync(dashEnvPath, `VITE_API_KEY=${keyMatch[1].trim()}`);
+                    console.log('   ✅ Synchronized Dashboard API Key.');
+                }
+            }
+
+            console.log('\n🔨 4. Building project...');
             execSync('npm run build', { stdio: 'inherit', cwd: rootDir });
 
             console.log('\n🔗 4. Updating global CLI...');
