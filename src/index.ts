@@ -22,6 +22,14 @@ export async function bootstrap() {
         require('dotenv').config({ path: envPath });
     }
 
+    // Synchronize the API Key to the Dashboard's Vite environment
+    if (process.env.DASHBOARD_API_KEY) {
+        const dashEnvPath = path.join(rootDir, 'dashboard', '.env');
+        try {
+            fs.writeFileSync(dashEnvPath, `VITE_API_KEY=${process.env.DASHBOARD_API_KEY.trim()}`);
+        } catch (e) { }
+    }
+
     // 2. Start the API & WebSocket Dashboard Server
     console.log("Initializing Dashboard API Server...");
     startServer();
