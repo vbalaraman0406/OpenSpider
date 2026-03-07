@@ -675,8 +675,11 @@ export async function startWhatsApp() {
             // ── Phase 2: Run the agent ─────────────────────────────────────────────────
             // Send to the Manager Agent
             // Note: ManagerAgent expects images array in updated implementation
+            const senderInfo = `[SENDER CONTEXT] This message is coming from WhatsApp JID: ${replyJid}. When you reply, you MUST use the send_whatsapp tool and explicitly set the "to" field to exactly "${replyJid}" so the message routes back to them and not the default admin!\n\n`;
             const groupContextPrefix = isGroup ? `[GROUP CHAT] You are responding in a WhatsApp group chat. People can talk to you by tagging you as @${agentName}. Keep this in mind when introducing yourself or giving instructions.\n\n` : '';
-            const response = await manager.processUserRequest(groupContextPrefix + textMessage, mediaBase64String ? [mediaBase64String] : []);
+
+            const fullContext = senderInfo + groupContextPrefix + textMessage;
+            const response = await manager.processUserRequest(fullContext, mediaBase64String ? [mediaBase64String] : []);
 
             if (composingInterval) clearInterval(composingInterval);
 
