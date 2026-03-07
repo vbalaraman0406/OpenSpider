@@ -424,12 +424,19 @@ ${context.join('\n')}
                                     if (rawNumber.length > 5 && /^\+?\d+$/.test(r.replace(/\s/g, ''))) {
                                         targetJids.push(`${rawNumber}@s.whatsapp.net`);
                                     } else {
-                                        // Assume it's a group name — case-insensitive match
-                                        const matchedGroup = participatingGroups.find(g => g.subject.toLowerCase() === lowerR || g.subject.toLowerCase().includes(lowerR));
+                                        // Assume it's a group name — robust two-way case-insensitive match
+                                        // It matches if the group name contains the LLM's string ("Family" in "Balaraman Family")
+                                        // OR if the LLM's string contains the group name ("Family" in "Family Group")
+                                        const cleanLowerR = lowerR.replace(/\bgroup\b/ig, '').trim();
+                                        const matchedGroup = participatingGroups.find(g => {
+                                            const sub = g.subject.toLowerCase();
+                                            return sub === lowerR || sub.includes(lowerR) || lowerR.includes(sub) || (cleanLowerR.length >= 3 && sub.includes(cleanLowerR));
+                                        });
                                         if (matchedGroup) {
                                             targetJids.push(matchedGroup.id);
                                         } else {
-                                            console.warn(`[Worker - ${this.role}] Warning: Could not resolve WhatsApp target "${r}" to a known format or Group Name. Evaluated against ${participatingGroups.length} groups.`);
+                                            const availableGroups = participatingGroups.map(g => `"${g.subject}" (${g.id})`).join(', ');
+                                            console.warn(`[Worker - ${this.role}] Warning: Could not resolve WhatsApp target "${r}" to a known format or Group Name. Evaluated against ${participatingGroups.length} groups: [${availableGroups}]`);
                                         }
                                     }
                                 }
