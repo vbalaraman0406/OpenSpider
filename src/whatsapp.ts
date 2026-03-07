@@ -727,7 +727,12 @@ export async function startWhatsApp() {
             }
 
             // Filter out system routing logs that the LLM occasionally leak back into the chat
-            cleanResponse = cleanResponse.replace(/WhatsApp message delivered to.*$/gim, '').trim();
+            cleanResponse = cleanResponse.replace(/WhatsApp message delivered to.*$/gim, '')
+                .replace(/WhatsApp message sent successfully to.*$/gim, '')
+                .replace(/Parallel Task \d+-\d+ Result from.*?(?=\n\n|$)/gis, '')
+                .replace(/^\d+\.\s+\*\*.*?\*\*.*?(?=\n\d+\.|\n\n|$)/gms, '') // Strips out the bulleted delivery confirmations
+                .replace(/Task complete\./gim, '')
+                .trim();
 
             if (cleanResponse.length > 0) {
                 // Broadcast to Web Dashboard UI!
