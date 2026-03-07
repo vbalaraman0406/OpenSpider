@@ -496,7 +496,7 @@ export async function startWhatsApp() {
 
                         const mentionedJidList = msg.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
                         const isTaggedViaJid = mentionedJidList.includes(botJid);
-                        const isMentionedViaText = textMessage.toLowerCase().includes(`@${agentName.toLowerCase()}`);
+                        const isMentionedViaText = new RegExp(`@\\s*${agentName}`, 'i').test(textMessage);
 
                         // If not tagged via WhatsApp mention system AND not mentioned by plain text, ignore
                         if (!isTaggedViaJid && !isMentionedViaText) {
@@ -512,7 +512,7 @@ export async function startWhatsApp() {
 
                         const mentionedJidList = msg.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
                         const isTaggedViaJid = mentionedJidList.includes(botJid);
-                        const isMentionedViaText = textMessage.toLowerCase().includes(`@${agentName.toLowerCase()}`);
+                        const isMentionedViaText = new RegExp(`@\\s*${agentName}`, 'i').test(textMessage);
 
                         if (!isTaggedViaJid && !isMentionedViaText) {
                             return;
@@ -537,7 +537,7 @@ export async function startWhatsApp() {
                     // If DM sender is allowed, enforce the global botMode mention requirement
                     // (Just like in groups, the agent should not eagerly jump into human DMs unless tagged)
                     if (config.botMode === 'mention') {
-                        const isMentionedViaText = textMessage.toLowerCase().includes(`@${agentName.toLowerCase()}`);
+                        const isMentionedViaText = new RegExp(`@\\s*${agentName}`, 'i').test(textMessage);
                         if (!isMentionedViaText) {
                             return;
                         }

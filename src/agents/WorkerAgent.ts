@@ -86,8 +86,8 @@ Available tools you can request in your JSON response:
   • "ErXwobaYiN019PkySvjV" = Antoni (calm male)
   • "VR6AewLTigWG4xSOukaG" = Arnold (deep male)
   • "pNInz6obpgDQGcFmaJgB" = Adam (confident male)
-  • "yoZ06aMxZJJ28mfd3POQ" = Sam (clear male)
-  If the user asks for a specific voice style, pick the closest match. If no preference, omit "args" to use the default.)
+- send_voice: { "message": "Hello", "args": "voice_id" } (Send a voice note to the user via WhatsApp. The text in "message" will be converted to speech using ElevenLabs TTS and delivered as an audio message. Use "args" to optionally specify a voice ID.)
+- update_whatsapp_whitelist: { "command": "add_dm", "target": "+14155552671" } (Safely grant or revoke WhatsApp access for users. "command" can be "add_dm", "remove_dm", "add_group", or "remove_group". "target" should be the raw phone number (e.g. +14155552671) or exact Group JID strings.)
 - final_answer: { "result": "The final output" } (CRITICAL: You MUST include the 'result' key containing your answer)
 
 BROWSER USAGE GUIDELINES:
@@ -131,7 +131,7 @@ ${context.join('\n')}
             let response;
             try {
                 response = await this.llm.generateStructuredOutputs<{
-                    action: 'run_command' | 'write_script' | 'execute_script' | 'browse_web' | 'wait_for_user' | 'schedule_task' | 'message_agent' | 'send_email' | 'read_emails' | 'send_whatsapp' | 'send_voice' | 'final_answer';
+                    action: 'run_command' | 'write_script' | 'execute_script' | 'browse_web' | 'wait_for_user' | 'schedule_task' | 'message_agent' | 'send_email' | 'read_emails' | 'send_whatsapp' | 'send_voice' | 'update_whatsapp_whitelist' | 'final_answer';
                     command?: string;
                     filename?: string;
                     content?: string;
@@ -147,7 +147,7 @@ ${context.join('\n')}
                 }>(messages, {
                     type: "object",
                     properties: {
-                        action: { type: "string", enum: ["run_command", "write_script", "execute_script", "browse_web", "wait_for_user", "schedule_task", "message_agent", "send_email", "read_emails", "send_whatsapp", "send_voice", "final_answer"] },
+                        action: { type: "string", enum: ["run_command", "write_script", "execute_script", "browse_web", "wait_for_user", "schedule_task", "message_agent", "send_email", "read_emails", "send_whatsapp", "send_voice", "update_whatsapp_whitelist", "final_answer"] },
                         thought: { type: "string" },
                         summary_of_findings: { type: "string", description: "A highly compressed, 1-2 sentence memory of what you learned in this step. Retained forever even if thoughts are pruned." },
                         command: { type: "string" },
@@ -315,6 +315,45 @@ ${context.join('\n')}
                         } catch (e: any) {
                             toolOutput = `Failed to schedule task: ${e.message}`;
                         }
+                    }
+                } else if (response.action === 'update_whatsapp_whitelist' && response.command && response.target) {
+                    try {
+                        const configPath = path.join(process.cwd(), 'workspace', 'whatsapp_config.json');
+                        let waConfig: any = { dmPolicy: 'allowlist', allowedDMs: [], groupPolicy: 'allowlist', allowedGroups: [], botMode: 'mention' };
+                        if (fs.existsSync(configPath)) {
+                            waConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+                        }
+
+                        const target = response.target.trim();
+                        const rawNumber = target.replace(/\D/g, ''); // Extract just digits for DMs
+
+                        if (response.command === 'add_dm' && rawNumber) {
+                            if (!waConfig.allowedDMs) waConfig.allowedDMs = [];
+                            if (!waConfig.allowedDMs.includes(rawNumber)) waConfig.allowedDMs.push(rawNumber);
+                            toolOutput = `Successfully added ${rawNumber} to the WhatsApp Direct Messages Allowlist.`;
+                        } else if (response.command === 'remove_dm' && rawNumber) {
+                            if (waConfig.allowedDMs) {
+                                waConfig.allowedDMs = waConfig.allowedDMs.filter((num: string) => num.replace(/\D/g, '') !== rawNumber);
+                            }
+                            toolOutput = `Successfully removed ${rawNumber} from the WhatsApp Direct Messages Allowlist.`;
+                        } else if (response.command === 'add_group') {
+                            if (!waConfig.allowedGroups) waConfig.allowedGroups = [];
+                            const exists = waConfig.allowedGroups.some((g: any) => typeof g === 'string' ? g === target : g.jid === target);
+                            if (!exists) waConfig.allowedGroups.push({ jid: target, mode: "mention" });
+                            toolOutput = `Successfully added group ${target} to the Allowlist.`;
+                        } else if (response.command === 'remove_group') {
+                            if (waConfig.allowedGroups) {
+                                waConfig.allowedGroups = waConfig.allowedGroups.filter((g: any) => typeof g === 'string' ? g !== target : g.jid !== target);
+                            }
+                            toolOutput = `Successfully removed group ${target} from the Allowlist.`;
+                        } else {
+                            toolOutput = `Error: Invalid command or target format.`;
+                        }
+
+                        fs.writeFileSync(configPath, JSON.stringify(waConfig, null, 2));
+                        console.log(`[Worker - ${this.role}] Updated WhatsApp Allowlist via Agent Command.`);
+                    } catch (e: any) {
+                        toolOutput = `Failed to update WhatsApp whitelist: ${e.message}`;
                     }
                 } else if (response.action === 'send_email' && response.to && response.subject && response.body) {
                     console.log(`[Worker - ${this.role}] Dispatching email to ${response.to}...`);
