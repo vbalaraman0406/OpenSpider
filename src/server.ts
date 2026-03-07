@@ -25,13 +25,15 @@ export function startServer() {
     // X-XSS-Protection, Referrer-Policy, and Content-Security-Policy.
     // CSP is relaxed for localhost dashboard assets (inline scripts needed by Vite).
     app.use(helmet({
+        hsts: false, // Disable Strict-Transport-Security to allow plain HTTP on local networks/Tailscale
         contentSecurityPolicy: {
             directives: {
+                "upgrade-insecure-requests": null, // Disable forced HTTPS upgrades for HTTP IPs
                 defaultSrc: ["'self'"],
                 scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],  // Vite/React requires this in dev
                 styleSrc: ["'self'", "'unsafe-inline'"],
                 imgSrc: ["'self'", "data:", "blob:"],
-                connectSrc: ["'self'", "ws://localhost:*", "wss://localhost:*"],
+                connectSrc: ["'self'", "ws:", "wss:"], // Allow WebSocket on remote IPs natively
                 fontSrc: ["'self'", "data:"],
                 frameSrc: ["'none'"],
             },
@@ -39,11 +41,13 @@ export function startServer() {
         crossOriginEmbedderPolicy: false, // Relax for WebSocket compatibility
     }));
 
-    // SECURITY: Restrict CORS to localhost only — dashboard is local-only.
+    // SECURITY: Restrict CORS to localhost, private/Tailscale network IPs, and extensions
     app.use(cors({
         origin: (origin, callback) => {
-            // Allow same-origin requests (no Origin header), localhost, and chrome extensions
-            if (!origin || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin) || /^chrome-extension:\/\//.test(origin)) {
+            // Allow same-origin requests (no Origin header), localhost, private IPs (Tailscale 100.x, 192.168, etc), and chrome extensions
+            if (!origin ||
+                /^https?:\/\/(localhost|127\.0\.0\.1|100\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2[0-9]|3[0-1])\.\d+\.\d+)(:\d+)?$/.test(origin) ||
+                /^chrome-extension:\/\//.test(origin)) {
                 callback(null, true);
             } else {
                 callback(new Error('CORS: origin not allowed'));
