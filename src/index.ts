@@ -5,6 +5,7 @@ import 'dotenv/config'; // Automatically loads .env if it exists
 import { runSetup } from './setup';
 import { startServer } from './server';
 import { startWhatsApp } from './whatsapp';
+import { initWorkspace } from './memory';
 
 export async function bootstrap() {
     console.clear();
@@ -31,7 +32,8 @@ export async function bootstrap() {
     }
 
     // 2. Start the API & WebSocket Dashboard Server
-    console.log("Initializing Dashboard API Server...");
+    console.log("Initializing Workspace & Dashboard API Server...");
+    initWorkspace();
     startServer();
 
     // 3. Start the WhatsApp Gateway conditionally
