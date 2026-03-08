@@ -79,7 +79,7 @@ Available tools you can request in your JSON response:
 - message_agent: { "target": "Role Name", "message": "Text to send" } (Delegate a sub-task to a specialized sub-agent)
 - send_email: { "to": "user@example.com", "subject": "Hello", "body": "My message here" } (Send an outbound email natively using OAuth.)
 - read_emails: { "content": "query string", "target": "5" } (Scan the user's Gmail inbox natively. "content" is the search query like 'is:unread' or 'from:boss', and "target" is the max number of results.)
-- send_whatsapp: { "message": "Hello!", "to": "Engineering Team" } (Send a WhatsApp message. "to" is optional – if omitted, the message goes to the default configured owner. You can provide a comma-separated list of phone numbers, the word "default", OR the exact name of a WhatsApp Group the bot is in to route to multiple destinations at once.)
+- send_whatsapp: { "message": "Hello!", "to": "Engineering Team" } (Send a WhatsApp message. "to" is optional – if omitted, the message goes to the default configured owner. You can provide a comma-separated list of phone numbers, the word "default", OR the exact name of a WhatsApp Group the bot is in. CRITICAL: the "message" field is the exact text that the human user will read. Do NOT put internal status logs like 'Message sent successfully' in here. Write the conversational answer.)
 - send_voice: { "message": "Hello, how are you?", "args": "voice_id" } (Send a voice note to the user via WhatsApp. The text in "message" will be converted to speech using ElevenLabs TTS and delivered as an audio message. Use "args" to optionally specify a voice ID. Available voices:
   • "21m00Tcm4TlvDq8ikWAM" = Rachel (default, warm female)
   • "EXAVITQu4vr4xnSDxMaL" = Bella (soft female)
@@ -503,6 +503,7 @@ ${context.join('\n')}
                             } catch (e) { }
 
                             const formattedMsg = `✨ *${agentName}*\n\n${response.message}`;
+
                             let sentCount = 0;
                             const failedJids: string[] = [];
                             for (const jid of targetJids) {
