@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const WORKSPACE_DIR = path.join(process.cwd(), 'workspace');
+const rootDir = __dirname.endsWith('src') || __dirname.endsWith('dist') ? path.join(__dirname, '..') : __dirname;
+const WORKSPACE_DIR = path.join(rootDir, 'workspace');
 const MEMORY_DIR = path.join(WORKSPACE_DIR, 'memory');
 
 export function initWorkspace() {
@@ -11,7 +12,7 @@ export function initWorkspace() {
         fs.mkdirSync(WORKSPACE_DIR, { recursive: true });
 
         // Seed workspace from shipped defaults (workspace-defaults/)
-        const defaultsDir = path.join(process.cwd(), 'workspace-defaults');
+        const defaultsDir = path.join(rootDir, 'workspace-defaults');
         if (fs.existsSync(defaultsDir)) {
             console.log('[Workspace] First run detected — seeding from workspace-defaults/...');
             copyDirRecursive(defaultsDir, WORKSPACE_DIR);
