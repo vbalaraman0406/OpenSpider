@@ -169,7 +169,8 @@ export async function sendWhatsAppAudio(jid: string, audioFilePath: string) {
             audio: audioBuffer,
             mimetype: 'audio/ogg; codecs=opus',
             ptt: true,
-            seconds: durationSeconds
+            seconds: durationSeconds,
+            contextInfo: {} // Strip context to prevent 'i' info icon rendering
         });
         if (result?.key?.id) {
             sentMessageIds.add(result.key.id);
@@ -245,7 +246,33 @@ export async function startWhatsApp() {
     const pino = require('pino');
     const NodeCache = require('node-cache');
     const msgRetryCounterCache = new NodeCache();
-    const baileysLogger = pino({ level: 'error' });
+
+    // Intercept Baileys internal logs to detect and self-heal from "Bad MAC" decryption crashes
+    const loggerStream = require('stream').Writable({
+        write(chunk: any, enc: any, next: any) {
+            const str = chunk.toString();
+            if (str.includes('SessionError: No matching sessions found') || str.includes('failed to decrypt message')) {
+                console.log('\n[WhatsApp Security] 🛡️ Intercepted Bad MAC Decryption Crash!');
+                try {
+                    const authDir = path.join(process.cwd(), 'baileys_auth_info');
+                    if (fs.existsSync(authDir)) {
+                        const sessionFiles = fs.readdirSync(authDir).filter((f: string) => f.startsWith('session-'));
+                        let deleted = 0;
+                        for (const file of sessionFiles) {
+                            fs.unlinkSync(path.join(authDir, file));
+                            deleted++;
+                        }
+                        if (deleted > 0) console.log(`[WhatsApp Security] 🧹 Purged ${deleted} corrupt session keys to force re-exchange!`);
+                    }
+                } catch (e: any) {
+                    console.error('[WhatsApp Security] Failed to clear corrupt sessions:', e.message);
+                }
+            }
+            next();
+        }
+    });
+
+    const baileysLogger = pino({ level: 'error' }, loggerStream);
 
     const sock = makeWASocket({
         version,
@@ -400,47 +427,72 @@ export async function startWhatsApp() {
             return;
         }
 
+        // Unwrap WhatsApp protocol wrappers (Disappearing Messages, Linked Devices)
+        let baseMsg = msg.message;
+        if (baseMsg?.ephemeralMessage?.message) baseMsg = baseMsg.ephemeralMessage.message;
+        if (baseMsg?.viewOnceMessage?.message) baseMsg = baseMsg.viewOnceMessage.message;
+        if (baseMsg?.viewOnceMessageV2?.message) baseMsg = baseMsg.viewOnceMessageV2.message;
+        if (baseMsg?.documentWithCaptionMessage?.message) baseMsg = baseMsg.documentWithCaptionMessage.message;
+        if (baseMsg?.deviceSentMessage?.message) baseMsg = baseMsg.deviceSentMessage.message;
+
         // Ensure we extract text from standard chat, extended chat, or media captions
-        let textMessage = msg.message.conversation || msg.message.extendedTextMessage?.text || msg.message.imageMessage?.caption || msg.message.videoMessage?.caption || msg.message.pollCreationMessage?.name || '';
+        let textMessage = baseMsg?.conversation || baseMsg?.extendedTextMessage?.text || baseMsg?.imageMessage?.caption || baseMsg?.videoMessage?.caption || baseMsg?.pollCreationMessage?.name || '';
 
         // Detect voice/audio messages
-        const audioMessage = msg.message.audioMessage;
+        const audioMessage = baseMsg?.audioMessage;
         const isVoiceNote = !!(audioMessage && (audioMessage as any).ptt); // ptt = push-to-talk voice note
         const isAudioFile = !!audioMessage; // Any audio attachment
 
         // Detect video messages (to inform user)
-        const videoMessage = msg.message.videoMessage;
+        const videoMessage = baseMsg?.videoMessage;
 
         console.log(`\n[DEBUG - RAW WA MSG] fromMe: ${msg.key.fromMe}, remoteJid: ${msg.key.remoteJid}, text: ${textMessage}`);
+        if (!textMessage && msg.key.fromMe) {
+            console.log(`[DEBUG - RAW JSON PAYLOAD FOR BLANK MSG]:\n${JSON.stringify(msg.message, null, 2)}`);
+        }
+
         const isGroup = msg.key.remoteJid?.endsWith('@g.us');
 
         let isNoteToSelf = false;
-        // Prevent Infinite Loops without hardcoded signatures:
-        // By tracking the exact ID of messages sent by OpenSpider, we can drop echoed bot replies but allow 'Message Yourself' inputs from the human.
+
+        // --- IRONCLAD LOOP GUARD ---
         if (msg.key.fromMe) {
-            // Check if this was a forwarded message etc
+            // Drop forwarded/automated echoes
             if (msg.message?.extendedTextMessage?.contextInfo?.isForwarded) {
                 processingMessageIds.delete(msg.key.id!);
                 return;
             }
 
-            // Strict heuristic perfectly mirroring OpenClaw's design pattern:
+            // 1. Did OpenSpider explicitly send this? (Matches OpenClaw memory)
             if (sentMessageIds.has(msg.key.id!)) {
                 processingMessageIds.delete(msg.key.id!);
-                return; // OpenSpider sent this! Drop it to prevent the infinite loop echo!
+                return;
             }
 
+            // 2. Is this literally the AI's *own* outbound reply formatting echoing back?
+            const cleanText = textMessage.trim();
+            if (cleanText.startsWith('✨ *') || cleanText.includes('✨ *')) {
+                processingMessageIds.delete(msg.key.id!);
+                return;
+            }
+
+            // If we survived the guards, this is a genuine message typed by the human from their own phone or Linked Device.
             const botNumber = sock.user?.id ? sock.user.id.split(':')[0] : '';
-            // Self-message detection:
-            // 1. remoteJid starts with the bot's own phone number (standard @s.whatsapp.net)
-            // 2. remoteJid matches the bot's own cached LID (discovered on connection from creds)
+
+            // Is the human texting their *own* number? (Self-Chat / Notes to Self)
+            // A genuine "Message Yourself" from a companion device will have `fromMe: true` 
+            // AND the remoteJid will either be the bot's primary number or a linked device @lid proxy.
             isNoteToSelf = !!(
                 (botNumber && msg.key.remoteJid?.startsWith(botNumber)) ||
+                (msg.key.remoteJid?.includes('@lid')) ||
                 (myLid && msg.key.remoteJid === myLid)
             );
-            if (!isNoteToSelf) {
+
+            // If it's a Group Chat, we let the group mention logic handle it below.
+            // If it's a DM to someone else, DROP IT. We absolutely do not want the bot hijacking our outbound texts to friends.
+            if (!isNoteToSelf && !isGroup) {
                 processingMessageIds.delete(msg.key.id!);
-                return; // Ignore outbound messages sent to other people
+                return;
             }
         }
 
@@ -454,9 +506,19 @@ export async function startWhatsApp() {
         // Dynamically ascertain the Manager's Persona Name
         let agentName = 'OpenSpider';
         try {
-            const persona = new PersonaShell('manager');
-            const caps = persona.getCapabilities();
-            if (caps && caps.name) agentName = caps.name;
+            const personaClass = require('./agents/PersonaShell').PersonaShell;
+            const pInstance = new personaClass('manager');
+
+            // Try to parse from IDENTITY.md first (most reliable)
+            const identityText = pInstance.getIdentity() || '';
+            const nameMatch = identityText.match(/Name:\s*(.+)/i);
+            if (nameMatch && nameMatch[1]) {
+                agentName = nameMatch[1].trim();
+            } else {
+                // Fallback to CAPABILITIES.json
+                const caps = pInstance.getCapabilities();
+                if (caps && caps.name) agentName = caps.name;
+            }
         } catch (e) { }
 
         let config = { dmPolicy: 'allowlist', allowedDMs: [] as string[], groupPolicy: 'disabled', allowedGroups: [] as any[], botMode: 'mention' };
@@ -470,77 +532,86 @@ export async function startWhatsApp() {
         } catch (e) { console.error("[WhatsApp] Failed to load Security Config. Defaulting to strict."); }
 
         // --- SECURITY FIREWALL ---
-        if (!isNoteToSelf) {
-            if (isGroup) {
-                // Group Policy Check
-                if (config.groupPolicy === 'disabled') {
-                    return; // Block all group messages entirely
-                } else if (config.groupPolicy === 'allowlist') {
-                    // allowedGroups can be: string[] or { jid: string, mode: string }[]
-                    const matchedGroup = config.allowedGroups.find((g: any) => {
-                        const jid = typeof g === 'string' ? g : g.jid;
-                        return jid === msg.key.remoteJid;
-                    });
-                    if (!matchedGroup) {
-                        return; // Block, this group is not on the whitelist
-                    }
-                    // Determine per-group mode (default to global botMode for backward compat)
-                    const groupMode = typeof matchedGroup === 'string'
-                        ? (config.botMode || 'mention')
-                        : (matchedGroup.mode || config.botMode || 'mention');
+        if (isGroup) {
+            // Group Policy Check
+            if (config.groupPolicy === 'disabled') {
+                processingMessageIds.delete(msg.key.id!);
+                return; // Block all group messages entirely
+            } else if (config.groupPolicy === 'allowlist') {
+                // allowedGroups can be: string[] or { jid: string, mode: string }[]
+                const matchedGroup = config.allowedGroups.find((g: any) => {
+                    const jid = typeof g === 'string' ? g : g.jid;
+                    return jid === msg.key.remoteJid;
+                });
+                if (!matchedGroup) {
+                    processingMessageIds.delete(msg.key.id!);
+                    return; // Block, this group is not on the whitelist
+                }
+                // Determine per-group mode (default to global botMode for backward compat)
+                const groupMode = typeof matchedGroup === 'string'
+                    ? (config.botMode || 'mention')
+                    : (matchedGroup.mode || config.botMode || 'mention');
 
-                    // Group Chat Mentions logic (per-group)
-                    if (groupMode === 'mention') {
-                        const botNumber = sock.user?.id ? sock.user.id.split(':')[0] : '';
-                        const botJid = `${botNumber}@s.whatsapp.net`;
+                // Group Chat Mentions logic (per-group)
+                if (groupMode === 'mention') {
+                    const botNumber = sock.user?.id ? sock.user.id.split(':')[0] : '';
+                    const botJid = `${botNumber}@s.whatsapp.net`;
 
-                        const mentionedJidList = msg.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
-                        const isTaggedViaJid = mentionedJidList.includes(botJid);
-                        const isMentionedViaText = new RegExp(`@\\s*${agentName}`, 'i').test(textMessage);
+                    const mentionedJidList = msg.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
+                    const isTaggedViaJid = mentionedJidList.includes(botJid);
+                    const isMentionedViaText = new RegExp(`@\\s*${agentName}`, 'i').test(textMessage);
 
-                        // If not tagged via WhatsApp mention system AND not mentioned by plain text, ignore
-                        if (!isTaggedViaJid && !isMentionedViaText) {
-                            return;
-                        }
-                    }
-                    // If groupMode === 'listen', fall through and process every message
-                } else if (config.groupPolicy === 'open') {
-                    // For open policy, use global botMode for mention check
-                    if (config.botMode === 'mention') {
-                        const botNumber = sock.user?.id ? sock.user.id.split(':')[0] : '';
-                        const botJid = `${botNumber}@s.whatsapp.net`;
-
-                        const mentionedJidList = msg.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
-                        const isTaggedViaJid = mentionedJidList.includes(botJid);
-                        const isMentionedViaText = new RegExp(`@\\s*${agentName}`, 'i').test(textMessage);
-
-                        if (!isTaggedViaJid && !isMentionedViaText) {
-                            return;
-                        }
+                    // If not tagged via WhatsApp mention system AND not mentioned by plain text, ignore
+                    if (!isTaggedViaJid && !isMentionedViaText) {
+                        processingMessageIds.delete(msg.key.id!);
+                        return;
                     }
                 }
-            } else {
-                // DM Policy Check (Direct Messages)
-                if (config.dmPolicy === 'disabled') {
-                    return; // Block all DMs
-                } else if (config.dmPolicy === 'allowlist') {
-                    // Sender JID looks like '1234567890@s.whatsapp.net'
-                    const senderNumber = msg.key.remoteJid?.split('@')[0] || '';
-                    // Ensure the number is allowed, either exact literal '1234567890' or standard '+' format
-                    const hasMatch = config.allowedDMs.some(allowed =>
-                        allowed.replace(/\D/g, '') === senderNumber.replace(/\D/g, '')
-                    );
-                    if (!hasMatch) {
-                        return; // Block, sender not whitelisted
-                    }
+                // If groupMode === 'listen', fall through and process every message
+            } else if (config.groupPolicy === 'open') {
+                // For open policy, use global botMode for mention check
+                if (config.botMode === 'mention') {
+                    const botNumber = sock.user?.id ? sock.user.id.split(':')[0] : '';
+                    const botJid = `${botNumber}@s.whatsapp.net`;
 
-                    // If DM sender is allowed, enforce the global botMode mention requirement
-                    // (Just like in groups, the agent should not eagerly jump into human DMs unless tagged)
-                    if (config.botMode === 'mention') {
-                        const isMentionedViaText = new RegExp(`@\\s*${agentName}`, 'i').test(textMessage);
-                        if (!isMentionedViaText) {
-                            return;
-                        }
+                    const mentionedJidList = msg.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
+                    const isTaggedViaJid = mentionedJidList.includes(botJid);
+                    const isMentionedViaText = new RegExp(`@\\s*${agentName}`, 'i').test(textMessage);
+
+                    if (!isTaggedViaJid && !isMentionedViaText) {
+                        processingMessageIds.delete(msg.key.id!);
+                        return;
+                    }
+                }
+            }
+        } else {
+            // DM Policy Check (Direct Messages)
+            if (config.dmPolicy === 'disabled') {
+                processingMessageIds.delete(msg.key.id!);
+                return; // Block all DMs
+            } else if (config.dmPolicy === 'allowlist') {
+                // Sender JID looks like '1234567890@s.whatsapp.net'
+                const senderNumber = msg.key.remoteJid?.split('@')[0] || '';
+                console.log(`[FIREWALL] DM Sender: ${senderNumber} | Allowlist: ${JSON.stringify(config.allowedDMs)}`);
+
+                // Ensure the number is allowed, either exact literal '1234567890' or standard '+' format.
+                // If it is a Note to Self, we inherently trust it (even if it's coming from an @lid proxy).
+                const hasMatch = isNoteToSelf || config.allowedDMs.some(allowed =>
+                    allowed.replace(/\D/g, '') === senderNumber.replace(/\D/g, '')
+                );
+                if (!hasMatch) {
+                    console.log(`[FIREWALL] Blocked: ${senderNumber} not in whitelist`);
+                    return; // Block, sender not whitelisted
+                }
+
+                // If DM sender is allowed, enforce the global botMode mention requirement
+                // (Just like in groups, the agent should not eagerly jump into human DMs unless tagged)
+                // Note: If the user is chatting in their *own* self-chat space (Note to Self), we bypass this requirement.
+                if (!isNoteToSelf && config.botMode === 'mention') {
+                    const isMentionedViaText = new RegExp(`@\\s*${agentName}`, 'i').test(textMessage);
+                    if (!isMentionedViaText) {
+                        console.log(`[FIREWALL] Blocked: Bot mode is "mention", but @${agentName} was not found in: "${textMessage}"`);
+                        return;
                     }
                 }
             }
@@ -673,12 +744,14 @@ export async function startWhatsApp() {
             // WhatsApp's "composing" bubble only shows for ~30-60s then disappears.
             // On long research tasks (2-5 min) the user sees nothing and thinks it hung.
             // Fix: send a brief "thinking" message immediately, then replace with the full answer.
-            const ackMsg = await sock.sendMessage(replyJid, {
-                text: `⏳ *${agentName}* is researching your question...`
-            }).catch(() => null);
-            if (ackMsg?.key?.id) {
-                sentMessageIds.add(ackMsg.key.id);
-                if (sentMessageIds.size > 1000) sentMessageIds.delete(Array.from(sentMessageIds)[0]!);
+            if (!msg.key.fromMe || isNoteToSelf) {
+                const ackMsg = await sock.sendMessage(replyJid, {
+                    text: `⏳ *${agentName}* is researching your question...`
+                }).catch(() => null);
+                if (ackMsg?.key?.id) {
+                    sentMessageIds.add(ackMsg.key.id);
+                    if (sentMessageIds.size > 1000) sentMessageIds.delete(Array.from(sentMessageIds)[0]!);
+                }
             }
 
             // ── Phase 2: Run the agent ─────────────────────────────────────────────────
@@ -697,6 +770,10 @@ export async function startWhatsApp() {
                 .replace(/(\[Agent\]\s*)?Plan execution finished successfully\.?\s*Final Output:?\s*/ig, '')
                 .replace(/^Final Output:?\s*/im, '')
                 .trim();
+
+            // Strip internal system outputs that leak from the WorkerAgent's tool execution
+            cleanResponse = cleanResponse.replace(/✅ WhatsApp message sent successfully.+/ig, '').trim();
+            cleanResponse = cleanResponse.replace(/⚠️ Partial success or complete failure.+/ig, '').trim();
 
             // 1. Convert **bold** to *bold*
             cleanResponse = cleanResponse.replace(/\*\*(.*?)\*\*/g, '*$1*');
@@ -748,9 +825,12 @@ export async function startWhatsApp() {
                 if (voiceAlreadySent) {
                     console.log('[WhatsApp] Skipping text reply — voice note was already delivered');
                 } else {
-                    // Send result back to WhatsApp with sleek dynamic header
+                    // Send result back to WhatsApp
                     console.log(`[DEBUG] Attempting to send outbound message to jid: ${replyJid}`);
-                    const sentMsg = await sock.sendMessage(replyJid, { text: `✨ *${agentName}*\n\n${cleanResponse.trim()}` }).catch(e => {
+                    const sentMsg = await sock.sendMessage(replyJid, {
+                        text: cleanResponse.trim(),
+                        contextInfo: {} // Strip context to prevent 'i' info icon rendering
+                    }).catch(e => {
                         console.error('[DEBUG - WA SEND ERROR]', e);
                         return null;
                     });
@@ -762,12 +842,12 @@ export async function startWhatsApp() {
                 }
             }
 
-            // Clear typing indicator
-            await sock.sendPresenceUpdate('paused', replyJid).catch(() => { });
+            // Stop typing intervals but let WhatsApp natively time out the 'composing' state 
+            // instead of explicitly sending 'paused', because 'paused' can trigger the 'i' info icon.
+            if (composingInterval) clearInterval(composingInterval);
 
         } catch (error: any) {
             if (composingInterval) clearInterval(composingInterval);
-            await sock.sendPresenceUpdate('paused', replyJid).catch(() => { });
             await sock.sendMessage(replyJid, { text: `❌ *Error processing request:*\n${error.message}` });
         }
     });
