@@ -62,9 +62,9 @@ export async function runBrowserSetup() {
     if (mode === 'remote') {
         p.log.info('You have chosen to control a remote browser (e.g. on your local Mac) from this OpenSpider server.');
 
-        let macCmd = `/Applications/Google\\ Chrome.app/Contents/MacOS/Google\\ Chrome --remote-debugging-port=9222 --remote-allow-origins=*`;
-        let winCmd = `"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" --remote-debugging-port=9222 --remote-allow-origins=*`;
-        let linCmd = `google-chrome --remote-debugging-port=9222 --remote-allow-origins=*`;
+        let macCmd = `/Applications/Google\\ Chrome.app/Contents/MacOS/Google\\ Chrome --remote-debugging-port=9222 --remote-allow-origins="*"`;
+        let winCmd = `"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" --remote-debugging-port=9222 --remote-allow-origins="*"`;
+        let linCmd = `google-chrome --remote-debugging-port=9222 --remote-allow-origins="*"`;
 
         p.log.step(`STEP 1: On your CLIENT machine (your laptop), completely close all Chrome windows.
 Then open a terminal and COPY AND PASTE the exact command below into it, and press Enter to restart Chrome:
