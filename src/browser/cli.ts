@@ -34,8 +34,7 @@ export async function runBrowserSetup() {
         options: [
             { value: 'headless', label: '1. Run Headless (Server Mode)', hint: 'Runs invisibly in the background. Best for autonomous cloud operation.' },
             { value: 'visible', label: '2. Run Visibly (Local Mode)', hint: 'Runs Chromium visibly on your screen. Best for local development.' },
-            { value: 'remote', label: '3. Connect to a Remote Client', hint: 'Cloud server securely tunnels to a Mac/PC and controls its browser.' },
-            { value: 'client_setup', label: '4. Setup as Client (Show Instructions)', hint: 'Show instructions on how to prepare this Mac/PC to be remotely controlled.' }
+            { value: 'remote', label: '3. Connect to a Remote Client', hint: 'Cloud server securely tunnels to a Mac/PC and controls its browser.' }
         ]
     });
 
@@ -61,8 +60,16 @@ export async function runBrowserSetup() {
     }
 
     if (mode === 'remote') {
+        p.log.info('You have chosen to control a remote browser (e.g. on your local Mac) from this OpenSpider server.');
+
+        let macCmd = `/Applications/Google\\ Chrome.app/Contents/MacOS/Google\\ Chrome --remote-debugging-port=9222 --remote-allow-origins=*`;
+        let winCmd = `"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" --remote-debugging-port=9222 --remote-allow-origins=*`;
+        let linCmd = `google-chrome --remote-debugging-port=9222 --remote-allow-origins=*`;
+
+        p.log.step(`STEP 1: On your CLIENT machine (your laptop), completely close all Chrome windows.\nThen run the following command in a new terminal to restart Chrome with remote debugging opened:\n\nMac:\n  ${macCmd}\n\nWindows:\n  ${winCmd}\n\nLinux:\n  ${linCmd}\n`);
+
         const ipInput = await p.text({
-            message: 'Enter the IP address (e.g. Tailscale IP) of the Mac/PC you want to control:',
+            message: 'STEP 2: Enter the IP address (e.g. Tailscale IP) of the CLIENT machine you just started Chrome on:',
             placeholder: '100.100.100.100'
         });
 
@@ -80,7 +87,7 @@ export async function runBrowserSetup() {
         }
 
         const portInput = await p.text({
-            message: 'Enter the remote debugging port (Default: 9222):',
+            message: 'Enter the remote debugging port used on the client (Default: 9222):',
             placeholder: '9222',
             initialValue: '9222'
         });
@@ -100,30 +107,7 @@ export async function runBrowserSetup() {
         config.profiles['chrome'].cdpUrl = `http://${ip}:${port}`;
 
         BrowserConfigManager.save(config);
-        p.outro(`✅ Configured to remotely control browser at http://${ip}:${port}.\nMake sure the client machine is running Chrome with --remote-debugging-port=${port} and --remote-allow-origins=*`);
+        p.outro(`✅ Configured to remotely control browser at http://${ip}:${port}.\nEnsure your server has network access to this IP (e.g. both machines are connected to Tailscale).`);
         return;
-    }
-
-    if (mode === 'client_setup') {
-        const localIp = getLocalIp();
-
-        p.log.info('To allow a remote OpenSpider cloud server to securely tunnel into this machine and use its residential browser profile, you must start Google Chrome from the terminal with remote debugging enabled.');
-
-        p.log.step('Close all existing Google Chrome windows completely (Cmd+Q on Mac).');
-
-        let launchCommand = '';
-        if (os.platform() === 'darwin') {
-            launchCommand = `/Applications/Google\\ Chrome.app/Contents/MacOS/Google\\ Chrome --remote-debugging-port=9222 --remote-allow-origins=*`;
-        } else if (os.platform() === 'win32') {
-            launchCommand = `"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" --remote-debugging-port=9222 --remote-allow-origins=*`;
-        } else {
-            launchCommand = `google-chrome --remote-debugging-port=9222 --remote-allow-origins=*`;
-        }
-
-        p.log.step(`Run this command in a new terminal tab:\n\n  ${launchCommand}\n`);
-
-        p.log.step(`Then, on your OpenSpider **UBUNTU SERVER**, run 'openspider tools browser' \nand select "Connect to a Remote Client". Enter your machine's IP address when prompted:\n\n  Your local IP: ${localIp} (Make sure your Cloud Server can reach this, e.g. via Tailscale)`);
-
-        p.outro('Client instructions complete.');
     }
 }
