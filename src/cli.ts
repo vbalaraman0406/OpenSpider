@@ -246,6 +246,19 @@ const toolsMenu = program
     .command('tools')
     .description('Manage Agent Tools and Skills');
 
+toolsMenu
+    .command('browser')
+    .description('Configure the Browser Specialist (Local Headless vs Remote Client)')
+    .action(async () => {
+        try {
+            const { runBrowserSetup } = await import('./browser/cli');
+            await runBrowserSetup();
+        } catch (error: any) {
+            console.error('Failed to configure browser:', error.message);
+            process.exit(1);
+        }
+    });
+
 const emailToolsMenu = toolsMenu
     .command('email')
     .description('Manage Email Capabilities');
