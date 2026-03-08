@@ -537,10 +537,23 @@ program
 
         const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf-8'));
 
+        const provider = process.env.DEFAULT_PROVIDER || 'Not Set';
+        const primaryModel =
+            provider === 'antigravity' ? (process.env.GEMINI_MODEL || 'Not Set') :
+                provider === 'antigravity-internal' ? (process.env.GEMINI_MODEL || 'claude-opus-4-6-thinking') :
+                    provider === 'ollama' ? (process.env.OLLAMA_MODEL || 'Not Set') :
+                        provider === 'openai' ? (process.env.OPENAI_MODEL || 'Not Set') :
+                            provider === 'anthropic' ? (process.env.ANTHROPIC_MODEL || 'Not Set') :
+                                provider === 'custom' ? (process.env.CUSTOM_MODEL || 'Not Set') : 'Unknown';
+
+        const providerDisplay = provider === 'Not Set'
+            ? '⚠️  Not configured (run: openspider onboard)'
+            : `${provider} (${primaryModel})`;
+
         console.log('\n🕷️  OpenSpider Status');
         console.log('─'.repeat(50));
         console.log(`Version:          v${pkg.version}`);
-        console.log(`Provider:         ${process.env.DEFAULT_PROVIDER || '⚠️  Not configured (run: openspider onboard)'}`);
+        console.log(`Provider:         ${providerDisplay}`);
         console.log(`API Port:         ${process.env.PORT || '4001'}`);
         console.log(`Dashboard:        http://localhost:${process.env.PORT || '4001'}`);
         console.log(`Gateway Token:    ${process.env.DASHBOARD_API_KEY || '⚠️  Not generated'}`);
