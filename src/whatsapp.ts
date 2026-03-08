@@ -481,10 +481,9 @@ export async function startWhatsApp() {
 
             // Is the human texting their *own* number? (Self-Chat / Notes to Self)
             // A genuine "Message Yourself" from a companion device will have `fromMe: true` 
-            // AND the remoteJid will either be the bot's primary number or a linked device @lid proxy.
+            // AND the remoteJid will either be the bot's primary number or its own linked device @lid.
             isNoteToSelf = !!(
                 (botNumber && msg.key.remoteJid?.startsWith(botNumber)) ||
-                (msg.key.remoteJid?.includes('@lid')) ||
                 (myLid && msg.key.remoteJid === myLid)
             );
 
@@ -723,7 +722,7 @@ export async function startWhatsApp() {
         // For self-messages, the remoteJid often arrives as an @lid device proxy which is
         // invisible in the chat UI. Route replies to the bot's primary @s.whatsapp.net JID
         // so messages actually appear in the "Message Yourself" chat window.
-        const replyJid = (isNoteToSelf && msg.key.remoteJid?.includes('@lid'))
+        const replyJid = (isNoteToSelf && myLid && msg.key.remoteJid === myLid)
             ? botJid
             : msg.key.remoteJid!;
 
