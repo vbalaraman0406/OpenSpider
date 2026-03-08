@@ -67,15 +67,15 @@ export async function runBrowserSetup() {
         let linCmd = `google-chrome --remote-debugging-port=9222 --remote-allow-origins=*`;
 
         p.log.step(`STEP 1: On your CLIENT machine (your laptop), completely close all Chrome windows.
-Then open a terminal and run the exact command below to restart Chrome with remote debugging opened:
+Then open a terminal and COPY AND PASTE the exact command below into it, and press Enter to restart Chrome:
 
-🍏 Mac (Open the 'Terminal' app):
+🍏 Mac (Open the 'Terminal' app, paste this in, and press Enter):
   ${macCmd}
 
-🪟 Windows (Open 'Command Prompt'):
+🪟 Windows (Open 'Command Prompt', paste this in, and press Enter):
   ${winCmd}
 
-🐧 Linux (Open your terminal emulator):
+🐧 Linux (Open your terminal emulator, paste this in, and press Enter):
   ${linCmd}
 `);
 
