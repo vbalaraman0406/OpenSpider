@@ -464,18 +464,35 @@ ${context.join('\n')}
                                         targetJids.push(`${rawNumber}@s.whatsapp.net`);
                                     } else {
                                         // Assume it's a group name — robust two-way case-insensitive match
-                                        // It matches if the group name contains the LLM's string ("Family" in "Balaraman Family")
-                                        // OR if the LLM's string contains the group name ("Family" in "Family Group")
                                         const cleanLowerR = lowerR.replace(/\bgroup\b/ig, '').trim();
-                                        const matchedGroup = participatingGroups.find(g => {
-                                            const sub = g.subject.toLowerCase();
-                                            return sub === lowerR || sub.includes(lowerR) || lowerR.includes(sub) || (cleanLowerR.length >= 3 && sub.includes(cleanLowerR));
-                                        });
+
+                                        // PASS 1: Exact Match (Case Insensitive)
+                                        let matchedGroup = participatingGroups.find(g => g.subject.toLowerCase() === lowerR || g.subject.toLowerCase() === cleanLowerR);
+
+                                        // PASS 2: Fuzzy Match (Only if exact match fails)
+                                        if (!matchedGroup) {
+                                            const fuzzyMatches = participatingGroups.filter(g => {
+                                                const sub = g.subject.toLowerCase();
+                                                return sub.includes(lowerR) || lowerR.includes(sub) || (cleanLowerR.length >= 3 && sub.includes(cleanLowerR));
+                                            });
+
+                                            if (fuzzyMatches.length === 1) {
+                                                matchedGroup = fuzzyMatches[0];
+                                            } else if (fuzzyMatches.length > 1) {
+                                                const options = fuzzyMatches.map(g => `"${g.subject}"`).join(', ');
+                                                console.warn(`[Worker - ${this.role}] Warning: Group name "${r}" is ambiguous and matches multiple groups: ${options}`);
+                                                // We intentionally do NOT define matchedGroup here; it will fall through to the warning block below and tell the agent it's ambiguous.
+                                            }
+                                        }
+
                                         if (matchedGroup) {
                                             targetJids.push(matchedGroup.id);
                                         } else {
-                                            const availableGroups = participatingGroups.map(g => `"${g.subject}" (${g.id})`).join(', ');
-                                            console.warn(`[Worker - ${this.role}] Warning: Could not resolve WhatsApp target "${r}" to a known format or Group Name. Evaluated against ${participatingGroups.length} groups: [${availableGroups}]`);
+                                            // Provide the agent with the exact list of available group names to prevent hallucination
+                                            const availableGroups = participatingGroups.map(g => `"${g.subject}"`).join(', ');
+                                            console.warn(`[Worker - ${this.role}] Warning: Could not resolve WhatsApp target "${r}" to a unique Group Name. Evaluated against ${participatingGroups.length} groups.`);
+                                            // The agent will see this error injected into its context loop so it can ask for clarification
+                                            targetJids.push(`ERROR_NOT_FOUND:${r}`);
                                         }
                                     }
                                 }
@@ -493,6 +510,9 @@ ${context.join('\n')}
 
                         if (targetJids.length === 0) {
                             toolOutput = 'Error: No WhatsApp target resolved! Could not map "' + response.to + '" to a known group name or phone number. Add a phone number to allowedDMs or ensure the exact group name is used.';
+                        } else if (targetJids.some(j => j.startsWith('ERROR_NOT_FOUND:'))) {
+                            const errs = targetJids.filter(j => j.startsWith('ERROR_NOT_FOUND:')).map(j => j.split(':')[1]);
+                            toolOutput = `Error: The requested WhatsApp target(s) [${errs.join(', ')}] were ambiguous or not found in the allowed group list. You MUST ask the user to clarify exactly which group they mean.`;
                         } else {
                             // Get agent persona name for the header
                             let agentName = 'OpenSpider';
