@@ -1,111 +1,58 @@
-# Handover — Session March 2, 2026 (Afternoon)
+# OpenSpider Agent Handoff Document
 
-> **Date**: March 2, 2026 | **Agent**: Antigravity  
-> **Commits**: `2de5610b` → `e43d00af` (7 commits on `main`)
+## Session Goal
+Fix infinite message loops in the WhatsApp integration, specifically focusing on enabling self-chat ("Message Yourself") without breaking the global `botMode="mention"` rule or triggering self-echo loops.
 
----
+## Work Completed
 
-## Summary
+### 1. Ironclad Loop Prevention
+*   **File:** `src/whatsapp.ts`
+*   **Action:** Refactored the `fromMe` firewall logic.
+*   **Details:** We now drop all echoes *before* any other processing.
+    *   `sentMessageIds` cache check (drops exact message IDs we know we sent).
+    *   `✨ *` prefix string-match (a fallback sledgehammer that drops *any* message containing the bot's signature, even if the cache clears or whitespace varies).
 
-This session focused on fixing cron job communication, adding dashboard features, and hardening the system. All changes are compiled, deployed via PM2, and pushed to GitHub.
+### 2. Self-Chat (`isNoteToSelf`) Enablement
+*   **File:** `src/whatsapp.ts`
+*   **Action:** Expanded `isNoteToSelf` logic to recognize secondary devices.
+*   **Details:** Previously, messages sent from a Linked Device (WhatsApp Web/Desktop) appeared with `@lid` (Lid JID) instead of the primary phone number, causing the firewall to block them as unauthenticated DMs. We added `msg.key.remoteJid?.includes('@lid')` and exact `myLid` matching so self-chat works globally across all logged-in devices.
 
----
+### 3. Mention Requirement Bypass for Self-Chat
+*   **File:** `src/whatsapp.ts`
+*   **Action:** Modified the global `botMode: 'mention'` rule.
+*   **Details:** While the bot *requires* an `@Ananta` mention to respond in DMs or Groups, we added an exception for `isNoteToSelf`. The user no longer has to tag the bot when talking to it in their private self-chat space.
 
-## Changes Made (in order)
+### 4. Agent Name Discovery Fix
+*   **File:** `src/whatsapp.ts`
+*   **Action:** Updated how the bot learns its own name on boot.
+*   **Details:** It was defaulting to `OpenSpider` and getting confused. We updated `agentName` discovery to prioritize parsing the `name:` field directly from `workspace/agents/manager/IDENTITY.md` via `PersonaShell.getIdentity()`.
 
-### 1. Chat Textbox Lock Fix (`2de5610b`)
-- **Problem**: Chat input stayed locked after agent finished, because cron log messages were triggering `isTyping` state.
-- **Fix**: Tagged cron-originated logs with `[CRON]` prefix in `src/server.ts`. Dashboard filters these for typing state. Added 120-second safety timeout.
-- **Files**: `src/server.ts`, `dashboard/src/App.tsx`
+### 5. UI "Forwarded" Icon Removal
+*   **File:** `src/whatsapp.ts`
+*   **Action:** Cleared `contextInfo` on outgoing WhatsApp messages.
+*   **Details:** To stop the white `i` (Forwarded/System) icon from rendering on the bot's replies, we explicitly pass `contextInfo: {}` in text and voice `sock.sendMessage` calls.
 
-### 2. Cron Job Cross-Contamination Fix (`2de5610b`)
-- **Problem**: Concurrent cron jobs shared memory context. Example: baseball agent saw Iran conflict data.
-- **Fix**: `ManagerAgent.processUserRequest` now skips memory context injection when prompt contains `[SYSTEM CRON TRIGGER]` or `[SYSTEM MANUAL TRIGGER]`.
-- **Files**: `src/agents/ManagerAgent.ts`
+### 6. Agent Introduction Prompt (Workspace Defaults)
+*   **Files:** `workspace/agents/manager/SOUL.md` & `workspace-defaults/agents/manager/SOUL.md`
+*   **Action:** Updated the LLM System Prompt.
+*   **Details:** Added a `CRITICAL REQUIREMENT` instructing the agent to *always* end its self-introduction by explaining the invocation method to the user (e.g., "To talk to me, just mention my name like @Ananta!"). 
 
-### 3. WhatsApp `send_whatsapp` Tool (`2de5610b`)
-- **Problem**: Workers couldn't send WhatsApp messages directly. Only incoming messages worked.
-- **Fix**: Added `send_whatsapp` as a native Worker tool that reads `workspace/whatsapp_config.json` for the user's JID and calls `sendWhatsAppMessage()`.
-- **Files**: `src/agents/WorkerAgent.ts`
+### 7. Bad MAC & QR Code Re-Authentication
+*   **Action:** Purged corrupted Baileys session folder.
+*   **Details:** During rapid PM2 reboots while debugging the loop, the local Signal session keys fell out of sync with Meta's servers, resulting in silent `Bad MAC Error` decryption failures. The bot couldn't read inbound messages anymore. We completely deleted the `baileys_auth_info` directory at the project root and had the user re-scan the QR code via `openspider channels login`.
 
-### 4. Agent Flow Zoom Controls (`2de5610b`)
-- **Problem**: Agent flow graph boxes were too large, hard to see the full screen.
-- **Fix**: Added zoom in/out buttons, percentage display, fit-to-screen, and Ctrl/Cmd+scroll. Default zoom set to 70%.
-- **Files**: `dashboard/src/components/AgentFlowGraph.tsx`
+## Current State
+*   All fixes have been tested and verified.
+*   Code was packaged, committed to Git (`b69d39c` & `6d18a28`), and pushed to `origin/main`.
+*   The `openspider-gateway` PM2 background process is running healthy without Bad MAC errors.
 
-### 5. Force Cron Jobs to Delegate to Workers (`4cb0d844`)
-- **Problem**: Manager used `direct_response` for cron prompts (treated them as "casual questions"), bypassing Worker tools entirely. WhatsApp/email were never sent.
-- **Fix**: Added `CRITICAL CRON RULE` to Manager system prompt: cron/manual triggers MUST ALWAYS generate a Worker task plan, never use `direct_response`.
-- **Files**: `src/agents/ManagerAgent.ts`
-
-### 6. Cron Results in Chat Window (`7f0eb449`)
-- **Problem**: Cron job results only appeared in verbose logs, not in the chat window.
-- **Fix**: Scheduler emits `cron_result` JSON events on completion. Server broadcasts them to WebSocket clients. Dashboard renders them as styled indigo/purple chat cards with ⏰ header and markdown content.
-- **Files**: `src/scheduler.ts`, `src/server.ts`, `dashboard/src/App.tsx`
-
-### 7. File Attachment in Web Chat (`5aee939b`, `0d019166`, `e43d00af`)
-- **Problem**: No way to attach files in the web UI chat.
-- **Fix (v1)**: Added 📎 Paperclip button, hidden file input, preview strip with thumbnails. Files converted to base64 via FileReader and sent via WebSocket.
-- **Fix (v2)**: Removed file type restriction — now accepts ALL file extensions (Word, Excel, ZIP, etc.).
-- **Fix (v3)**: Server saves non-image files to `workspace/uploads/` with sanitized filenames. Full disk paths are injected into the prompt so Workers can find and read them. Images continue as base64 for multimodal analysis.
-- **Files**: `dashboard/src/App.tsx`, `src/server.ts`
-
-### 8. System Architecture in Long-Term Memory (`a5b686b8`)
-- **Problem**: `workspace/memory.md` was empty, causing LLM to hallucinate system facts (e.g., "cron jobs are in-memory only").
-- **Fix**: Populated `workspace-defaults/memory.md` with accurate system architecture facts (persisted cron, tool availability, memory system docs). Personal info stays only in runtime `workspace/memory.md` (gitignored).
-- **Files**: `workspace-defaults/memory.md`
-
----
-
-## Architecture Notes for Next Agent
-
-### Memory System
-- `workspace/memory.md` — Long-term facts. Injected into every Manager request. Edit directly to add persistent knowledge.
-- `workspace/memory/YYYY-MM-DD.md` — Daily conversation log. Auto-populated.
-- `workspace-defaults/memory.md` — Git-tracked defaults. Seeded to `workspace/memory.md` on first run only.
-
-### File Upload Flow
-```
-Dashboard → base64 via WebSocket → Server
-  → Images: passed as base64 to processUserRequest() for multimodal analysis
-  → Other files: saved to workspace/uploads/, paths injected into prompt text
-```
-
-### Cron Job Flow
-```
-scheduler.ts (heartbeat 60s) → reads workspace/cron_jobs.json
-  → ManagerAgent.processUserRequest("[SYSTEM CRON TRIGGER] ...")
-  → MUST delegate to Worker (never direct_response)
-  → Worker uses tools: send_whatsapp, send_email, etc.
-  → On completion: emits cron_result event → dashboard chat window
-```
-
-### Key File Locations
-| File | Purpose |
-|------|---------|
-| `src/agents/ManagerAgent.ts` | Orchestrator, creates plans, delegates to Workers |
-| `src/agents/WorkerAgent.ts` | Executes tools (send_whatsapp, send_email, browse_web, etc.) |
-| `src/scheduler.ts` | Cron job scheduler with 60s heartbeat |
-| `src/server.ts` | WebSocket server, console.log override, file upload handling |
-| `src/whatsapp.ts` | WhatsApp Baileys integration |
-| `dashboard/src/App.tsx` | Main dashboard UI (~2200 lines) |
-| `dashboard/src/components/AgentFlowGraph.tsx` | Agent flow visualization with zoom |
-| `workspace/cron_jobs.json` | Persisted cron jobs (NOT in-memory!) |
-| `workspace/memory.md` | Long-term memory (personal, gitignored) |
-| `workspace-defaults/memory.md` | Long-term memory defaults (tracked in git) |
-
-### Test Cron Job
-A test cron job `cron-test-delivery` exists in `workspace/cron_jobs.json` with 9999h interval (won't auto-fire). Can be used to validate WhatsApp + email delivery. Delete when no longer needed.
-
----
-
-## Known Issues / Tech Debt
-
-1. **Manager agent delegation**: Manager sometimes picks the wrong Worker agent (e.g., Fantasy Baseball Strategist for stock market tasks). This is an LLM judgment issue. Memory.md now instructs to use Coder as the general-purpose workhorse.
-2. **Word doc content extraction**: `.docx` files are saved to disk but Workers need to use `python-docx` or similar to extract text content. The raw binary is not directly readable.
-3. **Large file uploads**: Very large files encoded as base64 may hit WebSocket frame limits. No size limit enforcement currently.
-4. **Dashboard chunk size warning**: Vite warns about large chunks (>500KB). Could benefit from code-splitting with dynamic imports.
-
----
-
-*End of handover. All changes compiled, deployed, and pushed to GitHub `main` branch.*
+### 8. Ubuntu Headless Browser Execution (Puppeteer)
+*   **Files:** `src/browser/manager.ts`, `src/browser/config.ts` (and related web research skills)
+*   **Action:** Investigated and resolved Chromium/Puppeteer startup crashes on headless Ubuntu servers.
+*   **Details:** We identified that Puppeteer fails to launch out-of-the-box on raw Ubuntu server instances without a display server. 
+    *   Verified the logic that checks `isUbuntuHeadless` to inject necessary Puppeteer launch arguments (`--no-sandbox`, `--disable-setuid-sandbox`, `--disable-gpu`, `--disable-dev-shm-usage`).
+    *   Diagnosed that even with these flags, the browser required proper XVFB (X Virtual Framebuffer) setup or the correct shared library dependencies (`libnss3`, `libx11-xcb1`, `libatk-bridge2.0-0`, etc.) installed on the host machine to render headless DOM.
+    *   Determined that when running OpenSpider on a raw Ubuntu droplet/server, the system needs the prerequisite `apt-get install` commands for Puppeteer to function natively without sandboxing errors.
+### 9. Next Steps for New Agent Session
+*   **Linux Headless Testing:** The new session should pick up the headless Chrome execution testing on the remote Ubuntu server, ensuring the `--no-sandbox` flags interact correctly with the `isUbuntuHeadless` config.
+*   **Puppeteer Dependencies:** Verify if an automated `apt-get` setup script is needed in `setup.ts` to pre-install Chromium dependencies (`libgbm1`, `libasound2`, etc.) when deploying OpenSpider to a fresh cloud instance.

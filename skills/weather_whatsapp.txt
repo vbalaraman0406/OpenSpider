@@ -1,0 +1,18 @@
+Vancouver, WA Weather Forecast
+
+No active alerts
+
+🌧️ Today: 50F, Light Rain, Wind 6 mph S, Precip 91%
+🌧️ Tonight: 46F, Light Rain, Wind 5 mph S, Precip 81%
+🌧️ Saturday: 57F, Chance Rain Showers, Wind 5 mph S, Precip 38%
+🌧️ Saturday Night: 45F, Chance Rain Showers then Light Rain Likely, Wind 3 mph SSW, Precip 58%
+🌧️ Sunday: 53F, Light Rain, Wind 2 to 8 mph SSW, Precip 87%
+🌧️ Sunday Night: 38F, Light Rain Likely then Chance Rain Showers, Wind 3 to 8 mph W, Precip 65%
+🌧️ Monday: 50F, Rain Showers then Light Rain Likely, Wind 3 to 10 mph W, Precip 80%
+🌧️ Monday Night: 35F, Light Rain Likely then Rain And Snow Likely, Wind 3 to 10 mph WSW, Precip 73%
+🌧️ Tuesday: 48F, Rain And Snow, Wind 3 to 9 mph SSW, Precip 75%
+🌧️ Tuesday Night: 39F, Light Rain, Wind 8 mph SSW, Precip 76%
+🌧️ Wednesday: 50F, Rain, Wind 8 to 12 mph SSW, Precip 79%
+🌧️ Wednesday Night: 41F, Rain, Wind 10 mph SSW, Precip 77%
+🌧️ Thursday: 53F, Rain, Wind 8 to 12 mph SSW, Precip 82%
+🌧️ Thursday Night: 39F, Light Rain Likely, Wind 6 to 10 mph SSW, Precip 74%

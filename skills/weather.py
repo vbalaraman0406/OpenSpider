@@ -1,61 +1,32 @@
-import urllib.request
+import requests
 import json
 
 try:
-    url = 'https://wttr.in/Vancouver+WA+98662?format=j1'
-    req = urllib.request.Request(url, headers={'User-Agent': 'curl/7.64.1'})
-    resp = urllib.request.urlopen(req, timeout=15)
-    data = json.loads(resp.read().decode())
+    resp = requests.get('https://wttr.in/Melbourne,Australia?format=j1', headers={'User-Agent': 'curl/7.68.0'}, timeout=15)
+    data = resp.json()
     
     cur = data['current_condition'][0]
-    temp_f = cur.get('temp_F', 'N/A')
-    condition = cur.get('weatherDesc', [{}])[0].get('value', 'N/A')
-    humidity = cur.get('humidity', 'N/A')
-    wind_mph = cur.get('windspeedMiles', 'N/A')
-    wind_dir = cur.get('winddir16Point', 'N/A')
-    feels_like = cur.get('FeelsLikeF', 'N/A')
-    pressure = cur.get('pressure', 'N/A')
-    visibility = cur.get('visibilityMiles', 'N/A')
-    uv = cur.get('uvIndex', 'N/A')
+    print('=== CURRENT CONDITIONS ===')
+    print(f"Temp: {cur['temp_C']}C ({cur['temp_F']}F)")
+    print(f"Feels Like: {cur['FeelsLikeC']}C")
+    print(f"Condition: {cur['weatherDesc'][0]['value']}")
+    print(f"Humidity: {cur['humidity']}%")
+    print(f"Wind: {cur['windspeedKmph']} km/h {cur['winddir16Point']}")
+    print(f"Pressure: {cur['pressure']} mb")
+    print(f"UV Index: {cur['uvIndex']}")
+    print(f"Visibility: {cur['visibility']} km")
+    print(f"Cloud Cover: {cur['cloudcover']}%")
     
-    print(f'CURRENT CONDITIONS:')
-    print(f'Temperature: {temp_f}°F')
-    print(f'Feels Like: {feels_like}°F')
-    print(f'Condition: {condition}')
-    print(f'Humidity: {humidity}%')
-    print(f'Wind: {wind_mph} mph {wind_dir}')
-    print(f'Pressure: {pressure} mb')
-    print(f'Visibility: {visibility} miles')
-    print(f'UV Index: {uv}')
-    
-    # Today and tomorrow forecast
-    weather = data.get('weather', [])
-    for i, day in enumerate(weather[:2]):
-        label = 'TODAY' if i == 0 else 'TOMORROW'
-        date = day.get('date', 'N/A')
-        max_f = day.get('maxtempF', 'N/A')
-        min_f = day.get('mintempF', 'N/A')
-        avg_humidity = day.get('hourly', [{}])[4].get('humidity', 'N/A') if len(day.get('hourly', [])) > 4 else 'N/A'
-        sunrise = day.get('astronomy', [{}])[0].get('sunrise', 'N/A')
-        sunset = day.get('astronomy', [{}])[0].get('sunset', 'N/A')
-        
-        # Get hourly descriptions for forecast summary
-        hourly = day.get('hourly', [])
-        conditions = []
-        for h in hourly:
-            desc = h.get('weatherDesc', [{}])[0].get('value', '')
-            if desc and desc not in conditions:
-                conditions.append(desc)
-        
-        print(f'\n{label} ({date}):')
-        print(f'High: {max_f}°F | Low: {min_f}°F')
-        print(f'Sunrise: {sunrise} | Sunset: {sunset}')
-        print(f'Conditions: {", ".join(conditions)}')
-        
-        # Chance of rain
-        rain_chances = [h.get('chanceofrain', '0') for h in hourly]
-        max_rain = max([int(r) for r in rain_chances]) if rain_chances else 0
-        print(f'Max Chance of Rain: {max_rain}%')
-
+    print('\n=== 3-DAY FORECAST ===')
+    for day in data['weather'][:3]:
+        print(f"\nDate: {day['date']}")
+        print(f"  High: {day['maxtempC']}C ({day['maxtempF']}F)")
+        print(f"  Low: {day['mintempC']}C ({day['mintempF']}F)")
+        print(f"  Avg Temp: {day['avgtempC']}C")
+        print(f"  Condition: {day['hourly'][4]['weatherDesc'][0]['value']}")
+        print(f"  Sunrise: {day['astronomy'][0]['sunrise']}")
+        print(f"  Sunset: {day['astronomy'][0]['sunset']}")
+        print(f"  Max Wind: {day['hourly'][4]['windspeedKmph']} km/h")
+        print(f"  Chance of Rain: {day['hourly'][4]['chanceofrain']}%")
 except Exception as e:
     print(f'Error: {e}')
