@@ -66,7 +66,18 @@ export async function runBrowserSetup() {
         let winCmd = `"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" --remote-debugging-port=9222 --remote-allow-origins=*`;
         let linCmd = `google-chrome --remote-debugging-port=9222 --remote-allow-origins=*`;
 
-        p.log.step(`STEP 1: On your CLIENT machine (your laptop), completely close all Chrome windows.\nThen run the following command in a new terminal to restart Chrome with remote debugging opened:\n\nMac:\n  ${macCmd}\n\nWindows:\n  ${winCmd}\n\nLinux:\n  ${linCmd}\n`);
+        p.log.step(`STEP 1: On your CLIENT machine (your laptop), completely close all Chrome windows.
+Then open a terminal and run the exact command below to restart Chrome with remote debugging opened:
+
+🍏 Mac (Open the 'Terminal' app):
+  ${macCmd}
+
+🪟 Windows (Open 'Command Prompt'):
+  ${winCmd}
+
+🐧 Linux (Open your terminal emulator):
+  ${linCmd}
+`);
 
         const ipInput = await p.text({
             message: 'STEP 2: Enter the IP address (e.g. Tailscale IP) of the CLIENT machine you just started Chrome on:',
