@@ -85,7 +85,15 @@ A comprehensive log viewer with filtering, search, and export.
 
 ### Agent Workspace 📁
 
-Browse the `workspace/` directory structure, view agent configuration files, and inspect persona settings.
+Manage your AI team directly from the UI without touching the core filesystem.
+
+**Features:**
+- **Create Agents** — Click "Create Agent" to bootstrap a new agent persona.
+- **Rename Agents** — Select an agent and edit the `name` field in the CAPABILITIES tab to gracefully change its display name.
+- **Modify Personas** — Edit the `IDENTITY` and `SOUL` tabs to tweak behavior, vibe, and safety guardrails in real-time.
+- **Teach User Context** — Update the `USER CONTEXT` tab to persist your preferences or background so the agent remembers.
+- **Manage Skills & Models** — Use the `CAPABILITIES` tab to add/remove tools or switch the underlying LLM processing the agent's thought loop.
+- **Instant Persistence** — Click **Save Changes** to immediately sync your UI edits out to the agent's pillar files (`IDENTITY.md`, `SOUL.md`, etc.).
 
 ### Dynamic Skills ⚙️
 
