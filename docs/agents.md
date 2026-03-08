@@ -167,8 +167,20 @@ If you ever want to reset an agent to its defaults, delete its folder from `work
 
 Agent pillar files (IDENTITY.md, SOUL.md, USER.md) are read at **runtime** — changes take effect immediately without rebuilding. CAPABILITIES.json changes also take effect on the next request.
 
-You can edit pillar files:
+You can manage agents and edit pillar files natively via the UI:
 
-- **Via the Dashboard**: Agents Workspace → click an agent → edit any pillar
-- **Via the API**: `PUT /api/agents/:id` with the updated pillar content
-- **Manually**: Edit the files directly in `workspace/agents/<id>/`
+### Via the Dashboard (Recommended)
+
+1. Navigate to **Agents Workspace** in the left sidebar.
+2. Select the agent you want to modify from the list.
+3. You will see tabs for each pillar file:
+   - **IDENTITY**: Update the agent's core background, title, and persona.
+   - **SOUL**: Update the agent's behavior rules and operational constraints.
+   - **USER CONTEXT**: Provide the agent with specific information about yourself or the project.
+   - **CAPABILITIES**: Add or remove skills, change the underlying AI model, or edit the `name` field to **rename the agent**.
+4. Click **Save Changes** to apply the updates immediately.
+
+### Via the API or CLI
+
+- **API**: `PUT /api/agents/:id` with the updated pillar content
+- **Manually**: Edit the files directly in `workspace/agents/<id>/` using your text editor
