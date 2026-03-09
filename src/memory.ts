@@ -10,12 +10,18 @@ export function initWorkspace() {
 
     if (isFirstRun) {
         fs.mkdirSync(WORKSPACE_DIR, { recursive: true });
+    }
 
-        // Seed workspace from shipped defaults (workspace-defaults/)
-        const defaultsDir = path.join(rootDir, 'workspace-defaults');
-        if (fs.existsSync(defaultsDir)) {
+    // Always sync agents from workspace-defaults so newly shipped agents
+    // (like canva-expert) appear on existing installs without a full re-onboard.
+    // copyDirRecursive skips files that already exist, so user customizations are safe.
+    const defaultsDir = path.join(rootDir, 'workspace-defaults');
+    if (fs.existsSync(defaultsDir)) {
+        if (isFirstRun) {
             console.log('[Workspace] First run detected — seeding from workspace-defaults/...');
-            copyDirRecursive(defaultsDir, WORKSPACE_DIR);
+        }
+        copyDirRecursive(defaultsDir, WORKSPACE_DIR);
+        if (isFirstRun) {
             console.log('[Workspace] Default agent configs, SOUL.md, and system settings copied successfully.');
         }
     }
