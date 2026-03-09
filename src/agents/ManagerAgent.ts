@@ -45,7 +45,10 @@ export class ManagerAgent {
                     if (!caps.role && !caps.name) continue; // Skip empty/broken agent folders
                     const roleName = caps.role || agentId;
                     existingRoles.push(roleName);
-                    agentCapabilities += `- "${roleName}" (${caps.name || agentId}): ${caps.allowedTools?.join(', ') || 'general'}\n`;
+                    const toolsList = caps.allowedTools || caps.tools || [];
+                    const toolsStr = Array.isArray(toolsList) && toolsList.length > 0 ? toolsList.join(', ') : 'general';
+                    const descStr = caps.description ? ` — ${caps.description}` : '';
+                    agentCapabilities += `- "${roleName}" (${caps.name || agentId}): ${toolsStr}${descStr}\n`;
                 }
             }
 
