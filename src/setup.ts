@@ -214,29 +214,76 @@ export async function runSetup() {
     const key = await p.text({
       message: 'Enter your OpenAI API Key:',
       placeholder: 'sk-...',
-    });
-    if (p.isCancel(key)) {
-      p.cancel('Setup cancelled.');
-      process.exit(0);
-    }
+      validate(value) { if (!value.startsWith('sk-')) return 'Key should start with sk-'; },
+    }) as string;
+    if (p.isCancel(key)) { p.cancel('Setup cancelled.'); process.exit(0); }
     envContent += `OPENAI_API_KEY = ${key}\n`;
+
+    // Fetch live models from OpenAI
+    s.start('Fetching available models from OpenAI...');
+    let openaiModelOptions: { value: string; label: string; hint?: string }[] = [];
+    try {
+      const resp = await fetch('https://api.openai.com/v1/models', {
+        headers: { Authorization: `Bearer ${key}` },
+      });
+      if (resp.ok) {
+        const data: any = await resp.json();
+        const gptModels = (data.data as any[])
+          .map((m: any) => m.id as string)
+          .filter((id: string) => id.startsWith('gpt-') || id.startsWith('o1') || id.startsWith('o3'))
+          .sort((a: string, b: string) => b.localeCompare(a)); // newest first
+        openaiModelOptions = gptModels.map((id: string) => ({ value: id, label: id }));
+      }
+      s.stop('Models fetched!');
+    } catch (_) {
+      s.stop('Could not fetch models — using curated list.');
+    }
+
+    if (openaiModelOptions.length === 0) {
+      // Fallback curated list
+      openaiModelOptions = [
+        { value: 'gpt-4o',       label: 'gpt-4o',       hint: 'Recommended — fast & smart' },
+        { value: 'gpt-4o-mini',  label: 'gpt-4o-mini',  hint: 'Cheapest' },
+        { value: 'gpt-4-turbo',  label: 'gpt-4-turbo',  hint: '128k context' },
+        { value: 'gpt-4',        label: 'gpt-4',        hint: 'Original GPT-4' },
+        { value: 'o1',           label: 'o1',           hint: 'Deep reasoning' },
+        { value: 'o1-mini',      label: 'o1-mini',      hint: 'Cheaper reasoning' },
+        { value: 'o3-mini',      label: 'o3-mini',      hint: 'Latest reasoning model' },
+      ];
+    }
+
+    const selectedOpenAIModel = await p.select({
+      message: 'Choose your default OpenAI model:',
+      options: openaiModelOptions,
+      initialValue: 'gpt-4o',
+    });
+    if (p.isCancel(selectedOpenAIModel)) { p.cancel('Setup cancelled.'); process.exit(0); }
+    envContent += `OPENAI_MODEL = ${selectedOpenAIModel}\n`;
   }
 
   if (projectType === 'anthropic') {
     const key = await p.text({
       message: 'Enter your Anthropic API Key:',
       placeholder: 'sk-ant-...',
-    });
-    const model = await p.text({
-      message: 'Enter your preferred Anthropic model (e.g. claude-3-5-sonnet-20241022, opus-4.6-thinking):',
-      initialValue: 'claude-3-5-sonnet-20241022'
-    });
-    if (p.isCancel(key) || p.isCancel(model)) {
-      p.cancel('Setup cancelled.');
-      process.exit(0);
-    }
+    }) as string;
+    if (p.isCancel(key)) { p.cancel('Setup cancelled.'); process.exit(0); }
     envContent += `ANTHROPIC_API_KEY = ${key}\n`;
-    envContent += `ANTHROPIC_MODEL = ${model}\n`;
+
+    const anthropicModels: { value: string; label: string; hint?: string }[] = [
+      { value: 'claude-opus-4-5',               label: 'claude-opus-4-5',               hint: 'Most capable' },
+      { value: 'claude-3-5-sonnet-20241022',     label: 'claude-3-5-sonnet-20241022',     hint: 'Recommended' },
+      { value: 'claude-3-5-haiku-20241022',      label: 'claude-3-5-haiku-20241022',      hint: 'Fastest & cheapest' },
+      { value: 'claude-3-opus-20240229',         label: 'claude-3-opus-20240229',         hint: 'Powerful reasoning' },
+      { value: 'claude-3-haiku-20240307',        label: 'claude-3-haiku-20240307',        hint: 'Budget' },
+    ];
+
+    const selectedAnthropicModel = await p.select({
+      message: 'Choose your default Anthropic model:',
+      options: anthropicModels,
+      initialValue: 'claude-3-5-sonnet-20241022',
+    });
+    if (p.isCancel(selectedAnthropicModel)) { p.cancel('Setup cancelled.'); process.exit(0); }
+    envContent += `ANTHROPIC_MODEL = ${selectedAnthropicModel}\n`;
   }
 
   if (projectType === 'custom') {

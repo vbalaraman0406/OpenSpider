@@ -539,6 +539,116 @@ modelsMenu
         process.exit(0);
     });
 
+modelsMenu
+    .command('select')
+    .description('Interactively switch the active model for your current provider')
+    .action(async () => {
+        const p = await import('@clack/prompts');
+        const rootDir = __dirname.endsWith('src') ? path.join(__dirname, '..') : path.join(__dirname, '..');
+        const envPath = path.join(rootDir, '.env');
+        require('dotenv').config({ path: envPath });
+
+        const provider = process.env.DEFAULT_PROVIDER || '';
+        if (!provider) {
+            console.error('\n❌ No provider configured. Run: openspider onboard');
+            process.exit(1);
+        }
+
+        console.log(`\n🕷️  Selecting model for provider: ${provider}\n`);
+
+        let selectedModel = '';
+
+        if (provider === 'openai') {
+            // Fetch live models from OpenAI API
+            const s = p.spinner();
+            s.start('Fetching available models from OpenAI...');
+            let options: { value: string; label: string }[] = [];
+            try {
+                const resp = await fetch('https://api.openai.com/v1/models', {
+                    headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+                });
+                if (resp.ok) {
+                    const data: any = await resp.json();
+                    options = (data.data as any[])
+                        .map((m: any) => m.id as string)
+                        .filter((id: string) => id.startsWith('gpt-') || id.startsWith('o1') || id.startsWith('o3'))
+                        .sort((a: string, b: string) => b.localeCompare(a))
+                        .map((id: string) => ({ value: id, label: id }));
+                }
+                s.stop('Models fetched!');
+            } catch (_) {
+                s.stop('Could not reach OpenAI — using curated list.');
+            }
+            if (options.length === 0) {
+                options = [
+                    { value: 'gpt-4o',      label: 'gpt-4o      — Recommended' },
+                    { value: 'gpt-4o-mini', label: 'gpt-4o-mini — Cheapest' },
+                    { value: 'gpt-4-turbo', label: 'gpt-4-turbo — 128k context' },
+                    { value: 'gpt-4',       label: 'gpt-4       — Original GPT-4' },
+                    { value: 'o1',          label: 'o1          — Deep reasoning' },
+                    { value: 'o1-mini',     label: 'o1-mini     — Cheaper reasoning' },
+                    { value: 'o3-mini',     label: 'o3-mini     — Latest reasoning' },
+                ];
+            }
+            const choice = await p.select({ message: 'Choose OpenAI model:', options, initialValue: process.env.OPENAI_MODEL || 'gpt-4o' });
+            if (p.isCancel(choice)) { p.cancel('Cancelled.'); process.exit(0); }
+            selectedModel = choice as string;
+
+        } else if (provider === 'anthropic') {
+            const options = [
+                { value: 'claude-opus-4-5',           label: 'claude-opus-4-5           — Most capable' },
+                { value: 'claude-3-5-sonnet-20241022', label: 'claude-3-5-sonnet-20241022 — Recommended' },
+                { value: 'claude-3-5-haiku-20241022',  label: 'claude-3-5-haiku-20241022  — Fastest & cheapest' },
+                { value: 'claude-3-opus-20240229',     label: 'claude-3-opus-20240229     — Powerful reasoning' },
+                { value: 'claude-3-haiku-20240307',    label: 'claude-3-haiku-20240307    — Budget' },
+            ];
+            const choice = await p.select({ message: 'Choose Anthropic model:', options, initialValue: process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022' });
+            if (p.isCancel(choice)) { p.cancel('Cancelled.'); process.exit(0); }
+            selectedModel = choice as string;
+
+        } else if (provider === 'antigravity' || provider === 'antigravity-internal') {
+            const options = [
+                { value: 'gemini-2.5-flash',         label: 'gemini-2.5-flash       — Recommended' },
+                { value: 'gemini-2.0-flash',          label: 'gemini-2.0-flash        — Fast & cheap' },
+                { value: 'gemini-2.0-flash-thinking', label: 'gemini-2.0-flash-thinking — Reasoning' },
+                { value: 'gemini-1.5-pro',            label: 'gemini-1.5-pro          — Large context' },
+                { value: 'gemini-1.5-flash',          label: 'gemini-1.5-flash        — Budget' },
+            ];
+            const choice = await p.select({ message: 'Choose Gemini model:', options, initialValue: process.env.GEMINI_MODEL || 'gemini-2.5-flash' });
+            if (p.isCancel(choice)) { p.cancel('Cancelled.'); process.exit(0); }
+            selectedModel = choice as string;
+
+        } else if (provider === 'ollama') {
+            const input = await p.text({ message: 'Enter Ollama model name (e.g. llama3, qwen2.5-coder:32b):', placeholder: 'llama3', initialValue: process.env.OLLAMA_MODEL || '' });
+            if (p.isCancel(input)) { p.cancel('Cancelled.'); process.exit(0); }
+            selectedModel = input as string;
+
+        } else {
+            const input = await p.text({ message: 'Enter model name:', placeholder: 'model-name', initialValue: process.env.CUSTOM_MODEL || '' });
+            if (p.isCancel(input)) { p.cancel('Cancelled.'); process.exit(0); }
+            selectedModel = input as string;
+        }
+
+        // Write the new model to .env
+        const envKey = provider === 'openai' ? 'OPENAI_MODEL' :
+            provider === 'anthropic' ? 'ANTHROPIC_MODEL' :
+                provider === 'ollama' ? 'OLLAMA_MODEL' :
+                    provider === 'custom' ? 'CUSTOM_MODEL' : 'GEMINI_MODEL';
+
+        const { execSync: exec } = require('child_process');
+        const envContent = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf-8') : '';
+        const newLine = `${envKey}=${selectedModel}`;
+        const updated = envContent.match(new RegExp(`^${envKey}=.*`, 'm'))
+            ? envContent.replace(new RegExp(`^${envKey}=.*`, 'm'), newLine)
+            : envContent + `\n${newLine}\n`;
+        fs.writeFileSync(envPath, updated);
+
+        console.log(`\n✅ Model updated to: ${selectedModel}`);
+        console.log('♻️  Restart OpenSpider to apply: openspider stop && openspider start\n');
+        process.exit(0);
+    });
+
+
 program
     .command('status')
     .description('Show current OpenSpider gateway status and configuration')
