@@ -373,6 +373,35 @@ export async function startWhatsApp() {
                         }
                     }
                 } catch (e) { }
+
+                // 🔄 Periodic session keep-alive: re-subscribe every 30 minutes to prevent
+                // Signal encryption sessions from going stale on long-running instances.
+                setInterval(async () => {
+                    try {
+                        const configPath = path.join(process.cwd(), 'workspace', 'whatsapp_config.json');
+                        if (!fs.existsSync(configPath)) return;
+                        const waConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+
+                        // Refresh DM sessions
+                        const dms = waConfig.allowedDMs || [];
+                        for (const entry of dms) {
+                            const num = (typeof entry === 'string' ? entry : entry.number || '').replace(/\D/g, '');
+                            if (num) {
+                                await sock.presenceSubscribe(`${num}@s.whatsapp.net`).catch(() => { });
+                                await sock.sendPresenceUpdate('available', `${num}@s.whatsapp.net`).catch(() => { });
+                            }
+                        }
+                        // Refresh group sessions
+                        const groups = waConfig.allowedGroups || [];
+                        for (const g of groups) {
+                            const groupJid = typeof g === 'string' ? g : g.jid;
+                            if (groupJid) {
+                                await sock.presenceSubscribe(groupJid).catch(() => { });
+                            }
+                        }
+                        console.log(`[WhatsApp] 🔄 Session keep-alive: refreshed ${dms.length} DM(s), ${groups.length} group(s)`);
+                    } catch (e) { }
+                }, 30 * 60 * 1000); // Every 30 minutes
             }, 3000); // Wait 3s after connection for Baileys internals to settle
         }
     });
