@@ -1,0 +1,6 @@
+{
+    "name": "stock_screener",
+    "description": "Screen stocks by multiple criteria: RSI, market cap, P/E ratio, sector, volume, price change. Returns matching tickers ranked by relevance.",
+    "instructions": "Call with {\"criteria\": \"oversold tech large-cap\"} or {\"min_market_cap\": 10000000000, \"sector\": \"Technology\", \"max_pe\": 30}. Returns top matching stocks.",
+    "language": "python"
+}

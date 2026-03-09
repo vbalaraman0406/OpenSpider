@@ -1,0 +1,6 @@
+{
+    "name": "stock_news",
+    "description": "Get latest news and sentiment for a stock ticker. Uses yfinance news feed with AI-enriched sentiment classification.",
+    "instructions": "Call with {\"ticker\": \"TSLA\", \"limit\": 10} to get recent headlines with sentiment. Optionally use {\"query\": \"interest rates\"} for general market news.",
+    "language": "python"
+}

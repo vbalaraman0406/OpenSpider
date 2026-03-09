@@ -1,0 +1,6 @@
+{
+    "name": "stock_quote",
+    "description": "Fetch real-time stock price, change %, volume, 52-week range, market cap, and after-hours data for any ticker symbol.",
+    "instructions": "Call with {\"ticker\": \"AAPL\"} to get current price snapshot. Returns current price, daily change, volume, 52-week high/low, market cap.",
+    "language": "python"
+}

@@ -1,0 +1,6 @@
+{
+    "name": "stock_compare",
+    "description": "Compare multiple stocks side-by-side on key metrics: price, P/E, market cap, RSI, revenue growth, dividend yield. Returns a formatted comparison.",
+    "instructions": "Call with {\"tickers\": [\"AAPL\", \"MSFT\", \"GOOG\"]} to get side-by-side comparison. Optionally specify {\"metrics\": [\"pe\", \"rsi\", \"market_cap\"]}.",
+    "language": "python"
+}

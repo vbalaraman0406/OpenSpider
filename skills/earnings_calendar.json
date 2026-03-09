@@ -1,0 +1,6 @@
+{
+    "name": "earnings_calendar",
+    "description": "Get upcoming and recent earnings reports. Shows EPS estimates, actual results, surprise %, and next earnings date for any ticker.",
+    "instructions": "Call with {\"ticker\": \"AAPL\"} to get earnings history and next date. Call with {\"date_range\": \"this_week\"} to see upcoming earnings.",
+    "language": "python"
+}

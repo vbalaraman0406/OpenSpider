@@ -1,0 +1,6 @@
+{
+    "name": "portfolio_tracker",
+    "description": "Track portfolio performance: unrealized P&L per position, total portfolio value, sector allocation, and returns. Persists holdings to local storage.",
+    "instructions": "Call with {\"action\": \"status\"} to view current portfolio. Use {\"action\": \"add\", \"ticker\": \"AAPL\", \"shares\": 50, \"cost_basis\": 150.00} to add a holding. Use {\"action\": \"remove\", \"ticker\": \"AAPL\"} to remove. Use {\"action\": \"set\", \"holdings\": [...]} to set entire portfolio.",
+    "language": "python"
+}

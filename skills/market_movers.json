@@ -1,0 +1,6 @@
+{
+    "name": "market_movers",
+    "description": "Get today's top stock market movers: gainers, losers, and most active by volume. Returns top 10-15 tickers per category.",
+    "instructions": "Call with {\"category\": \"gainers\"} or {\"category\": \"losers\"} or {\"category\": \"volume\"} or {\"category\": \"all\"} for all three. Returns formatted movers list.",
+    "language": "python"
+}
