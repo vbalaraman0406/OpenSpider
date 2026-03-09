@@ -222,34 +222,78 @@ const channelsMenu = program
 
 channelsMenu
     .command('login')
-    .description('View the live WhatsApp QR Code for authentication')
+    .description('Connect OpenSpider to WhatsApp by scanning a QR code')
     .action(async () => {
-        const fs = await import('node:fs');
-        const path = await import('node:path');
-        const qrcode = await import('qrcode-terminal');
-        const rootDir = __dirname.endsWith('src') ? path.join(__dirname, '..') : path.join(__dirname, '..');
-        const qrPath = path.join(rootDir, '.latest_qr.txt');
+        console.log('\n🕷️ OpenSpider WhatsApp Login');
+        console.log('─────────────────────────────────────────');
+        console.log('Starting WhatsApp connection...\n');
 
-        console.log('\n🕷️ Watching for WhatsApp QR Code from background engine (Press Ctrl+C to exit)...');
-        let lastQr = '';
+        try {
+            const makeWASocket = (await import('@whiskeysockets/baileys')).default;
+            const { useMultiFileAuthState, fetchLatestBaileysVersion, DisconnectReason } = await import('@whiskeysockets/baileys');
+            const { Boom } = await import('@hapi/boom');
+            const qrcode = (await import('qrcode-terminal')).default;
+            const fs = await import('node:fs');
+            const path = await import('node:path');
 
-        const checkQr = () => {
-            if (fs.existsSync(qrPath)) {
-                const qr = fs.readFileSync(qrPath, 'utf-8');
-                if (qr !== lastQr && qr.trim() !== '') {
-                    console.clear();
-                    console.log('\n🕷️ [WhatsApp] Scan this live QR code to connect OpenSpider:');
-                    qrcode.default.generate(qr, { small: true });
-                    lastQr = qr;
-                }
-            } else if (lastQr) {
-                console.log('\n✅ OpenSpider successfully connected to WhatsApp!');
-                process.exit(0);
+            // Store creds alongside the main gateway's auth so they share the same session
+            const authDir = path.join(process.cwd(), 'baileys_auth_info');
+            if (fs.existsSync(authDir)) {
+                // Clear stale session files so Baileys forces a fresh QR instead of reconnecting silently
+                const staleFiles = fs.readdirSync(authDir).filter((f: string) => f.startsWith('session-'));
+                staleFiles.forEach((f: string) => { try { fs.unlinkSync(path.join(authDir, f)); } catch (e) { } });
             }
-        };
 
-        checkQr();
-        setInterval(checkQr, 1000);
+            const { state, saveCreds } = await useMultiFileAuthState(authDir);
+            const { version } = await fetchLatestBaileysVersion();
+
+            const sock = makeWASocket({
+                version,
+                auth: state,
+                printQRInTerminal: false,
+                qrTimeout: 60000,
+            });
+
+            sock.ev.on('creds.update', saveCreds);
+
+            sock.ev.on('connection.update', async (update: any) => {
+                const { connection, lastDisconnect, qr } = update;
+
+                if (qr) {
+                    console.clear();
+                    console.log('\n🕷️ Scan this QR code in WhatsApp → Linked Devices → Link a Device:\n');
+                    qrcode.generate(qr, { small: true });
+                    console.log('\n⏳ Waiting for scan... (QR refreshes every 60s)');
+                }
+
+                if (connection === 'open') {
+                    console.log('\n✅ WhatsApp connected successfully!');
+                    console.log('📱 OpenSpider is now linked. Restart the gateway to activate: openspider restart\n');
+                    // Also enable WhatsApp in the workspace config
+                    try {
+                        const configPath = path.join(process.cwd(), 'workspace', 'whatsapp_config.json');
+                        let cfg: any = { enabled: true, dmPolicy: 'allowlist', allowedDMs: [], groupPolicy: 'disabled', allowedGroups: [], botMode: 'mention' };
+                        if (fs.existsSync(configPath)) cfg = { ...JSON.parse(fs.readFileSync(configPath, 'utf-8')), enabled: true };
+                        fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2));
+                        console.log('✅ WhatsApp auto-enabled in workspace config.');
+                    } catch (e) { }
+                    await sock.logout().catch(() => {});
+                    process.exit(0);
+                }
+
+                if (connection === 'close') {
+                    const code = (lastDisconnect?.error as any)?.output?.statusCode;
+                    if (code === DisconnectReason.loggedOut) {
+                        console.log('\n❌ Logged out. Please try again.');
+                        process.exit(1);
+                    }
+                }
+            });
+
+        } catch (err: any) {
+            console.error('Failed to start WhatsApp login:', err.message);
+            process.exit(1);
+        }
     });
 
 const toolsMenu = program
