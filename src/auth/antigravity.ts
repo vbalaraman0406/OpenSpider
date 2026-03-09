@@ -192,10 +192,10 @@ export function saveAuthState(state: AuthState) {
 }
 
 export async function loginToAntigravity(): Promise<AuthState> {
-    if (!ANTIGRAVITY_CLIENT_ID || !ANTIGRAVITY_CLIENT_SECRET) {
+    if (!ANTIGRAVITY_CLIENT_ID) {
         throw new Error(
             'Antigravity credentials not configured. ' +
-            'Add ANTIGRAVITY_CLIENT_ID and ANTIGRAVITY_CLIENT_SECRET to your .env file.'
+            'Add ANTIGRAVITY_CLIENT_ID to your .env file.'
         );
     }
 
