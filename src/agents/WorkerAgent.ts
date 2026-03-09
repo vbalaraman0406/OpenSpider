@@ -332,11 +332,16 @@ ${context.join('\n')}
 
                         if (response.command === 'add_dm' && rawNumber) {
                             if (!waConfig.allowedDMs) waConfig.allowedDMs = [];
-                            if (!waConfig.allowedDMs.includes(rawNumber)) waConfig.allowedDMs.push(rawNumber);
-                            toolOutput = `Successfully added ${rawNumber} to the WhatsApp Direct Messages Allowlist.`;
+                            const exists = waConfig.allowedDMs.some((e: any) =>
+                                (typeof e === 'string' ? e : e.number || '').replace(/\D/g, '') === rawNumber
+                            );
+                            if (!exists) waConfig.allowedDMs.push({ number: rawNumber, mode: 'mention' });
+                            toolOutput = `Successfully added ${rawNumber} to the WhatsApp Direct Messages Allowlist (mode: mention).`;
                         } else if (response.command === 'remove_dm' && rawNumber) {
                             if (waConfig.allowedDMs) {
-                                waConfig.allowedDMs = waConfig.allowedDMs.filter((num: string) => num.replace(/\D/g, '') !== rawNumber);
+                                waConfig.allowedDMs = waConfig.allowedDMs.filter((e: any) =>
+                                    (typeof e === 'string' ? e : e.number || '').replace(/\D/g, '') !== rawNumber
+                                );
                             }
                             toolOutput = `Successfully removed ${rawNumber} from the WhatsApp Direct Messages Allowlist.`;
                         } else if (response.command === 'add_group') {
@@ -411,7 +416,8 @@ ${context.join('\n')}
                         if (fs.existsSync(configPath)) {
                             const waConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
                             if (waConfig.allowedDMs && waConfig.allowedDMs.length > 0) {
-                                const rawNumber = waConfig.allowedDMs[0].replace(/\D/g, '');
+                                const firstEntry = waConfig.allowedDMs[0];
+                                const rawNumber = (typeof firstEntry === 'string' ? firstEntry : firstEntry.number || '').replace(/\D/g, '');
                                 defaultJid = `${rawNumber}@s.whatsapp.net`;
                             }
                             if (waConfig.groupPolicy) groupPolicy = waConfig.groupPolicy;
@@ -557,7 +563,8 @@ ${context.join('\n')}
                         if (fs.existsSync(configPath)) {
                             const waConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
                             if (waConfig.allowedDMs && waConfig.allowedDMs.length > 0) {
-                                const rawNumber = waConfig.allowedDMs[0].replace(/\D/g, '');
+                                const firstEntry = waConfig.allowedDMs[0];
+                                const rawNumber = (typeof firstEntry === 'string' ? firstEntry : firstEntry.number || '').replace(/\D/g, '');
                                 userJid = `${rawNumber}@s.whatsapp.net`;
                             }
                         }

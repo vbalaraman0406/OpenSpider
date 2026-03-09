@@ -41,6 +41,15 @@ export function WhatsAppSecurity({ isRunning }: { isRunning: boolean }) {
                     mode: data.botMode || 'mention'
                 }));
             }
+            // Migrate legacy: convert plain string allowedDMs to objects
+            if (data.allowedDMs && data.allowedDMs.length > 0) {
+                data.allowedDMs = data.allowedDMs.map((entry: any) => {
+                    if (typeof entry === 'string') {
+                        return { number: entry, mode: 'always' };
+                    }
+                    return entry;
+                });
+            }
             setConfig(data);
         } catch (e) {
             console.error("Failed to fetch WhatsApp config", e);
@@ -75,21 +84,33 @@ export function WhatsAppSecurity({ isRunning }: { isRunning: boolean }) {
 
             if (val.length === 10) {
                 val = '1' + val; // Auto-prepend US country code
-            } else if (val.length !== 11 || !val.startsWith('1')) {
-                setDmError('Please enter a valid 10-digit US phone number (e.g. 555-123-4567).');
+            }
+            // Accept international numbers (5-15 digits)
+            if (val.length < 5 || val.length > 15) {
+                setDmError('Please enter a valid phone number (5-15 digits).');
                 return;
             }
 
-            if (val && !config.allowedDMs.includes(val)) {
-                setConfig({ ...config, allowedDMs: [...config.allowedDMs, val] });
+            const exists = config.allowedDMs.some((entry: any) =>
+                (entry.number || '').replace(/\D/g, '') === val
+            );
+            if (!exists) {
+                setConfig({ ...config, allowedDMs: [...config.allowedDMs, { number: val, mode: 'mention' }] });
             }
             setDmInput('');
             setDmError('');
         }
     };
 
-    const removeDmTag = (tag: string) => {
-        setConfig({ ...config, allowedDMs: config.allowedDMs.filter((t: string) => t !== tag) });
+    const removeDmTag = (number: string) => {
+        setConfig({ ...config, allowedDMs: config.allowedDMs.filter((entry: any) => (entry.number || entry) !== number) });
+    };
+
+    const setDmMode = (number: string, mode: string) => {
+        setConfig({
+            ...config,
+            allowedDMs: config.allowedDMs.map((entry: any) => (entry.number || entry) === number ? { ...entry, mode } : entry)
+        });
     };
 
     const addGroupTag = (e?: React.KeyboardEvent, val?: string) => {
@@ -182,29 +203,70 @@ export function WhatsAppSecurity({ isRunning }: { isRunning: boolean }) {
                         </div>
 
                         {config.dmPolicy === 'allowlist' && (
-                            <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-top-2">
-                                <label className="text-[10px] uppercase tracking-widest text-slate-500 font-bold">Allowed Numbers</label>
-                                <div className="bg-slate-900 border border-slate-800 rounded-lg p-3 min-h-[100px] flex flex-wrap content-start gap-2 focus-within:border-indigo-500/50 focus-within:ring-1 focus-within:ring-indigo-500/50 transition-all cursor-text" onClick={() => document.getElementById('dm-input')?.focus()}>
-                                    {config.allowedDMs.map((phone: string) => (
-                                        <div key={phone} className="flex items-center gap-1.5 bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 px-2.5 py-1 rounded-md text-xs font-mono font-medium group">
-                                            +{phone}
-                                            <button onClick={(e) => { e.stopPropagation(); removeDmTag(phone); }} className="opacity-50 hover:opacity-100 hover:text-red-400 transition-colors">
-                                                &times;
-                                            </button>
-                                        </div>
-                                    ))}
+                            <div className="flex flex-col gap-3 animate-in fade-in slide-in-from-top-2">
+                                <label className="text-[10px] uppercase tracking-widest text-slate-500 font-bold">Allowed Contacts</label>
+
+                                {/* Per-contact list with individual mode toggles */}
+                                {config.allowedDMs.length > 0 && (
+                                    <div className="flex flex-col gap-2">
+                                        {config.allowedDMs.map((entry: any) => {
+                                            const number = entry.number || entry;
+                                            const isAlways = (entry.mode || 'always') === 'always';
+                                            return (
+                                                <div key={number} className="bg-slate-900/80 border border-slate-800 rounded-xl p-3 flex items-center justify-between gap-3 group hover:border-slate-700 transition-colors">
+                                                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                                        <MessageSquare className="w-4 h-4 text-slate-500 shrink-0" />
+                                                        <div className="min-w-0">
+                                                            <div className="text-sm font-medium text-white font-mono">+{number}</div>
+                                                            {entry.lid && <div className="text-[10px] font-mono text-slate-500 truncate">LID: {entry.lid}</div>}
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 shrink-0">
+                                                        <div className="flex bg-slate-950 rounded-lg p-0.5 border border-slate-800">
+                                                            <button
+                                                                onClick={() => setDmMode(number, 'mention')}
+                                                                className={`px-3 py-1 text-[10px] uppercase tracking-wider font-bold rounded-md transition-all ${!isAlways ? 'bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
+                                                            >
+                                                                Mention
+                                                            </button>
+                                                            <button
+                                                                onClick={() => setDmMode(number, 'always')}
+                                                                className={`px-3 py-1 text-[10px] uppercase tracking-wider font-bold rounded-md transition-all ${isAlways ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
+                                                            >
+                                                                Always
+                                                            </button>
+                                                        </div>
+                                                        <button
+                                                            onClick={() => removeDmTag(number)}
+                                                            className="p-1 text-slate-600 hover:text-red-400 transition-colors"
+                                                            title="Remove contact"
+                                                        >
+                                                            &times;
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+
+                                {/* Add DM input */}
+                                <div className="bg-slate-900 border border-slate-800 rounded-lg p-3 focus-within:border-indigo-500/50 focus-within:ring-1 focus-within:ring-indigo-500/50 transition-all cursor-text" onClick={() => document.getElementById('dm-input')?.focus()}>
                                     <input
                                         id="dm-input"
                                         type="text"
-                                        placeholder={config.allowedDMs.length === 0 ? "Type US number & press Enter..." : ""}
+                                        placeholder={config.allowedDMs.length === 0 ? "Type phone number & press Enter..." : "Add another number..."}
                                         value={dmInput}
                                         onChange={(e) => { setDmInput(e.target.value); setDmError(''); }}
                                         onKeyDown={addDmTag}
-                                        className="bg-transparent border-none outline-none text-sm text-slate-300 min-w-[120px] flex-1 font-mono placeholder:font-sans placeholder:text-slate-600"
+                                        className="w-full bg-transparent border-none outline-none text-sm text-slate-300 font-mono placeholder:font-sans placeholder:text-slate-600"
                                     />
                                 </div>
                                 {dmError && <p className="text-xs text-red-500 font-medium animate-in fade-in">{dmError}</p>}
-                                <p className="text-[10px] text-slate-600 leading-snug">Type a standard 10-digit US phone number. Non-numeric characters are ignored.</p>
+                                <div className="text-[10px] text-slate-500 leading-snug flex items-start gap-1.5 mt-1 bg-slate-950/50 p-3 rounded-lg border border-slate-800">
+                                    <Fingerprint className="w-3 h-3 shrink-0 mt-0.5" />
+                                    <span><strong className="text-indigo-400">Mention:</strong> Agent only responds when @mentioned. <strong className="text-emerald-400">Always:</strong> Agent responds to every message. LIDs auto-discovered on first contact.</span>
+                                </div>
                             </div>
                         )}
                     </div>

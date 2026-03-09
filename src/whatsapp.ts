@@ -335,29 +335,41 @@ export async function startWhatsApp() {
             } catch (e) { }
 
             // 🔑 Session Warm-Up: Force Baileys to establish fresh encryption sessions
-            // with allowed DM contacts on connection. Presence subscription alone is NOT
-            // enough — we need to send actual outbound encrypted packets to force the
-            // E2E key exchange and prevent Bad MAC on the first real message.
+            // with allowed DM contacts AND group participants on connection.
             setTimeout(async () => {
                 try {
                     const configPath = path.join(process.cwd(), 'workspace', 'whatsapp_config.json');
                     if (fs.existsSync(configPath)) {
                         const waConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
                         const dms = waConfig.allowedDMs || [];
-                        for (const number of dms) {
-                            const cleanNumber = number.replace(/\D/g, '');
+                        let warmCount = 0;
+                        for (const entry of dms) {
+                            // Support both legacy string format and new object format
+                            const cleanNumber = (typeof entry === 'string' ? entry : entry.number || '').replace(/\D/g, '');
                             if (cleanNumber) {
                                 const jid = `${cleanNumber}@s.whatsapp.net`;
-                                // Subscribe to presence (lightweight)
                                 await sock.presenceSubscribe(jid).catch(() => { });
-                                // Send 'available' presence TO the contact (forces outbound encryption)
                                 await sock.sendPresenceUpdate('available', jid).catch(() => { });
-                                // Fetch their profile status (forces another encrypted exchange)
                                 await sock.fetchStatus(jid).catch(() => { });
+                                warmCount++;
+                            }
+                            // Also warm up LID if known
+                            const lid = typeof entry === 'object' ? entry.lid : undefined;
+                            if (lid) {
+                                const lidJid = `${lid}@lid`;
+                                await sock.presenceSubscribe(lidJid).catch(() => { });
                             }
                         }
-                        if (dms.length > 0) {
-                            console.log(`[WhatsApp] 🔑 Session warm-up complete: ${dms.length} contact(s) sessions established`);
+                        // Group session warm-up: subscribe to allowed group JIDs
+                        const groups = waConfig.allowedGroups || [];
+                        for (const g of groups) {
+                            const groupJid = typeof g === 'string' ? g : g.jid;
+                            if (groupJid) {
+                                await sock.presenceSubscribe(groupJid).catch(() => { });
+                            }
+                        }
+                        if (warmCount > 0 || groups.length > 0) {
+                            console.log(`[WhatsApp] 🔑 Session warm-up complete: ${warmCount} contact(s), ${groups.length} group(s)`);
                         }
                     }
                 } catch (e) { }
@@ -504,7 +516,7 @@ export async function startWhatsApp() {
             }
         } catch (e) { }
 
-        let config = { dmPolicy: 'allowlist', allowedDMs: [] as string[], groupPolicy: 'disabled', allowedGroups: [] as any[], botMode: 'mention' };
+        let config = { dmPolicy: 'allowlist', allowedDMs: [] as any[], groupPolicy: 'disabled', allowedGroups: [] as any[], botMode: 'mention' };
 
         try {
             const configPath = './workspace/whatsapp_config.json';
@@ -573,27 +585,74 @@ export async function startWhatsApp() {
                 processingMessageIds.delete(msg.key.id!);
                 return; // Block all DMs
             } else if (config.dmPolicy === 'allowlist') {
-                // Sender JID looks like '1234567890@s.whatsapp.net'
-                const senderNumber = msg.key.remoteJid?.split('@')[0] || '';
-                console.log(`[FIREWALL] DM Sender: ${senderNumber} | Allowlist: ${JSON.stringify(config.allowedDMs)}`);
+                // Sender JID can be '1234567890@s.whatsapp.net' OR '217115042836598@lid'
+                const isLidJid = msg.key.remoteJid?.endsWith('@lid');
+                const senderRaw = msg.key.remoteJid?.split('@')[0] || '';
 
-                // Ensure the number is allowed, either exact literal '1234567890' or standard '+' format.
-                // If it is a Note to Self, we inherently trust it (even if it's coming from an @lid proxy).
-                const hasMatch = isNoteToSelf || config.allowedDMs.some(allowed =>
-                    allowed.replace(/\D/g, '') === senderNumber.replace(/\D/g, '')
+                // Match against both phone number AND LID fields
+                // allowedDMs supports legacy strings AND new { number, lid, mode } objects
+                let matchedContact: any = null;
+                if (!isNoteToSelf) {
+                    for (const entry of config.allowedDMs) {
+                        if (typeof entry === 'string') {
+                            // Legacy string format: match by phone number only
+                            if (entry.replace(/\D/g, '') === senderRaw.replace(/\D/g, '')) {
+                                matchedContact = { number: entry, mode: 'always' }; // Legacy defaults to always
+                                break;
+                            }
+                        } else {
+                            // New object format: { number, lid?, mode }
+                            const numMatch = (entry.number || '').replace(/\D/g, '') === senderRaw.replace(/\D/g, '');
+                            const lidMatch = entry.lid && entry.lid === senderRaw;
+                            if (numMatch || lidMatch) {
+                                matchedContact = entry;
+                                break;
+                            }
+                        }
+                    }
+                } else {
+                    matchedContact = { number: 'self', mode: 'always' }; // Self-chat always passes
+                }
+
+                const allowlistSummary = config.allowedDMs.map((e: any) =>
+                    typeof e === 'string' ? e : `${e.number}${e.lid ? '(LID:' + e.lid + ')' : ''}`
                 );
-                if (!hasMatch) {
-                    console.log(`[FIREWALL] Blocked: ${senderNumber} not in whitelist`);
+                console.log(`[FIREWALL] DM Sender: ${senderRaw}${isLidJid ? ' (LID)' : ''} | Allowlist: ${JSON.stringify(allowlistSummary)}`);
+
+                if (!matchedContact) {
+                    console.log(`[FIREWALL] Blocked: ${senderRaw} not in whitelist`);
                     return; // Block, sender not whitelisted
                 }
 
-                // If DM sender is allowed, enforce the global botMode mention requirement
-                // (Just like in groups, the agent should not eagerly jump into human DMs unless tagged)
-                // Note: If the user is chatting in their *own* self-chat space (Note to Self), we bypass this requirement.
-                if (!isNoteToSelf && config.botMode === 'mention') {
+                // Auto-discover LID: if this message came from @lid and we matched by phone,
+                // save the LID back to the config for future matching
+                if (isLidJid && matchedContact && typeof matchedContact !== 'string' && !matchedContact.lid) {
+                    try {
+                        const configPath = './workspace/whatsapp_config.json';
+                        const rawConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+                        const idx = rawConfig.allowedDMs.findIndex((e: any) => {
+                            if (typeof e === 'string') return e.replace(/\D/g, '') === matchedContact.number.replace(/\D/g, '');
+                            return (e.number || '').replace(/\D/g, '') === matchedContact.number.replace(/\D/g, '');
+                        });
+                        if (idx !== -1) {
+                            // Upgrade legacy string entry to object format with LID
+                            if (typeof rawConfig.allowedDMs[idx] === 'string') {
+                                rawConfig.allowedDMs[idx] = { number: rawConfig.allowedDMs[idx], lid: senderRaw, mode: 'always' };
+                            } else {
+                                rawConfig.allowedDMs[idx].lid = senderRaw;
+                            }
+                            fs.writeFileSync(configPath, JSON.stringify(rawConfig, null, 2));
+                            console.log(`[FIREWALL] Auto-discovered LID ${senderRaw} for contact ${matchedContact.number}`);
+                        }
+                    } catch (e) { /* Non-critical — config update failed, will retry next message */ }
+                }
+
+                // Per-contact mention mode check
+                const contactMode = matchedContact.mode || 'always';
+                if (!isNoteToSelf && contactMode === 'mention') {
                     const isMentionedViaText = new RegExp(`@\\s*${agentName}`, 'i').test(textMessage);
                     if (!isMentionedViaText) {
-                        console.log(`[FIREWALL] Blocked: Bot mode is "mention", but @${agentName} was not found in: "${textMessage}"`);
+                        console.log(`[FIREWALL] Blocked: Contact mode is "mention", but @${agentName} was not found in: "${textMessage}"`);
                         return;
                     }
                 }
