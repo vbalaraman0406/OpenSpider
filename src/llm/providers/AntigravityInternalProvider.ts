@@ -95,15 +95,14 @@ export class AntigravityInternalProvider implements LLMProvider {
         let response!: Response;
         let streamText = '';
         let attempt = 0;
-        const maxAttempts = 5;
+        const maxAttempts = 3;
         let hasRetriedAuth = false;
 
         // Log payload size for context bloat monitoring
         const payloadSizeKB = (JSON.stringify(requestPayload).length / 1024).toFixed(1);
         console.log(`[Context] Payload size: ${payloadSizeKB}KB (${formatted.contents.length} parts)`);
 
-        // Highly Optimized Stealth Mode: Add a proactive micro-jitter delay before hitting the internal IDE API
-        // This prevents Google from fingerprinting the traffic velocity as a bot script, while keeping latency ultra-low.
+        // Stealth Mode: micro-jitter delay to mimic IDE traffic patterns
         const microJitterMs = Math.floor(Math.random() * (400 - 150 + 1)) + 150;
         await new Promise(r => setTimeout(r, microJitterMs));
 
@@ -128,9 +127,9 @@ export class AntigravityInternalProvider implements LLMProvider {
                 const currentModel = wrappedBody.model;
                 // 429 RESOURCE_EXHAUSTED is often model-specific quota — switch model after 1 retry
                 if (attempt === 0) {
-                    // First 429: wait 5s and retry same model once
-                    console.warn(`\n⚠️ [Agent] [AntigravityInternal] Rate limit (429) on ${currentModel}. Waiting 5s before retry...`);
-                    await new Promise(r => setTimeout(r, 5000));
+                    // First 429: wait 1s and retry same model once
+                    console.warn(`\n⚠️ [Agent] [AntigravityInternal] Rate limit (429) on ${currentModel}. Waiting 1s before retry...`);
+                    await new Promise(r => setTimeout(r, 1000));
                 } else {
                     // Subsequent 429: quota is model-specific — switch to next fallback model
                     const fallbacks = AntigravityInternalProvider.MODEL_FALLBACKS.filter(m => m !== currentModel);
@@ -272,15 +271,14 @@ export class AntigravityInternalProvider implements LLMProvider {
         let response!: Response;
         let streamText = '';
         let attempt = 0;
-        const maxAttempts = 5;
+        const maxAttempts = 3;
         let hasRetriedAuth = false;
 
         // Log payload size for context bloat monitoring
         const payloadSizeKB = (JSON.stringify(requestPayload).length / 1024).toFixed(1);
         console.log(`[Context] Structured payload size: ${payloadSizeKB}KB (${formatted.contents.length} parts)`);
 
-        // Stealth Mode: Add a proactive human-like delay before hitting the internal IDE API
-        // to prevent Google from fingerprinting the traffic as an automated bot script.
+        // Stealth Mode: human-like delay to mimic IDE traffic patterns
         const stealthDelayMs = Math.floor(Math.random() * (1500 - 500 + 1)) + 500;
         await new Promise(r => setTimeout(r, stealthDelayMs));
 
@@ -303,8 +301,8 @@ export class AntigravityInternalProvider implements LLMProvider {
             if (response.status === 429) {
                 const currentModel = wrappedBody.model;
                 if (attempt === 0) {
-                    console.warn(`\n⚠️ [Agent] [AntigravityInternal] Rate limit (429) on ${currentModel}. Waiting 5s before retry...`);
-                    await new Promise(r => setTimeout(r, 5000));
+                    console.warn(`\n⚠️ [Agent] [AntigravityInternal] Rate limit (429) on ${currentModel}. Waiting 1s before retry...`);
+                    await new Promise(r => setTimeout(r, 1000));
                 } else {
                     const fallbacks = AntigravityInternalProvider.MODEL_FALLBACKS.filter(m => m !== currentModel);
                     const nextModel = fallbacks[attempt - 1] ?? fallbacks[fallbacks.length - 1] ?? 'gemini-2.5-flash';

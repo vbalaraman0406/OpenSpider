@@ -94,11 +94,12 @@ async function fetchManagedProjectId(accessToken: string): Promise<{ projectId: 
         }
     }
 
-    // Non-fatal fallback: if the internal API is unavailable (e.g. account not enrolled in
-    // Gemini Code Assist), use the production endpoint with an empty projectId.
-    // The actual generate() calls may still succeed with cloud-platform scope alone.
-    console.warn('[Antigravity] Could not resolve project ID from Code Assist endpoints — using production endpoint as fallback.');
-    return { projectId: '', endpoint: 'https://cloudcode-pa.googleapis.com' };
+    // Non-fatal fallback: if loadCodeAssist fails (e.g. account not enrolled),
+    // use the daily sandbox endpoint which doesn't require Cloud Code Private API
+    // to be enabled on the OAuth project. Production endpoint (cloudcode-pa.googleapis.com)
+    // returns 403 unless the API is explicitly enabled on the GCP project.
+    console.warn('[Antigravity] Could not resolve project ID from Code Assist endpoints — using daily sandbox endpoint as fallback.');
+    return { projectId: '', endpoint: 'https://daily-cloudcode-pa.sandbox.googleapis.com' };
 }
 
 async function exchangeCodeForAuth(code: string, codeVerifier: string, redirectUri: string): Promise<AuthState> {
@@ -315,39 +316,32 @@ export async function loginToAntigravity(): Promise<AuthState> {
         );
     }
 
+    // ── PRIORITY 1: Use saved OAuth state (has its own dedicated quota) ───────
     const existing = loadAuthState();
     if (existing) {
         if (existing.expires < Date.now()) {
-            // Token expired — try OAuth refresh FIRST if we have a refresh token
+            // Token expired — refresh via OAuth if we have a refresh token
             if (existing.refresh) {
                 try {
                     return await refreshAntigravityToken(existing);
                 } catch (e: any) {
-                    console.warn('[Antigravity] OAuth refresh failed, falling back to IDE borrow...');
+                    console.warn('[Antigravity] OAuth refresh failed:', e.message);
+                    // Clear stale state so we fall through to fresh browser login
+                    clearAuthState();
                 }
+            } else {
+                // No refresh token (e.g. leftover from IDE borrow) — clear it
+                console.warn('[Antigravity] Saved token expired with no refresh token — clearing stale state.');
+                clearAuthState();
             }
-            // Fall back to IDE borrow with timeout (no refresh token, or refresh failed)
-            const ideToken = await Promise.race([
-                borrowTokenFromIDE(),
-                new Promise<null>(r => setTimeout(() => r(null), 5000))
-            ]);
-            if (ideToken) return ideToken;
-
-            // Last resort: fresh browser login
-            console.warn('[Antigravity] All token sources exhausted, attempting fresh browser login...');
         } else {
             return existing;
         }
     }
 
-    // No saved state — try IDE borrow with 5s timeout as a quick start
-    const ideToken = await Promise.race([
-        borrowTokenFromIDE(),
-        new Promise<null>(r => setTimeout(() => r(null), 5000))
-    ]);
-    if (ideToken) return ideToken;
-
-    console.log("🕷️ Initializing Internal Google IDE Authentication...");
+    // ── PRIORITY 2: Fresh OAuth browser login (gets dedicated token + refresh) ──
+    console.log("🕷️ Initializing Google OAuth Authentication...");
+    console.log("🕷️ This will open your browser for a one-time Google sign-in.");
 
     const state = crypto.randomBytes(32).toString('hex');
     const codeVerifier = base64URLEncode(crypto.randomBytes(32));
