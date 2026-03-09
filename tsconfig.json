@@ -47,6 +47,7 @@
     "dist",
     "workspace",
     "workspace-defaults",
-    "skills/workspace"
+    "skills/workspace",
+    "skills"
   ]
 }

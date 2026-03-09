@@ -362,7 +362,7 @@ export async function runSetup() {
     const existingLines = fs.readFileSync(envPath, 'utf-8').split('\n');
     const preserved: string[] = [];
     for (const line of existingLines) {
-      const key = line.split('=')[0].trim().replace(/^export\s+/, '');
+      const key = (line.split('=')[0] ?? '').trim().replace(/^export\s+/, '');
       if (key && !key.startsWith('#') && !WIZARD_MANAGED_KEYS.has(key)) {
         preserved.push(line);
       }
