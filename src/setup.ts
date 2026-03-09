@@ -350,8 +350,31 @@ export async function runSetup() {
   envContent += `DASHBOARD_API_KEY = ${dashboardKey}\n`;
   envContent += `OPENSPIDER_HOOK_TOKEN = ${hookToken}\n\n`;
 
+  // Keys managed by this wizard — these will be freshly set above, so we skip duplicates from old .env
+  const WIZARD_MANAGED_KEYS = new Set([
+    'DEFAULT_PROVIDER', 'OPENAI_API_KEY', 'OPENAI_MODEL', 'GEMINI_API_KEY', 'GEMINI_MODEL',
+    'GEMINI_USE_ADC', 'ANTHROPIC_API_KEY', 'ANTHROPIC_MODEL', 'OLLAMA_MODEL', 'CUSTOM_API_URL',
+    'CUSTOM_API_KEY', 'CUSTOM_MODEL', 'AGENT_PERSONA', 'FALLBACK_MODEL', 'ENABLE_WHATSAPP',
+    'DASHBOARD_API_KEY', 'OPENSPIDER_HOOK_TOKEN', 'PORT',
+  ]);
+  // Preserve any manually-set keys (e.g. ANTIGRAVITY_CLIENT_ID, ANTIGRAVITY_CLIENT_SECRET, PORT overrides)
+  if (fs.existsSync(envPath)) {
+    const existingLines = fs.readFileSync(envPath, 'utf-8').split('\n');
+    const preserved: string[] = [];
+    for (const line of existingLines) {
+      const key = line.split('=')[0].trim().replace(/^export\s+/, '');
+      if (key && !key.startsWith('#') && !WIZARD_MANAGED_KEYS.has(key)) {
+        preserved.push(line);
+      }
+    }
+    if (preserved.length > 0) {
+      envContent += '\n# Preserved custom settings\n' + preserved.join('\n') + '\n';
+    }
+  }
+
   s.start('Writing configuration to .env');
   fs.writeFileSync(envPath, envContent);
+
   await setTimeout(500);
   s.stop('.env configured successfully!');
 
