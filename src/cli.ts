@@ -224,33 +224,26 @@ channelsMenu
     .command('login')
     .description('Connect OpenSpider to WhatsApp by scanning a QR code')
     .action(async () => {
-        console.log('\n🕷️ OpenSpider WhatsApp Login');
+        console.log('\n🕷️  OpenSpider WhatsApp Login');
         console.log('─────────────────────────────────────────');
-        console.log('Starting WhatsApp connection...\n');
+        console.log('Connecting to WhatsApp... stand by.\n');
 
         try {
             const makeWASocket = (await import('@whiskeysockets/baileys')).default;
             const { useMultiFileAuthState, fetchLatestBaileysVersion, DisconnectReason } = await import('@whiskeysockets/baileys');
-            const { Boom } = await import('@hapi/boom');
             const qrcode = (await import('qrcode-terminal')).default;
             const fs = await import('node:fs');
             const path = await import('node:path');
+            const os = await import('node:os');
 
-            // Wipe auth entirely so Baileys ALWAYS generates a fresh QR
-            // (just clearing session- files isn't enough — creds.json causes a silent reconnect)
-            const authDir = path.join(process.cwd(), 'baileys_auth_info');
-            if (fs.existsSync(authDir)) {
-                const filesToWipe = fs.readdirSync(authDir);
-                filesToWipe.forEach((f: string) => {
-                    try { fs.unlinkSync(path.join(authDir, f)); } catch (e) { }
-                });
-                console.log('🧹 Cleared existing session to generate fresh QR...\n');
-            }
+            // Use a TEMPORARY isolated dir — never touch the live gateway's baileys_auth_info
+            const tempAuthDir = fs.mkdtempSync(path.join(os.tmpdir(), 'openspider-login-'));
+            const finalAuthDir = path.join(process.cwd(), 'baileys_auth_info');
 
-            const { state, saveCreds } = await useMultiFileAuthState(authDir);
+            const { state, saveCreds } = await useMultiFileAuthState(tempAuthDir);
             const { version } = await fetchLatestBaileysVersion();
 
-            // Use a completely silent pino logger — prevents Baileys from dumping raw JSON to the terminal
+            // Completely silent logger — no JSON dumped to stdout
             const pino = require('pino');
             const silentLogger = pino({ level: 'silent' });
 
@@ -269,37 +262,52 @@ channelsMenu
 
                 if (qr) {
                     console.clear();
-                    console.log('\n🕷️ Scan this QR code in WhatsApp → Linked Devices → Link a Device:\n');
+                    console.log('\n🕷️  Scan this QR code in WhatsApp → Linked Devices → Link a Device:\n');
                     qrcode.generate(qr, { small: true });
-                    console.log('\n⏳ Waiting for scan... (QR refreshes every 60s)');
+                    console.log('\n⏳ Waiting for scan... (QR expires in 60s, a new one will appear automatically)');
                 }
 
                 if (connection === 'open') {
-                    console.log('\n✅ WhatsApp connected successfully!');
-                    console.log('📱 OpenSpider is now linked. Restart the gateway to activate: openspider restart\n');
-                    // Also enable WhatsApp in the workspace config
+                    console.log('\n✅ WhatsApp paired successfully!');
+
+                    // Copy the new creds to the live auth dir so the gateway picks them up on restart
+                    try {
+                        if (!fs.existsSync(finalAuthDir)) fs.mkdirSync(finalAuthDir, { recursive: true });
+                        const newFiles = fs.readdirSync(tempAuthDir);
+                        newFiles.forEach((f: string) => {
+                            fs.copyFileSync(path.join(tempAuthDir, f), path.join(finalAuthDir, f));
+                        });
+                        console.log('📁 Credentials saved.');
+                    } catch (e: any) {
+                        console.error('⚠️  Could not save credentials:', e.message);
+                    }
+
+                    // Auto-enable WhatsApp in workspace config
                     try {
                         const configPath = path.join(process.cwd(), 'workspace', 'whatsapp_config.json');
                         let cfg: any = { enabled: true, dmPolicy: 'allowlist', allowedDMs: [], groupPolicy: 'disabled', allowedGroups: [], botMode: 'mention' };
                         if (fs.existsSync(configPath)) cfg = { ...JSON.parse(fs.readFileSync(configPath, 'utf-8')), enabled: true };
                         fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2));
-                        console.log('✅ WhatsApp auto-enabled in workspace config.');
                     } catch (e) { }
-                    await sock.logout().catch(() => {});
+
+                    // Clean up temp dir
+                    try { fs.rmSync(tempAuthDir, { recursive: true, force: true }); } catch (e) { }
+
+                    console.log('\n📱 Run `openspider restart` to activate WhatsApp in the gateway.\n');
                     process.exit(0);
                 }
 
                 if (connection === 'close') {
                     const code = (lastDisconnect?.error as any)?.output?.statusCode;
                     if (code === DisconnectReason.loggedOut) {
-                        console.log('\n❌ Logged out. Please try again.');
+                        console.log('\n❌ Session rejected. Please try again.');
                         process.exit(1);
                     }
                 }
             });
 
         } catch (err: any) {
-            console.error('Failed to start WhatsApp login:', err.message);
+            console.error('\nFailed to start WhatsApp login:', err.message);
             process.exit(1);
         }
     });
