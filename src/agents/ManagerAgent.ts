@@ -288,7 +288,7 @@ Example output:
                         instruction: step.instruction
                     }));
 
-                    const worker = new WorkerAgent(this.llm, step.role);
+                    const worker = new WorkerAgent(this.llm, step.role, () => this.cancelRequested);
                     const result = await worker.executeTask(step.instruction, globalContext);
 
                     console.log(`[Manager] Task ${taskId} completed. Result:\n${result}\n`);
@@ -318,7 +318,7 @@ Example output:
 
                         // Parallel tasks get a copy of the CURRENT global context!
                         const workerContext = [...globalContext];
-                        const worker = new WorkerAgent(this.llm, subtask.role);
+                        const worker = new WorkerAgent(this.llm, subtask.role, () => this.cancelRequested);
                         const result = await worker.executeTask(subtask.instruction, workerContext);
 
                         console.log(`[Manager] Parallel Task ${taskId} completed.`);

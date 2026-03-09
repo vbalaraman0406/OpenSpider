@@ -12,12 +12,14 @@ export class WorkerAgent {
     private executor: DynamicExecutor;
     private browserTool: BrowserTool;
     private role: string;
+    private cancelChecker: (() => boolean) | undefined;
 
-    constructor(llm: LLMProvider, role: string) {
+    constructor(llm: LLMProvider, role: string, cancelChecker?: () => boolean) {
         this.llm = llm;
         this.executor = new DynamicExecutor();
         this.browserTool = new BrowserTool();
         this.role = role;
+        this.cancelChecker = cancelChecker;
     }
 
     async executeTask(instruction: string, context: string[]): Promise<string> {
@@ -120,6 +122,12 @@ ${context.join('\n')}
 
         // Autonomy Loop
         for (let i = 0; i < maxLoops; i++) {
+
+            // Check for cancel at the top of every iteration
+            if (this.cancelChecker && this.cancelChecker()) {
+                console.log(`[Worker - ${this.role}] ⛔ Cancel detected at iteration ${i + 1}. Aborting task.`);
+                return '⛔ Task cancelled by user.';
+            }
 
             // --- Iteration budget warning ---
             // When approaching the limit, push a system message forcing the agent
