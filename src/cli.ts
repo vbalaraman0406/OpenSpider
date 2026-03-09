@@ -764,18 +764,50 @@ program
                 pm2.disconnect();
                 if (err || !desc || desc.length === 0) {
                     console.log('Gateway:          ⛔ Not running  (start with: openspider start)');
-                } else {
-                    const proc = desc[0];
-                    const status = proc?.pm2_env?.status || 'unknown';
-                    const uptime = proc?.pm2_env?.pm_uptime
-                        ? Math.round((Date.now() - proc.pm2_env.pm_uptime) / 60000) + ' min'
-                        : 'N/A';
-                    const restarts = proc?.pm2_env?.restart_time ?? 0;
-                    const icon = status === 'online' ? '✅' : '⛔';
-                    console.log(`Gateway:          ${icon} ${status}  (uptime: ${uptime}, restarts: ${restarts})`);
+                    console.log('');
+                    process.exit(0);
+                    return;
                 }
-                console.log('');
-                process.exit(0);
+
+                const proc = desc[0];
+                const status = proc?.pm2_env?.status || 'unknown';
+                const uptime = proc?.pm2_env?.pm_uptime
+                    ? Math.round((Date.now() - proc.pm2_env.pm_uptime) / 60000) + ' min'
+                    : 'N/A';
+                const restarts = proc?.pm2_env?.restart_time ?? 0;
+                const icon = status === 'online' ? '✅' : '⛔';
+                console.log(`Gateway:          ${icon} ${status}  (uptime: ${uptime}, restarts: ${restarts})`);
+
+                // Query the health API for WhatsApp and other component statuses
+                const port = process.env.PORT || '4001';
+                const apiKey = process.env.DASHBOARD_API_KEY || '';
+                const http = require('http');
+                const req = http.get(
+                    `http://localhost:${port}/api/health`,
+                    { headers: { 'x-api-key': apiKey } },
+                    (res: any) => {
+                        let body = '';
+                        res.on('data', (chunk: any) => body += chunk);
+                        res.on('end', () => {
+                            try {
+                                const health = JSON.parse(body);
+                                const wa = health?.components?.whatsapp || 'unknown';
+                                const waIcon = wa === 'connected' ? '✅' : '⚠️ ';
+                                console.log(`WhatsApp:         ${waIcon} ${wa}`);
+                            } catch (e) {
+                                console.log(`WhatsApp:         ⚠️  Could not reach health API`);
+                            }
+                            console.log('');
+                            process.exit(0);
+                        });
+                    }
+                );
+                req.on('error', () => {
+                    console.log(`WhatsApp:         ⚠️  Gateway API unreachable`);
+                    console.log('');
+                    process.exit(0);
+                });
+                req.end();
             });
         });
     });
