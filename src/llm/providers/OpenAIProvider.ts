@@ -1,5 +1,30 @@
 import { LLMProvider, ChatMessage, TokenUsage } from '../BaseProvider';
 
+/**
+ * OpenAI Structured Outputs require `additionalProperties: false` on every
+ * object schema (including nested ones). This helper enforces that recursively.
+ * Only used by OpenAIProvider — does not affect Antigravity/Gemini providers.
+ */
+function enforceAdditionalProperties(schema: Record<string, any>): Record<string, any> {
+    if (typeof schema !== 'object' || schema === null) return schema;
+    const result: Record<string, any> = { ...schema };
+    if (result.type === 'object' || result.properties) {
+        result.additionalProperties = false;
+        if (result.properties) {
+            result.properties = Object.fromEntries(
+                Object.entries(result.properties).map(([k, v]) => [k, enforceAdditionalProperties(v as Record<string, any>)])
+            );
+        }
+    }
+    if (result.items) result.items = enforceAdditionalProperties(result.items);
+    if (result.anyOf) result.anyOf = (result.anyOf as any[]).map(enforceAdditionalProperties);
+    if (result.oneOf) result.oneOf = (result.oneOf as any[]).map(enforceAdditionalProperties);
+    if (result.allOf) result.allOf = (result.allOf as any[]).map(enforceAdditionalProperties);
+    return result;
+}
+
+
+
 export class OpenAIProvider implements LLMProvider {
     private apiKey: string;
     private model: string;
@@ -52,6 +77,10 @@ export class OpenAIProvider implements LLMProvider {
         agentId?: string
     ): Promise<T> {
         console.log(`[Agent] [OpenAI] Sending structured generation to ${this.model}...`);
+
+        // OpenAI requires additionalProperties: false on every object in the schema
+        const strictSchema = enforceAdditionalProperties(schema);
+
         const response = await fetch(`${this.baseUrl}/chat/completions`, {
             method: 'POST',
             headers: {
@@ -61,7 +90,7 @@ export class OpenAIProvider implements LLMProvider {
             body: JSON.stringify({
                 model: this.model,
                 messages: messages.map(m => ({ role: m.role, content: m.content })),
-                response_format: { type: 'json_schema', json_schema: { name: 'schema', schema, strict: true } }
+                response_format: { type: 'json_schema', json_schema: { name: 'schema', schema: strictSchema, strict: true } }
             })
         });
 
