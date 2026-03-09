@@ -30,6 +30,7 @@ const CODE_ASSIST_HEADERS = {
 };
 
 const AUTH_FILE_PATH = path.join(process.cwd(), '.antigravity-auth.json');
+let cachedAuthState: AuthState | null = null; // In-memory cache to prevent repeated browser logins
 
 export interface AuthState {
     access: string;
@@ -91,7 +92,12 @@ async function fetchManagedProjectId(accessToken: string): Promise<{ projectId: 
             // Ignore and move to next fallback
         }
     }
-    throw new Error("Failed to resolve Antigravity account info via loadCodeAssist endpoints.");
+
+    // Non-fatal fallback: if the internal API is unavailable (e.g. account not enrolled in
+    // Gemini Code Assist), use the production endpoint with an empty projectId.
+    // The actual generate() calls may still succeed with cloud-platform scope alone.
+    console.warn('[Antigravity] Could not resolve project ID from Code Assist endpoints — using production endpoint as fallback.');
+    return { projectId: '', endpoint: 'https://cloudcode-pa.googleapis.com' };
 }
 
 async function exchangeCodeForAuth(code: string, codeVerifier: string, redirectUri: string): Promise<AuthState> {
@@ -167,9 +173,12 @@ export async function refreshAntigravityToken(state: AuthState): Promise<AuthSta
 }
 
 export function loadAuthState(): AuthState | null {
+    // Check in-memory cache first to avoid repeated file reads
+    if (cachedAuthState && cachedAuthState.expires > Date.now()) return cachedAuthState;
     if (fs.existsSync(AUTH_FILE_PATH)) {
         try {
-            return JSON.parse(fs.readFileSync(AUTH_FILE_PATH, 'utf-8'));
+            cachedAuthState = JSON.parse(fs.readFileSync(AUTH_FILE_PATH, 'utf-8'));
+            return cachedAuthState;
         } catch (e) {
             return null;
         }
@@ -178,6 +187,7 @@ export function loadAuthState(): AuthState | null {
 }
 
 export function saveAuthState(state: AuthState) {
+    cachedAuthState = state; // Update in-memory cache immediately
     fs.writeFileSync(AUTH_FILE_PATH, JSON.stringify(state, null, 2));
 }
 
