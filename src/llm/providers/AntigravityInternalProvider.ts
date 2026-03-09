@@ -104,7 +104,8 @@ export class AntigravityInternalProvider implements LLMProvider {
             request: requestPayload,
         };
 
-        let response: Response | undefined;
+        let response!: Response;
+        let streamText = '';
         let attempt = 0;
         const maxAttempts = 5;
 
@@ -127,63 +128,48 @@ export class AntigravityInternalProvider implements LLMProvider {
                 body: JSON.stringify(wrappedBody)
             });
 
-            if (response.status === 429) {
-                const errBody = await response.text();
-                let sleepMs = 2000; // Default 2 second fallback
+            // Read body ONCE immediately — Node 22 native fetch throws "Body already read" if consumed twice
+            const responseBody = await response.text();
 
+            if (response.status === 429) {
+                let sleepMs = 2000;
                 try {
-                    const errData = JSON.parse(errBody);
-                    // Extract quotaResetDelay from the highly nested cloudcode-pa.googleapis.com metadata
+                    const errData = JSON.parse(responseBody);
                     const details = errData.error?.details || [];
                     for (const detail of details) {
                         if (detail.metadata?.quotaResetDelay) {
-                            const delayStr = detail.metadata.quotaResetDelay; // "974.96105ms" or "1.5s"
-                            if (delayStr.endsWith('ms')) {
-                                sleepMs = parseFloat(delayStr);
-                            } else if (delayStr.endsWith('s')) {
-                                sleepMs = parseFloat(delayStr) * 1000;
-                            }
+                            const delayStr = detail.metadata.quotaResetDelay;
+                            sleepMs = delayStr.endsWith('ms') ? parseFloat(delayStr) : parseFloat(delayStr) * 1000;
                         } else if (detail.retryDelay) {
-                            const delayStr = detail.retryDelay; // "0.974961050s"
-                            if (delayStr.endsWith('s')) {
-                                sleepMs = parseFloat(delayStr) * 1000;
-                            }
+                            sleepMs = parseFloat(detail.retryDelay) * 1000;
                         }
                     }
                 } catch (e) { }
-
-                console.warn(`\n⚠️ [Agent] [AntigravityInternal] Rate limit exceeded (429). Sleeping for ${Math.ceil(sleepMs / 1000)}s before retry ${attempt + 1}/${maxAttempts}...`);
-                await new Promise(r => setTimeout(r, sleepMs + 250)); // Add 250ms buffer
+                console.warn(`\n⚠️ [Agent] [AntigravityInternal] Rate limit (429). Sleeping ${Math.ceil(sleepMs / 1000)}s, retry ${attempt + 1}/${maxAttempts}...`);
+                await new Promise(r => setTimeout(r, sleepMs + 250));
                 attempt++;
                 continue;
             }
 
             if (!response.ok) {
-                const errBody = await response.text();
-                // 503 MODEL_CAPACITY_EXHAUSTED: try next fallback model silently
-                if (response.status === 503) {
-                    let isCapacity = false;
-                    try { isCapacity = errBody.includes('MODEL_CAPACITY_EXHAUSTED'); } catch (_) {}
-                    if (isCapacity) {
-                        const currentModel = wrappedBody.model;
-                        const fallbacks = AntigravityInternalProvider.MODEL_FALLBACKS.filter(m => m !== currentModel);
-                        const nextModel = fallbacks[attempt] ?? fallbacks[fallbacks.length - 1] ?? 'gemini-2.0-flash';
-                        console.warn(`⚠️  [Antigravity] ${currentModel} capacity exhausted — switching to ${nextModel} (attempt ${attempt + 1}/${maxAttempts})`);
-                        wrappedBody.model = nextModel;
-                        attempt++;
-                        continue;
-                    }
+                if (response.status === 503 && responseBody.includes('MODEL_CAPACITY_EXHAUSTED')) {
+                    const currentModel = wrappedBody.model;
+                    const fallbacks = AntigravityInternalProvider.MODEL_FALLBACKS.filter(m => m !== currentModel);
+                    const nextModel = fallbacks[attempt] ?? fallbacks[fallbacks.length - 1] ?? 'gemini-2.0-flash';
+                    console.warn(`⚠️  [Antigravity] ${currentModel} capacity exhausted — switching to ${nextModel} (attempt ${attempt + 1}/${maxAttempts})`);
+                    wrappedBody.model = nextModel;
+                    attempt++;
+                    continue;
                 }
-                throw new Error(`Internal IDE API Error: ${response.status} - ${errBody}`);
+                throw new Error(`Internal IDE API Error: ${response.status} - ${responseBody}`);
             }
+            streamText = responseBody;
             break;
         }
 
-        if (!response) {
+        if (!streamText) {
             throw new Error(`Internal IDE API Error: Rate limit retries exhausted.`);
         }
-
-        const streamText = await response.text();
         const lines = streamText.split('\n');
 
         let finalText = "";
@@ -264,7 +250,8 @@ export class AntigravityInternalProvider implements LLMProvider {
             request: requestPayload,
         };
 
-        let response: Response | undefined;
+        let response!: Response;
+        let streamText = '';
         let attempt = 0;
         const maxAttempts = 5;
 
@@ -286,63 +273,48 @@ export class AntigravityInternalProvider implements LLMProvider {
                 body: JSON.stringify(wrappedBody)
             });
 
-            if (response.status === 429) {
-                const errBody = await response.text();
-                let sleepMs = 2000; // Default 2 second fallback
+            // Read body ONCE immediately — Node 22 native fetch throws "Body already read" if consumed twice
+            const responseBody = await response.text();
 
+            if (response.status === 429) {
+                let sleepMs = 2000;
                 try {
-                    const errData = JSON.parse(errBody);
-                    // Extract quotaResetDelay from the highly nested cloudcode-pa.googleapis.com metadata
+                    const errData = JSON.parse(responseBody);
                     const details = errData.error?.details || [];
                     for (const detail of details) {
                         if (detail.metadata?.quotaResetDelay) {
-                            const delayStr = detail.metadata.quotaResetDelay; // "974.96105ms" or "1.5s"
-                            if (delayStr.endsWith('ms')) {
-                                sleepMs = parseFloat(delayStr);
-                            } else if (delayStr.endsWith('s')) {
-                                sleepMs = parseFloat(delayStr) * 1000;
-                            }
+                            const delayStr = detail.metadata.quotaResetDelay;
+                            sleepMs = delayStr.endsWith('ms') ? parseFloat(delayStr) : parseFloat(delayStr) * 1000;
                         } else if (detail.retryDelay) {
-                            const delayStr = detail.retryDelay; // "0.974961050s"
-                            if (delayStr.endsWith('s')) {
-                                sleepMs = parseFloat(delayStr) * 1000;
-                            }
+                            sleepMs = parseFloat(detail.retryDelay) * 1000;
                         }
                     }
                 } catch (e) { }
-
-                console.warn(`\n⚠️ [Agent] [AntigravityInternal] Rate limit exceeded (429). Sleeping for ${Math.ceil(sleepMs / 1000)}s before retry ${attempt + 1}/${maxAttempts}...`);
-                await new Promise(r => setTimeout(r, sleepMs + 250)); // Add 250ms buffer
+                console.warn(`\n⚠️ [Agent] [AntigravityInternal] Rate limit (429). Sleeping ${Math.ceil(sleepMs / 1000)}s, retry ${attempt + 1}/${maxAttempts}...`);
+                await new Promise(r => setTimeout(r, sleepMs + 250));
                 attempt++;
                 continue;
             }
 
             if (!response.ok) {
-                const errBody = await response.text();
-                // 503 MODEL_CAPACITY_EXHAUSTED: try next fallback model silently
-                if (response.status === 503) {
-                    let isCapacity = false;
-                    try { isCapacity = errBody.includes('MODEL_CAPACITY_EXHAUSTED'); } catch (_) {}
-                    if (isCapacity) {
-                        const currentModel = wrappedBody.model;
-                        const fallbacks = AntigravityInternalProvider.MODEL_FALLBACKS.filter(m => m !== currentModel);
-                        const nextModel = fallbacks[attempt] ?? fallbacks[fallbacks.length - 1] ?? 'gemini-2.0-flash';
-                        console.warn(`⚠️  [Antigravity] ${currentModel} capacity exhausted — switching to ${nextModel} (attempt ${attempt + 1}/${maxAttempts})`);
-                        wrappedBody.model = nextModel;
-                        attempt++;
-                        continue;
-                    }
+                if (response.status === 503 && responseBody.includes('MODEL_CAPACITY_EXHAUSTED')) {
+                    const currentModel = wrappedBody.model;
+                    const fallbacks = AntigravityInternalProvider.MODEL_FALLBACKS.filter(m => m !== currentModel);
+                    const nextModel = fallbacks[attempt] ?? fallbacks[fallbacks.length - 1] ?? 'gemini-2.0-flash';
+                    console.warn(`⚠️  [Antigravity] ${currentModel} capacity exhausted — switching to ${nextModel} (attempt ${attempt + 1}/${maxAttempts})`);
+                    wrappedBody.model = nextModel;
+                    attempt++;
+                    continue;
                 }
-                throw new Error(`Internal IDE API Error: ${response.status} - ${errBody}`);
+                throw new Error(`Internal IDE API Error: ${response.status} - ${responseBody}`);
             }
+            streamText = responseBody;
             break;
         }
 
-        if (!response) {
+        if (!streamText) {
             throw new Error(`Internal IDE API Error: Rate limit retries exhausted.`);
         }
-
-        const streamText = await response.text();
         const lines = streamText.split('\n');
 
         let finalText = "";
