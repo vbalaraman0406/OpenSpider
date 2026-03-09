@@ -58,7 +58,14 @@ export function readMemoryContext(): string {
     let context = "--- Context Memory ---\n\n";
 
     try {
-        const ltm = fs.readFileSync(path.join(WORKSPACE_DIR, 'memory.md'), 'utf-8');
+        let ltm = fs.readFileSync(path.join(WORKSPACE_DIR, 'memory.md'), 'utf-8');
+        // Cap long-term memory to prevent unbounded growth
+        const LTM_LIMIT = 5000;
+        if (ltm.length > LTM_LIMIT) {
+            ltm = ltm.slice(-LTM_LIMIT);
+            const firstNewline = ltm.indexOf('\n');
+            ltm = '...[LTM TRUNCATED]...\n' + (firstNewline !== -1 ? ltm.slice(firstNewline + 1) : ltm);
+        }
         context += `## memory.md (Long Term Key Information)\n${ltm}\n\n`;
 
         // Tiered memory window — balances cross-day awareness with token budget:

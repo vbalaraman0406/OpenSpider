@@ -9,7 +9,7 @@ import path from 'node:path';
 import { ManagerAgent } from './agents/ManagerAgent';
 import { getProvider } from './llm';
 import { ChatMessage } from './llm/BaseProvider';
-import { logMemory, readMemoryContext } from './memory';
+import { logMemory } from './memory';
 import { initScheduler, runJobForcefully, activeCronJobs } from './scheduler';
 import { logUsage, getUsageSummary } from './usage';
 import { PersonaShell } from './agents/PersonaShell';
@@ -189,14 +189,13 @@ export function startServer() {
                         }
                     }
 
-                    // Process request
-                    const memoryStr = readMemoryContext();
+                    // Process request — ManagerAgent injects memory context internally,
+                    // so we pass the raw user text to avoid double memory injection.
                     let userText = parsed.text;
                     if (uploadedFilePaths.length > 0) {
                         userText += `\n\n[UPLOADED FILES - saved to disk, Workers can read these paths directly]\n${uploadedFilePaths.map(p => `- ${p}`).join('\n')}`;
                     }
-                    const fullPrompt = `Below is your historic Memory Context and Transcript.\n${memoryStr}\n\n[NEW USER REQUEST]\n${userText}`;
-                    const response = await manager.processUserRequest(fullPrompt, images);
+                    const response = await manager.processUserRequest(userText, images);
 
                     // Log agent response to session memory
                     logMemory('Agent', response);

@@ -43,22 +43,25 @@ export class ManagerAgent {
                     const caps = shell.getCapabilities();
                     if (caps.status === 'stopped') continue; // Prevent delegating to offline agents
                     if (!caps.role && !caps.name) continue; // Skip empty/broken agent folders
-                    const identityStr = shell.getIdentity().split('\\n').filter(l => l.trim().length > 0)[0] || "Specialized Sub-Agent";
                     const roleName = caps.role || agentId;
                     existingRoles.push(roleName);
-                    agentCapabilities += `- Agent ID: "${agentId}" | Role: "${roleName}" | Name: ${caps.name || agentId}\n  Summary: ${identityStr}\n  Tools: ${caps.allowedTools?.join(', ') || 'none'}\n`;
+                    agentCapabilities += `- "${roleName}" (${caps.name || agentId}): ${caps.allowedTools?.join(', ') || 'general'}\n`;
                 }
             }
 
             const skillsDir = path.join(process.cwd(), 'skills');
             if (fs.existsSync(skillsDir)) {
-                agentCapabilities += "\nAvailable Skill Summaries:\n";
                 const files = fs.readdirSync(skillsDir).filter(f => f.endsWith('.json') && f !== 'package.json');
-                for (const file of files) {
-                    try {
-                        const metadata = JSON.parse(fs.readFileSync(path.join(skillsDir, file), 'utf-8'));
-                        agentCapabilities += `- ${metadata.name}: ${metadata.description}\n`;
-                    } catch (e) { }
+                if (files.length > 0) {
+                    agentCapabilities += "\nSkills: ";
+                    const skillNames: string[] = [];
+                    for (const file of files) {
+                        try {
+                            const metadata = JSON.parse(fs.readFileSync(path.join(skillsDir, file), 'utf-8'));
+                            skillNames.push(metadata.name || file.replace('.json', ''));
+                        } catch (e) { }
+                    }
+                    agentCapabilities += skillNames.join(', ') + '\n';
                 }
             }
         } catch (e) { console.error("Could not load agent catalog."); }
@@ -71,17 +74,17 @@ export class ManagerAgent {
         const isCronTriggered = prompt.includes('[SYSTEM CRON TRIGGER]') || prompt.includes('[SYSTEM MANUAL TRIGGER]');
         const memorySection = isCronTriggered ? '' : `\n\n[MEMORY CONTEXT]\n${readMemoryContext()}`;
 
-        // Inject active cron jobs list so the agent knows what's already running
+        // Inject a compact summary of active cron jobs (names only, no full prompts)
         let cronJobsSection = "";
         try {
             const cronPath = path.join(process.cwd(), 'workspace', 'cron_jobs.json');
             if (fs.existsSync(cronPath)) {
                 const jobs = JSON.parse(fs.readFileSync(cronPath, 'utf-8'));
-                if (jobs.length > 0) {
-                    cronJobsSection = "\n\n[ACTIVE CRON JOBS]\nThe following scheduled cron jobs are currently mapped in the system:\n";
-                    for (const job of jobs) {
-                        cronJobsSection += `- Job ID: ${job.id} | Name: ${job.name || job.description}\n  Schedule: Every ${job.intervalHours || 24} hours${job.preferredTime ? ` at ${job.preferredTime}` : ''}\n  Prompt Text: ${job.prompt}\n\n`;
-                    }
+                const enabledJobs = jobs.filter((j: any) => j.status !== 'disabled');
+                if (enabledJobs.length > 0) {
+                    cronJobsSection = "\n\n[ACTIVE CRON JOBS] " + enabledJobs.map((j: any) =>
+                        `${j.name || j.description}${j.preferredTime ? ` @${j.preferredTime}` : ` every ${j.intervalHours}h`}`
+                    ).join(', ');
                 }
             }
         } catch (e) { }
@@ -223,8 +226,15 @@ Example output:
                     }, 'manager');
                     break; // Success!
                 } catch (e: any) {
+                    // Don't retry API/infrastructure errors (rate limits, auth, network) as "JSON parse errors"
+                    // — only genuine JSON validation failures should trigger the LLM self-healing loop.
+                    const errMsg = e.message || '';
+                    if (errMsg.includes('Rate limit') || errMsg.includes('429') || errMsg.includes('401') || errMsg.includes('503') || errMsg.includes('UNAUTHENTICATED') || errMsg.includes('Internal IDE API Error')) {
+                        console.error(`[Manager] API Error (not a JSON issue) — aborting self-healing loop: ${errMsg.substring(0, 200)}`);
+                        throw e;
+                    }
                     console.warn(`\n⚠️ [Manager] JSON Parse Error. Requesting LLM Self-Healing...`);
-                    messages.push({ role: 'user', content: `SYSTEM EXCEPTION: You generated an invalid JSON payload that crashed the parser (${e.message}). Please strictly evaluate your JSON syntax, ensure all internal quotes are escaped, and try again.` });
+                    messages.push({ role: 'user', content: `SYSTEM EXCEPTION: You generated an invalid JSON payload that crashed the parser (${errMsg.substring(0, 300)}). Please strictly evaluate your JSON syntax, ensure all internal quotes are escaped, and try again.` });
                     if (i === maxLoops - 1) throw e;
                 }
             }

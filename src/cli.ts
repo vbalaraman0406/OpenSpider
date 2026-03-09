@@ -235,9 +235,13 @@ channelsMenu
             const fs = await import('node:fs');
             const path = await import('node:path');
 
-            // Write auth directly to live baileys_auth_info — no temp dir copy needed
+            // Always start fresh — stale credentials cause "Session rejected" errors
             const authDir = path.join(process.cwd(), 'baileys_auth_info');
-            if (!fs.existsSync(authDir)) fs.mkdirSync(authDir, { recursive: true });
+            if (fs.existsSync(authDir)) {
+                fs.rmSync(authDir, { recursive: true, force: true });
+                console.log('🧹 Cleared old WhatsApp sessions.');
+            }
+            fs.mkdirSync(authDir, { recursive: true });
 
             const { state, saveCreds } = await useMultiFileAuthState(authDir);
             const { version } = await fetchLatestBaileysVersion();
@@ -248,93 +252,102 @@ channelsMenu
             const silentLogger = pino({ level: 'silent' });
             const msgRetryCounterCache = new NodeCache();
 
-            const sock = makeWASocket({
-                version,
-                auth: {
-                    creds: state.creds,
-                    keys: makeCacheableSignalKeyStore(state.keys, silentLogger),
-                },
-                printQRInTerminal: false,
-                qrTimeout: 60000,
-                logger: silentLogger,
-                browser: ['OpenSpider', 'Chrome', '122.0.0'],
-                syncFullHistory: false,
-                markOnlineOnConnect: true,
-                msgRetryCounterCache,
-            });
+            // Track sync state across reconnects
+            let syncComplete = false;
 
-            sock.ev.on('creds.update', saveCreds);
-
-            // Hard timeout — never hang more than 90s after QR appears
+            // Hard timeout — never hang more than 120s total
             const hardTimeout = setTimeout(() => {
-                console.log('\n⚠️  Login timed out. Please try again.');
-                try { sock.end(undefined); } catch (_) {}
-                process.exit(1);
-            }, 90000);
+                console.log('\n⏳ Sync taking longer than expected, but credentials are saved.');
+                console.log('\n📱 Now run: pm2 start openspider-gateway\n');
+                process.exit(0);
+            }, 120000);
 
-            sock.ev.on('connection.update', async (update: any) => {
-                const { connection, lastDisconnect, qr } = update;
+            function connectSocket() {
+                const sock = makeWASocket({
+                    version,
+                    auth: {
+                        creds: state.creds,
+                        keys: makeCacheableSignalKeyStore(state.keys, silentLogger),
+                    },
+                    printQRInTerminal: false,
+                    qrTimeout: 60000,
+                    logger: silentLogger,
+                    browser: ['OpenSpider', 'Chrome', '122.0.0'],
+                    syncFullHistory: false,
+                    markOnlineOnConnect: true,
+                    msgRetryCounterCache,
+                });
 
-                if (qr) {
-                    console.clear();
-                    console.log('\n🕷️  Scan this QR code in WhatsApp → Linked Devices → Link a Device:\n');
-                    qrcode.generate(qr, { small: true });
-                    console.log('\n⏳ Waiting for scan... (QR expires in 60s, a new one will appear automatically)');
-                    // Reset timeout on each new QR so user has 90s from the latest QR
-                    hardTimeout.refresh();
-                }
+                sock.ev.on('creds.update', saveCreds);
 
-                if (connection === 'open') {
-                    clearTimeout(hardTimeout);
-                    console.log('\n✅ WhatsApp paired successfully!');
-                    console.log('📁 Credentials saved to baileys_auth_info/');
-
-                    // Auto-update whatsapp_config.json enabled flag
-                    try {
-                        const configPath = path.join(process.cwd(), 'workspace', 'whatsapp_config.json');
-                        let cfg: any = { enabled: true, dmPolicy: 'allowlist', allowedDMs: [], groupPolicy: 'disabled', allowedGroups: [], botMode: 'respond' };
-                        if (fs.existsSync(configPath)) cfg = { ...JSON.parse(fs.readFileSync(configPath, 'utf-8')), enabled: true };
-                        fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2));
-                    } catch (e) { }
-
-                    // Flip ENABLE_WHATSAPP=true in .env
-                    try {
-                        const envPath = path.join(process.cwd(), '.env');
-                        if (fs.existsSync(envPath)) {
-                            let envContent = fs.readFileSync(envPath, 'utf-8');
-                            if (/ENABLE_WHATSAPP\s*=\s*false/i.test(envContent)) {
-                                envContent = envContent.replace(/ENABLE_WHATSAPP\s*=\s*false/gi, 'ENABLE_WHATSAPP = true');
-                                fs.writeFileSync(envPath, envContent);
-                            } else if (!/ENABLE_WHATSAPP/i.test(envContent)) {
-                                fs.appendFileSync(envPath, '\nENABLE_WHATSAPP = true\n');
-                            }
-                        }
-                    } catch (e) { }
-
-                    console.log('\n📱 Now run: pm2 start openspider-gateway\n');
-
-                    // Force-exit after 3s — gives saveCreds time to flush, avoids sock.end() hang
-                    setTimeout(() => process.exit(0), 3000);
-                }
-
-                if (connection === 'close') {
-                    const code = (lastDisconnect?.error as any)?.output?.statusCode;
-                    if (code === DisconnectReason.loggedOut) {
+                sock.ev.on('messaging-history.set', () => {
+                    if (!syncComplete) {
+                        syncComplete = true;
                         clearTimeout(hardTimeout);
-                        console.log('\n❌ Session rejected. Please try again.');
-                        process.exit(1);
-                    }
-                    // 515 = "restart required" — this is NORMAL after a successful pairing.
-                    // WhatsApp sends it after the new device is registered. Creds are already saved.
-                    if (code === 515 || code === 428) {
-                        clearTimeout(hardTimeout);
-                        console.log('\n✅ WhatsApp paired successfully!');
-                        console.log('📁 Credentials saved to baileys_auth_info/');
+                        console.log('✅ WhatsApp device sync complete!');
                         console.log('\n📱 Now run: pm2 start openspider-gateway\n');
                         setTimeout(() => process.exit(0), 2000);
                     }
-                }
-            });
+                });
+
+                sock.ev.on('connection.update', async (update: any) => {
+                    const { connection, lastDisconnect, qr } = update;
+
+                    if (qr) {
+                        console.clear();
+                        console.log('\n🕷️  Scan this QR code in WhatsApp → Linked Devices → Link a Device:\n');
+                        qrcode.generate(qr, { small: true });
+                        console.log('\n⏳ Waiting for scan... (QR expires in 60s, a new one will appear automatically)');
+                    }
+
+                    if (connection === 'open') {
+                        console.log('\n✅ WhatsApp paired successfully!');
+                        console.log('📁 Credentials saved to baileys_auth_info/');
+
+                        // Auto-update whatsapp_config.json enabled flag
+                        try {
+                            const configPath = path.join(process.cwd(), 'workspace', 'whatsapp_config.json');
+                            let cfg: any = { enabled: true, dmPolicy: 'allowlist', allowedDMs: [], groupPolicy: 'disabled', allowedGroups: [], botMode: 'respond' };
+                            if (fs.existsSync(configPath)) cfg = { ...JSON.parse(fs.readFileSync(configPath, 'utf-8')), enabled: true };
+                            fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2));
+                        } catch (e) { }
+
+                        // Flip ENABLE_WHATSAPP=true in .env
+                        try {
+                            const envPath = path.join(process.cwd(), '.env');
+                            if (fs.existsSync(envPath)) {
+                                let envContent = fs.readFileSync(envPath, 'utf-8');
+                                if (/ENABLE_WHATSAPP\s*=\s*false/i.test(envContent)) {
+                                    envContent = envContent.replace(/ENABLE_WHATSAPP\s*=\s*false/gi, 'ENABLE_WHATSAPP = true');
+                                    fs.writeFileSync(envPath, envContent);
+                                } else if (!/ENABLE_WHATSAPP/i.test(envContent)) {
+                                    fs.appendFileSync(envPath, '\nENABLE_WHATSAPP = true\n');
+                                }
+                            }
+                        } catch (e) { }
+
+                        console.log('⏳ Waiting for WhatsApp to finish device sync (your phone should say "Linked" shortly)...');
+                    }
+
+                    if (connection === 'close') {
+                        const code = (lastDisconnect?.error as any)?.output?.statusCode;
+                        if (code === DisconnectReason.loggedOut) {
+                            clearTimeout(hardTimeout);
+                            console.log('\n❌ Session rejected. Please try again.');
+                            process.exit(1);
+                        }
+                        // 515 = "restart required", 428 = "connection replaced"
+                        // WhatsApp sends these after pairing to trigger a reconnect for sync.
+                        // Create a fresh socket to complete the registration handshake.
+                        if (code === 515 || code === 428) {
+                            console.log('🔄 WhatsApp requested reconnect (normal after pairing)...');
+                            setTimeout(() => connectSocket(), 1000);
+                        }
+                    }
+                });
+            }
+
+            connectSocket();
 
         } catch (err: any) {
             console.error('\nFailed to start WhatsApp login:', err.message);

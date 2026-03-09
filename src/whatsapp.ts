@@ -218,24 +218,7 @@ export async function sendWhatsAppAudio(jid: string, audioFilePath: string) {
 }
 
 export async function startWhatsApp() {
-    // 🧹 Delete stale Signal session files for the bot's own LID before initializing.
-    // These files contain the encryption ratchet state from the previous process lifetime.
-    // After a restart, the phone has advanced its ratchet but the on-disk session is stale,
-    // causing Bad MAC errors on every incoming message. Deleting them forces a fresh handshake.
-    try {
-        const authDir = path.join(process.cwd(), 'baileys_auth_info');
-        if (fs.existsSync(authDir)) {
-            const sessionFiles = fs.readdirSync(authDir).filter(f => f.startsWith('session-'));
-            let deleted = 0;
-            for (const file of sessionFiles) {
-                fs.unlinkSync(path.join(authDir, file));
-                deleted++;
-            }
-            if (deleted > 0) console.log(`[WhatsApp] 🧹 Cleared ${deleted} stale Signal session file(s) — fresh sessions will be negotiated`);
-        }
-    } catch (e: any) {
-        console.error('[WhatsApp] Failed to clear stale sessions:', e.message);
-    }
+    // Note: We no longer delete session files on startup. Baileys handles stale\n    // sessions via its built-in retry mechanism (msgRetryCounterCache), and our\n    // log interceptor (below) self-heals Bad MAC errors by purging corrupt\n    // session files on-demand. Blanket deletion here was causing the phone to\n    // hang on \"Logging in...\" after channels login because it wiped the partial\n    // sessions established during QR pairing.
 
     const { state, saveCreds } = await useMultiFileAuthState('baileys_auth_info');
     const manager = new ManagerAgent();
@@ -281,6 +264,7 @@ export async function startWhatsApp() {
             keys: makeCacheableSignalKeyStore(state.keys, baileysLogger)
         },
         logger: baileysLogger,
+        browser: ['OpenSpider', 'Chrome', '122.0.0'], // Must match channels login fingerprint
         markOnlineOnConnect: true,
         syncFullHistory: false,
         msgRetryCounterCache,

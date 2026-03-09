@@ -1,5 +1,5 @@
 import { LLMProvider, ChatMessage, TokenUsage } from '../BaseProvider';
-import { loginToAntigravity, AuthState } from '../../auth/antigravity';
+import { loginToAntigravity, AuthState, clearAuthState } from '../../auth/antigravity';
 import { randomUUID } from 'crypto';
 
 export class AntigravityInternalProvider implements LLMProvider {
@@ -7,13 +7,12 @@ export class AntigravityInternalProvider implements LLMProvider {
     private model: string;
     private authState: AuthState | null = null;
 
-    // Fallback models in priority order — if primary has no capacity, try the next
+    // Fallback models in priority order — verified against daily-cloudcode-pa endpoint
     private static readonly MODEL_FALLBACKS: string[] = [
         'claude-sonnet-4-5',
-        'claude-opus-4-5',
-        'gemini-2.5-pro',
         'gemini-2.5-flash',
-        'gemini-2.0-flash',
+        'claude-opus-4-6-thinking',
+        'gemini-2.5-pro',
     ];
 
     constructor() {
@@ -30,14 +29,13 @@ export class AntigravityInternalProvider implements LLMProvider {
         return this.authState;
     }
 
-    private formatMessages(messages: ChatMessage[]) {
-        let systemInstruction = '';
-
+    private formatMessages(messages: ChatMessage[]): { contents: any[], systemInstruction?: { parts: { text: string }[] } } {
+        let systemText = '';
         const contents = [];
 
         for (const msg of messages) {
             if (msg.role === 'system') {
-                systemInstruction += (typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)) + '\n';
+                systemText += (typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)) + '\n';
             } else {
                 if (Array.isArray(msg.content)) {
                     const parts = msg.content.map(p => {
@@ -56,44 +54,34 @@ export class AntigravityInternalProvider implements LLMProvider {
             }
         }
 
-        if (systemInstruction) {
-            let injected = false;
-            if (contents.length > 0 && contents[0]!.role === 'user') {
-                const firstUser = contents[0]!;
-                if (firstUser.parts && firstUser.parts.length > 0) {
-                    const firstPart = firstUser.parts[0]!;
-                    if (firstPart.text !== undefined) {
-                        firstPart.text = systemInstruction + firstPart.text;
-                        injected = true;
-                    }
-                }
-            }
-            if (!injected) {
-                contents.unshift({ role: 'user', parts: [{ text: systemInstruction + "Please acknowledge." }] });
-                contents.unshift({ role: 'model', parts: [{ text: "Acknowledged." }] });
-            }
+        // Use the dedicated systemInstruction field — matches real Antigravity IDE API format
+        const result: { contents: any[], systemInstruction?: { parts: { text: string }[] } } = { contents };
+        if (systemText.trim()) {
+            result.systemInstruction = { parts: [{ text: systemText.trim() }] };
         }
-
-        return contents;
+        return result;
     }
 
     async generateResponse(messages: ChatMessage[], agentId?: string): Promise<{ text: string, usage?: TokenUsage }> {
         console.log(`[Agent] [AntigravityInternal] Generating response using ${this.model}...`);
-        const auth = await this.ensureAuth();
-        const contents = this.formatMessages(messages);
+        let auth = await this.ensureAuth();
+        const formatted = this.formatMessages(messages);
 
         const url = `${auth.endpoint}/v1internal:streamGenerateContent?alt=sse`;
 
-        const requestPayload = {
-            contents,
+        const requestPayload: any = {
+            contents: formatted.contents,
             generationConfig: {
                 thinkingConfig: {
                     include_thoughts: true,
-                    thinking_budget: 16384
+                    thinking_budget: 8192
                 },
                 maxOutputTokens: 64000
             }
         };
+        if (formatted.systemInstruction) {
+            requestPayload.systemInstruction = formatted.systemInstruction;
+        }
 
         const wrappedBody = {
             project: auth!.projectId,
@@ -108,6 +96,11 @@ export class AntigravityInternalProvider implements LLMProvider {
         let streamText = '';
         let attempt = 0;
         const maxAttempts = 5;
+        let hasRetriedAuth = false;
+
+        // Log payload size for context bloat monitoring
+        const payloadSizeKB = (JSON.stringify(requestPayload).length / 1024).toFixed(1);
+        console.log(`[Context] Payload size: ${payloadSizeKB}KB (${formatted.contents.length} parts)`);
 
         // Highly Optimized Stealth Mode: Add a proactive micro-jitter delay before hitting the internal IDE API
         // This prevents Google from fingerprinting the traffic velocity as a bot script, while keeping latency ultra-low.
@@ -132,36 +125,59 @@ export class AntigravityInternalProvider implements LLMProvider {
             const responseBody = await response.text();
 
             if (response.status === 429) {
-                let sleepMs = 2000;
-                try {
-                    const errData = JSON.parse(responseBody);
-                    const details = errData.error?.details || [];
-                    for (const detail of details) {
-                        if (detail.metadata?.quotaResetDelay) {
-                            const delayStr = detail.metadata.quotaResetDelay;
-                            sleepMs = delayStr.endsWith('ms') ? parseFloat(delayStr) : parseFloat(delayStr) * 1000;
-                        } else if (detail.retryDelay) {
-                            sleepMs = parseFloat(detail.retryDelay) * 1000;
-                        }
-                    }
-                } catch (e) { }
-                console.warn(`\n⚠️ [Agent] [AntigravityInternal] Rate limit (429). Sleeping ${Math.ceil(sleepMs / 1000)}s, retry ${attempt + 1}/${maxAttempts}...`);
-                await new Promise(r => setTimeout(r, sleepMs + 250));
+                const currentModel = wrappedBody.model;
+                // 429 RESOURCE_EXHAUSTED is often model-specific quota — switch model after 1 retry
+                if (attempt === 0) {
+                    // First 429: wait 5s and retry same model once
+                    console.warn(`\n⚠️ [Agent] [AntigravityInternal] Rate limit (429) on ${currentModel}. Waiting 5s before retry...`);
+                    await new Promise(r => setTimeout(r, 5000));
+                } else {
+                    // Subsequent 429: quota is model-specific — switch to next fallback model
+                    const fallbacks = AntigravityInternalProvider.MODEL_FALLBACKS.filter(m => m !== currentModel);
+                    const nextModel = fallbacks[attempt - 1] ?? fallbacks[fallbacks.length - 1] ?? 'gemini-2.5-flash';
+                    console.warn(`⚠️  [Antigravity] ${currentModel} quota exhausted (429) — switching to ${nextModel}`);
+                    wrappedBody.model = nextModel;
+                }
                 attempt++;
                 continue;
             }
 
             if (!response.ok) {
-                if (response.status === 503 && responseBody.includes('MODEL_CAPACITY_EXHAUSTED')) {
+                // 401: Token expired — clear stale auth and re-borrow from IDE
+                if (response.status === 401 && !hasRetriedAuth) {
+                    hasRetriedAuth = true;
+                    const failedToken = auth.access.substring(0, 30);
+                    console.warn(`⚠️  [Antigravity] 401 Unauthorized — clearing ALL auth caches and re-borrowing from IDE...`);
+                    this.authState = null;
+                    clearAuthState(); // Wipe .antigravity-auth.json + in-memory cache
+                    auth = await this.ensureAuth();
+                    if (auth.access.substring(0, 30) === failedToken) {
+                        console.error(`[Antigravity] IDE returned same expired token — cannot recover. Is Antigravity IDE open and active?`);
+                        throw new Error(`IDE API Error: 401 - Token expired. IDE has no fresh token. Open/restart Antigravity IDE to refresh the session.`);
+                    }
+                    attempt++;
+                    continue;
+                }
+                // 404: Model not found on this endpoint — switch to next fallback
+                if (response.status === 404) {
                     const currentModel = wrappedBody.model;
                     const fallbacks = AntigravityInternalProvider.MODEL_FALLBACKS.filter(m => m !== currentModel);
-                    const nextModel = fallbacks[attempt] ?? fallbacks[fallbacks.length - 1] ?? 'gemini-2.0-flash';
-                    console.warn(`⚠️  [Antigravity] ${currentModel} capacity exhausted — switching to ${nextModel} (attempt ${attempt + 1}/${maxAttempts})`);
+                    const nextModel = fallbacks[0] ?? 'gemini-2.5-flash';
+                    console.warn(`⚠️  [Antigravity] ${currentModel} not found (404) — switching to ${nextModel}`);
                     wrappedBody.model = nextModel;
                     attempt++;
                     continue;
                 }
-                throw new Error(`Internal IDE API Error: ${response.status} - ${responseBody}`);
+                if (response.status === 503 && responseBody.includes('MODEL_CAPACITY_EXHAUSTED')) {
+                    const currentModel = wrappedBody.model;
+                    const fallbacks = AntigravityInternalProvider.MODEL_FALLBACKS.filter(m => m !== currentModel);
+                    const nextModel = fallbacks[0] ?? 'gemini-2.5-flash';
+                    console.warn(`⚠️  [Antigravity] ${currentModel} capacity exhausted — switching to ${nextModel}`);
+                    wrappedBody.model = nextModel;
+                    attempt++;
+                    continue;
+                }
+                throw new Error(`Internal IDE API Error: ${response.status} - ${responseBody.substring(0, 500)}`);
             }
             streamText = responseBody;
             break;
@@ -218,11 +234,11 @@ export class AntigravityInternalProvider implements LLMProvider {
     ): Promise<T> {
 
         console.log(`[Agent] [AntigravityInternal] Sending structured request to ${this.model}...`);
-        const auth = await this.ensureAuth();
-        const contents = this.formatMessages(messages);
+        let auth = await this.ensureAuth();
+        const formatted = this.formatMessages(messages);
 
-        if (contents.length > 0) {
-            const lastMsg = contents[contents.length - 1]!;
+        if (formatted.contents.length > 0) {
+            const lastMsg = formatted.contents[formatted.contents.length - 1]!;
             if (lastMsg.parts && lastMsg.parts.length > 0) {
                 const lastPart = lastMsg.parts[0]!;
                 if (lastPart.text !== undefined) {
@@ -233,13 +249,16 @@ export class AntigravityInternalProvider implements LLMProvider {
 
         const url = `${auth.endpoint}/v1internal:streamGenerateContent?alt=sse`;
 
-        const requestPayload = {
-            contents,
+        const requestPayload: any = {
+            contents: formatted.contents,
             generationConfig: {
                 maxOutputTokens: 8192,
                 temperature: 0.1
             }
         };
+        if (formatted.systemInstruction) {
+            requestPayload.systemInstruction = formatted.systemInstruction;
+        }
 
         const wrappedBody = {
             project: auth!.projectId,
@@ -254,6 +273,11 @@ export class AntigravityInternalProvider implements LLMProvider {
         let streamText = '';
         let attempt = 0;
         const maxAttempts = 5;
+        let hasRetriedAuth = false;
+
+        // Log payload size for context bloat monitoring
+        const payloadSizeKB = (JSON.stringify(requestPayload).length / 1024).toFixed(1);
+        console.log(`[Context] Structured payload size: ${payloadSizeKB}KB (${formatted.contents.length} parts)`);
 
         // Stealth Mode: Add a proactive human-like delay before hitting the internal IDE API
         // to prevent Google from fingerprinting the traffic as an automated bot script.
@@ -277,36 +301,56 @@ export class AntigravityInternalProvider implements LLMProvider {
             const responseBody = await response.text();
 
             if (response.status === 429) {
-                let sleepMs = 2000;
-                try {
-                    const errData = JSON.parse(responseBody);
-                    const details = errData.error?.details || [];
-                    for (const detail of details) {
-                        if (detail.metadata?.quotaResetDelay) {
-                            const delayStr = detail.metadata.quotaResetDelay;
-                            sleepMs = delayStr.endsWith('ms') ? parseFloat(delayStr) : parseFloat(delayStr) * 1000;
-                        } else if (detail.retryDelay) {
-                            sleepMs = parseFloat(detail.retryDelay) * 1000;
-                        }
-                    }
-                } catch (e) { }
-                console.warn(`\n⚠️ [Agent] [AntigravityInternal] Rate limit (429). Sleeping ${Math.ceil(sleepMs / 1000)}s, retry ${attempt + 1}/${maxAttempts}...`);
-                await new Promise(r => setTimeout(r, sleepMs + 250));
+                const currentModel = wrappedBody.model;
+                if (attempt === 0) {
+                    console.warn(`\n⚠️ [Agent] [AntigravityInternal] Rate limit (429) on ${currentModel}. Waiting 5s before retry...`);
+                    await new Promise(r => setTimeout(r, 5000));
+                } else {
+                    const fallbacks = AntigravityInternalProvider.MODEL_FALLBACKS.filter(m => m !== currentModel);
+                    const nextModel = fallbacks[attempt - 1] ?? fallbacks[fallbacks.length - 1] ?? 'gemini-2.5-flash';
+                    console.warn(`⚠️  [Antigravity] ${currentModel} quota exhausted (429) — switching to ${nextModel}`);
+                    wrappedBody.model = nextModel;
+                }
                 attempt++;
                 continue;
             }
 
             if (!response.ok) {
-                if (response.status === 503 && responseBody.includes('MODEL_CAPACITY_EXHAUSTED')) {
+                // 401: Token expired — clear stale auth and re-borrow from IDE
+                if (response.status === 401 && !hasRetriedAuth) {
+                    hasRetriedAuth = true;
+                    const failedToken = auth.access.substring(0, 30);
+                    console.warn(`⚠️  [Antigravity] 401 Unauthorized — clearing ALL auth caches and re-borrowing from IDE...`);
+                    this.authState = null;
+                    clearAuthState(); // Wipe .antigravity-auth.json + in-memory cache
+                    auth = await this.ensureAuth();
+                    if (auth.access.substring(0, 30) === failedToken) {
+                        console.error(`[Antigravity] IDE returned same expired token — cannot recover. Is Antigravity IDE open and active?`);
+                        throw new Error(`IDE API Error: 401 - Token expired. IDE has no fresh token. Open/restart Antigravity IDE to refresh the session.`);
+                    }
+                    attempt++;
+                    continue;
+                }
+                // 404: Model not found on this endpoint — switch to next fallback
+                if (response.status === 404) {
                     const currentModel = wrappedBody.model;
                     const fallbacks = AntigravityInternalProvider.MODEL_FALLBACKS.filter(m => m !== currentModel);
-                    const nextModel = fallbacks[attempt] ?? fallbacks[fallbacks.length - 1] ?? 'gemini-2.0-flash';
-                    console.warn(`⚠️  [Antigravity] ${currentModel} capacity exhausted — switching to ${nextModel} (attempt ${attempt + 1}/${maxAttempts})`);
+                    const nextModel = fallbacks[0] ?? 'gemini-2.5-flash';
+                    console.warn(`⚠️  [Antigravity] ${currentModel} not found (404) — switching to ${nextModel}`);
                     wrappedBody.model = nextModel;
                     attempt++;
                     continue;
                 }
-                throw new Error(`Internal IDE API Error: ${response.status} - ${responseBody}`);
+                if (response.status === 503 && responseBody.includes('MODEL_CAPACITY_EXHAUSTED')) {
+                    const currentModel = wrappedBody.model;
+                    const fallbacks = AntigravityInternalProvider.MODEL_FALLBACKS.filter(m => m !== currentModel);
+                    const nextModel = fallbacks[0] ?? 'gemini-2.5-flash';
+                    console.warn(`⚠️  [Antigravity] ${currentModel} capacity exhausted — switching to ${nextModel}`);
+                    wrappedBody.model = nextModel;
+                    attempt++;
+                    continue;
+                }
+                throw new Error(`Internal IDE API Error: ${response.status} - ${responseBody.substring(0, 500)}`);
             }
             streamText = responseBody;
             break;
