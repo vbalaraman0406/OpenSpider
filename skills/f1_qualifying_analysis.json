@@ -1,0 +1,6 @@
+{
+    "name": "f1_qualifying_analysis",
+    "description": "Analyze F1 qualifying results: Q1/Q2/Q3 times, gaps to pole, driver comparisons, and historical qualifying performance at any circuit.",
+    "instructions": "Call with {\"year\": 2025, \"round\": 10} for specific qualifying results. Or {\"driver\": \"verstappen\"} for driver qualifying stats.",
+    "language": "python"
+}

@@ -1,0 +1,6 @@
+{
+    "name": "f1_championship_tracker",
+    "description": "Live F1 championship standings: drivers and constructors. Points gap, remaining races, maximum possible points, title probability, key battles.",
+    "instructions": "Call with {\"type\": \"drivers\"} or {\"type\": \"constructors\"} for current standings. Use {\"driver\": \"norris\"} for specific title math.",
+    "language": "python"
+}

@@ -1,0 +1,6 @@
+{
+    "name": "f1_weather_strategy",
+    "description": "Race weekend weather forecast + strategy impact: track temp, rain probability, tire warmup implications, historical weather patterns at circuit.",
+    "instructions": "Call with {\"round\": 8} or {\"circuit\": \"Spa\"} to get weather forecast and strategy recommendations.",
+    "language": "python"
+}

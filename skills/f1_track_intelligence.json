@@ -1,0 +1,6 @@
+{
+    "name": "f1_track_intelligence",
+    "description": "Deep circuit analysis: track length, turns, DRS zones, elevation, surface type, lap record, overtaking rating, key corners, team/car advantages, historical weather.",
+    "instructions": "Call with {\"circuit\": \"Spa-Francorchamps\"} or {\"circuit\": \"Monaco\"} for full track breakdown.",
+    "language": "python"
+}

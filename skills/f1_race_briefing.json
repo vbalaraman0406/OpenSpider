@@ -1,0 +1,6 @@
+{
+    "name": "f1_race_briefing",
+    "description": "Complete F1 race weekend preview: circuit profile, weather forecast, tire strategy, form guide, predicted pole/winner, key storylines, and full session schedule.",
+    "instructions": "Call with {\"round\": \"next\"} or {\"round\": 12} for a comprehensive pre-race briefing combining all data sources.",
+    "language": "python"
+}

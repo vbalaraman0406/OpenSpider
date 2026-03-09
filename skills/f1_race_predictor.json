@@ -1,0 +1,6 @@
+{
+    "name": "f1_race_predictor",
+    "description": "Predict pole position and race winner for any upcoming F1 race using multi-factor scoring: recent form (30%), circuit history (25%), team strength (20%), track type advantage (15%), weather fit (10%).",
+    "instructions": "Call with {\"round\": 5} or {\"circuit\": \"Monaco\"} to get top-5 predicted pole sitter and race winner with confidence percentages and key factors.",
+    "language": "python"
+}

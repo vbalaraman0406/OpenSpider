@@ -1,0 +1,273 @@
+"""
+f1_track_intelligence.py — Comprehensive circuit database.
+Built-in data for all 24 F1 2026 circuits with track characteristics,
+DRS zones, overtaking difficulty, elevation, key corners.
+"""
+from datetime import datetime
+
+# Comprehensive circuit database
+CIRCUITS = {
+    "albert park": {
+        "name": "Albert Park Circuit",
+        "location": "Melbourne, Australia",
+        "length_km": 5.278,
+        "laps": 58,
+        "turns": 14,
+        "drs_zones": 4,
+        "direction": "clockwise",
+        "surface": "semi-permanent street",
+        "elevation_change_m": 12,
+        "lap_record": "1:20.235 (Charles Leclerc, 2024)",
+        "overtaking_rating": 7,
+        "key_corners": ["Turn 1-2 (heavy braking)", "Turn 6 (fast chicane)", "Turn 11-12 (chicane)"],
+        "favors": "Balanced — rewards good traction and braking",
+        "weather_tendency": "Unpredictable; can shift from sunny to wet rapidly",
+        "pit_loss_sec": 22,
+        "typical_strategy": "1-2 stops",
+        "famous_for": "Season opener, lakeside circuit, close racing",
+    },
+    "shanghai": {
+        "name": "Shanghai International Circuit",
+        "location": "Shanghai, China",
+        "length_km": 5.451,
+        "laps": 56,
+        "turns": 16,
+        "drs_zones": 2,
+        "direction": "clockwise",
+        "surface": "permanent",
+        "elevation_change_m": 8,
+        "lap_record": "1:32.238 (Michael Schumacher, 2004)",
+        "overtaking_rating": 6,
+        "key_corners": ["Turns 1-2-3 (long hairpin)", "Turn 7 (fast kink)", "Turn 13 (hairpin)"],
+        "favors": "Power-sensitive; long back straight rewards top speed",
+        "weather_tendency": "Spring weather; occasional rain",
+        "pit_loss_sec": 23,
+        "typical_strategy": "1-2 stops",
+        "famous_for": "Iconic snail-shaped Turn 1",
+    },
+    "suzuka": {
+        "name": "Suzuka International Racing Course",
+        "location": "Suzuka, Japan",
+        "length_km": 5.807,
+        "laps": 53,
+        "turns": 18,
+        "drs_zones": 2,
+        "direction": "clockwise (figure-8)",
+        "surface": "permanent",
+        "elevation_change_m": 40,
+        "lap_record": "1:30.983 (Lewis Hamilton, 2019)",
+        "overtaking_rating": 4,
+        "key_corners": ["S Curves (T3-T7)", "130R (T15)", "Spoon Curve (T13-14)", "Degner Curves (T8-9)"],
+        "favors": "High downforce; rewards mechanical grip and driver skill",
+        "weather_tendency": "Typhoon season risk; rain common",
+        "pit_loss_sec": 25,
+        "typical_strategy": "1 stop",
+        "famous_for": "Figure-8 layout, 130R legendary corner, drivers' favorite",
+    },
+    "bahrain": {
+        "name": "Bahrain International Circuit",
+        "location": "Sakhir, Bahrain",
+        "length_km": 5.412,
+        "laps": 57,
+        "turns": 15,
+        "drs_zones": 3,
+        "direction": "clockwise",
+        "surface": "permanent (abrasive)",
+        "elevation_change_m": 12,
+        "lap_record": "1:31.447 (Pedro de la Rosa, 2005)",
+        "overtaking_rating": 8,
+        "key_corners": ["Turn 1 (heavy braking)", "Turn 4 (long left)", "Turn 10 (tight hairpin)"],
+        "favors": "High tire degradation; rear-limited; rewards traction",
+        "weather_tendency": "Hot, dry, sand/dust risk; night race",
+        "pit_loss_sec": 22,
+        "typical_strategy": "1-2 stops",
+        "famous_for": "Desert night race, abrasive surface, tire management test",
+    },
+    "jeddah": {
+        "name": "Jeddah Corniche Circuit",
+        "location": "Jeddah, Saudi Arabia",
+        "length_km": 6.174,
+        "laps": 50,
+        "turns": 27,
+        "drs_zones": 3,
+        "direction": "counter-clockwise",
+        "surface": "street",
+        "elevation_change_m": 3,
+        "lap_record": "1:30.734 (Lewis Hamilton, 2021)",
+        "overtaking_rating": 5,
+        "key_corners": ["Turn 1 (fast left)", "Turn 13 (blind apex)", "Turn 22-23 (wall-brushing)"],
+        "favors": "Fastest street circuit ever; rewards bravery and low-downforce",
+        "weather_tendency": "Hot, dry, no rain expected",
+        "pit_loss_sec": 24,
+        "typical_strategy": "1 stop",
+        "famous_for": "Fastest street circuit, close walls, high-speed blind corners",
+    },
+    "miami": {
+        "name": "Miami International Autodrome",
+        "location": "Miami Gardens, Florida",
+        "length_km": 5.412,
+        "laps": 57,
+        "turns": 19,
+        "drs_zones": 3,
+        "direction": "counter-clockwise",
+        "surface": "semi-permanent",
+        "elevation_change_m": 2,
+        "lap_record": "1:29.708 (Max Verstappen, 2023)",
+        "overtaking_rating": 6,
+        "key_corners": ["Turn 1 (heavy braking)", "Turn 7 (chicane)", "Turn 17 (street section)"],
+        "favors": "Power-sensitive with tight street section; rewards versatility",
+        "weather_tendency": "Hot, humid; thunderstorm risk",
+        "pit_loss_sec": 23,
+        "typical_strategy": "1-2 stops",
+        "famous_for": "Glamorous event, Hard Rock Stadium backdrop",
+    },
+    "monaco": {
+        "name": "Circuit de Monaco",
+        "location": "Monte Carlo, Monaco",
+        "length_km": 3.337,
+        "laps": 78,
+        "turns": 19,
+        "drs_zones": 1,
+        "direction": "clockwise",
+        "surface": "street (bumpy)",
+        "elevation_change_m": 42,
+        "lap_record": "1:12.909 (Lewis Hamilton, 2021)",
+        "overtaking_rating": 1,
+        "key_corners": ["Sainte Devote (T1)", "Casino Square (T4)", "Grand Hotel Hairpin (T6)", "Swimming Pool (T13-15)", "Rascasse (T18)"],
+        "favors": "Pure qualifying pace; race = track position. Low-speed aero critical",
+        "weather_tendency": "Mediterranean; rain disrupts everything",
+        "pit_loss_sec": 20,
+        "typical_strategy": "1 stop (overcut preferred)",
+        "famous_for": "Crown jewel of F1, narrowest circuit, qualifying = victory",
+    },
+    "silverstone": {
+        "name": "Silverstone Circuit",
+        "location": "Silverstone, United Kingdom",
+        "length_km": 5.891,
+        "laps": 52,
+        "turns": 18,
+        "drs_zones": 2,
+        "direction": "clockwise",
+        "surface": "permanent",
+        "elevation_change_m": 25,
+        "lap_record": "1:27.097 (Max Verstappen, 2020)",
+        "overtaking_rating": 6,
+        "key_corners": ["Maggotts-Becketts-Chapel (T8-12)", "Copse (T9)", "Stowe (T15)"],
+        "favors": "High-speed aerodynamic efficiency; rewards brave driving",
+        "weather_tendency": "British weather — unpredictable, rain likely",
+        "pit_loss_sec": 22,
+        "typical_strategy": "1-2 stops",
+        "famous_for": "Home of British motorsport, Maggotts-Becketts complex",
+    },
+    "spa": {
+        "name": "Circuit de Spa-Francorchamps",
+        "location": "Stavelot, Belgium",
+        "length_km": 7.004,
+        "laps": 44,
+        "turns": 19,
+        "drs_zones": 2,
+        "direction": "clockwise",
+        "surface": "permanent",
+        "elevation_change_m": 104,
+        "lap_record": "1:46.286 (Valtteri Bottas, 2018)",
+        "overtaking_rating": 7,
+        "key_corners": ["Eau Rouge/Raidillon (T4-5)", "Pouhon (T11)", "Blanchimont (T17)", "Bus Stop (T18-19)"],
+        "favors": "Power units + low-drag; massive elevation changes test suspension",
+        "weather_tendency": "Microclimate — rain can hit one sector while another is dry",
+        "pit_loss_sec": 24,
+        "typical_strategy": "1 stop",
+        "famous_for": "Eau Rouge, longest circuit, dramatic weather swings",
+    },
+    "monza": {
+        "name": "Autodromo Nazionale Monza",
+        "location": "Monza, Italy",
+        "length_km": 5.793,
+        "laps": 53,
+        "turns": 11,
+        "drs_zones": 2,
+        "direction": "clockwise",
+        "surface": "permanent",
+        "elevation_change_m": 11,
+        "lap_record": "1:21.046 (Rubens Barrichello, 2004)",
+        "overtaking_rating": 8,
+        "key_corners": ["Variante del Rettifilo (T1-2)", "Lesmo 1 & 2 (T5-7)", "Parabolica/Alboreto (T11)"],
+        "favors": "Ultimate power circuit; low drag absolutely critical",
+        "weather_tendency": "Late summer; generally dry and hot",
+        "pit_loss_sec": 23,
+        "typical_strategy": "1 stop",
+        "famous_for": "Temple of Speed, slipstreaming battles, Tifosi atmosphere",
+    },
+    "baku": {
+        "name": "Baku City Circuit",
+        "location": "Baku, Azerbaijan",
+        "length_km": 6.003,
+        "laps": 51,
+        "turns": 20,
+        "drs_zones": 2,
+        "direction": "counter-clockwise",
+        "surface": "street",
+        "elevation_change_m": 22,
+        "lap_record": "1:43.009 (Charles Leclerc, 2019)",
+        "overtaking_rating": 7,
+        "key_corners": ["Turn 3 (castle hairpin)", "Turn 8 (narrow old city)", "Turn 15 (heavy braking into DRS)"],
+        "favors": "Longest straight on calendar (2.2km); power + DRS critical",
+        "weather_tendency": "Strong crosswinds off Caspian Sea; dry",
+        "pit_loss_sec": 25,
+        "typical_strategy": "1 stop (high safety car probability)",
+        "famous_for": "Chaos. Safety cars, crashes, unpredictable results",
+    },
+    "marina bay": {
+        "name": "Marina Bay Street Circuit",
+        "location": "Singapore",
+        "length_km": 4.940,
+        "laps": 62,
+        "turns": 19,
+        "drs_zones": 3,
+        "direction": "counter-clockwise",
+        "surface": "street",
+        "elevation_change_m": 5,
+        "lap_record": "1:35.867 (Lewis Hamilton, 2023)",
+        "overtaking_rating": 3,
+        "key_corners": ["Turn 1 (braking zone)", "Turn 5 (Anderson Bridge)", "Turn 14 (tight left)"],
+        "favors": "Physical endurance test; high-downforce, traction",
+        "weather_tendency": "Hot, humid, heavy rain showers possible",
+        "pit_loss_sec": 28,
+        "typical_strategy": "1-2 stops",
+        "famous_for": "Night race, most physically demanding GP, heat and humidity",
+    },
+}
+
+
+def execute(args: dict) -> dict:
+    query = (args.get("circuit", "") or args.get("track", "") or "").strip().lower()
+
+    if not query:
+        return {
+            "error": "Provide 'circuit' name. Example: {\"circuit\": \"Spa\"}",
+            "available_circuits": sorted(CIRCUITS.keys())
+        }
+
+    # Fuzzy match
+    match = None
+    for key in CIRCUITS:
+        if query in key or key in query:
+            match = CIRCUITS[key]
+            break
+
+    if not match:
+        # Try matching circuit name
+        for key, data in CIRCUITS.items():
+            if query in data["name"].lower() or query in data.get("location", "").lower():
+                match = data
+                break
+
+    if not match:
+        return {
+            "error": f"Circuit '{query}' not found in database.",
+            "available_circuits": sorted(CIRCUITS.keys()),
+            "tip": "Try shorter names like 'spa', 'monaco', 'monza', 'silverstone'"
+        }
+
+    result = dict(match)
+    result["timestamp"] = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+    return result

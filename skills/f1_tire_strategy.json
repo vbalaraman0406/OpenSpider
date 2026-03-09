@@ -1,0 +1,6 @@
+{
+    "name": "f1_tire_strategy",
+    "description": "Pit stop and tire compound analysis: recommended strategy (1-stop vs 2), compound life per circuit, historical pit windows, undercut/overcut analysis, safety car probability.",
+    "instructions": "Call with {\"circuit\": \"Monza\"} or {\"round\": 16} for optimal tire strategy recommendations.",
+    "language": "python"
+}

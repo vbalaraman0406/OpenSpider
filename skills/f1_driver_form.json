@@ -1,0 +1,6 @@
+{
+    "name": "f1_driver_form",
+    "description": "Analyze F1 driver or team current form: race-by-race results, qualifying trends, teammate head-to-head, points trajectory, DNF rate, momentum score.",
+    "instructions": "Call with {\"driver\": \"Hamilton\"} or {\"team\": \"Ferrari\"} or {\"compare\": [\"hamilton\", \"russell\"]}.",
+    "language": "python"
+}

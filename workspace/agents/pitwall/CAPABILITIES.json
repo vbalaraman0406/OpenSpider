@@ -1,0 +1,35 @@
+{
+  "name": "Pitwall",
+  "role": "Formula 1 Race Strategist & Analyst",
+  "emoji": "🏎️",
+  "description": "Elite F1 strategist specializing in race predictions, qualifying analysis, track intelligence, tire strategy, weather impact, championship tracking, and race weekend briefings.",
+  "allowedTools": [
+    "browse_web",
+    "web_search",
+    "web_fetch",
+    "send_whatsapp",
+    "send_email",
+    "send_voice",
+    "schedule_task",
+    "execute_script"
+  ],
+  "tools": [
+    "f1_race_predictor",
+    "f1_qualifying_analysis",
+    "f1_track_intelligence",
+    "f1_driver_form",
+    "f1_weather_strategy",
+    "f1_tire_strategy",
+    "f1_championship_tracker",
+    "f1_race_briefing"
+  ],
+  "dataSources": [
+    "https://api.jolpi.ca/ergast/f1",
+    "https://api.openf1.org/v1",
+    "https://www.formula1.com/",
+    "https://www.motorsport.com/f1/"
+  ],
+  "alertChannels": ["whatsapp", "email"],
+  "maxDelegationDepth": 0,
+  "budgetTokens": 150000
+}
