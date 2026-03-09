@@ -36,7 +36,6 @@ else
     if [ "$NODE_VERSION" -lt 22 ]; then
         echo -e "${RED}Error: OpenSpider requires Node.js version 22 or higher.${NC}"
         echo -e "${YELLOW}You currently have Node.js $(node -v). Please upgrade and run this script again.${NC}"
-        # We could try to upgrade here, but it's safer to let the user knowingly upgrade.
         exit 1
     fi
     echo -e "${GREEN}✔ Node.js $(node -v) detected.${NC}\n"
@@ -75,9 +74,45 @@ echo ""
 echo -e "${GREEN}Linking the 'openspider' global command...${NC}"
 npm link --unsafe-perm || sudo npm link --unsafe-perm
 
+# 6. Ensure NVM and npm global bin are in PATH permanently and for this session
+NVM_SNIPPET='
+# NVM (Node Version Manager) - added by OpenSpider installer
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"'
+
+# Detect shell profile
+SHELL_PROFILE=""
+if [ -f "$HOME/.zshrc" ]; then
+    SHELL_PROFILE="$HOME/.zshrc"
+elif [ -f "$HOME/.bashrc" ]; then
+    SHELL_PROFILE="$HOME/.bashrc"
+elif [ -f "$HOME/.bash_profile" ]; then
+    SHELL_PROFILE="$HOME/.bash_profile"
+fi
+
+if [ -n "$SHELL_PROFILE" ]; then
+    if ! grep -q 'NVM_DIR' "$SHELL_PROFILE" 2>/dev/null; then
+        echo -e "${GREEN}Adding NVM to $SHELL_PROFILE for future sessions...${NC}"
+        echo "$NVM_SNIPPET" >> "$SHELL_PROFILE"
+    fi
+    # Source immediately so the current shell session picks it up
+    # shellcheck disable=SC1090
+    source "$SHELL_PROFILE" 2>/dev/null || true
+fi
+
+# Also load NVM and update PATH for the current session directly
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+
+# Add npm global bin to PATH for the current session
+NPM_BIN=$(npm bin -g 2>/dev/null || npm root -g | sed 's|/node_modules||')/bin
+if [ -d "$NPM_BIN" ]; then
+    export PATH="$NPM_BIN:$PATH"
+fi
+
 echo -e "\n${GREEN}==========================================${NC}"
 echo -e "${GREEN}🕷️ OpenSpider installed successfully! 🎉${NC}"
 echo -e "${GREEN}==========================================${NC}"
-echo -e "\n${YELLOW}To get started, run the following command in your terminal:${NC}"
+echo -e "\n${YELLOW}To get started, run:${NC}"
 echo -e "  openspider onboard\n"
-echo -e "If you installed NVM during this script, you may need to restart your terminal first."
