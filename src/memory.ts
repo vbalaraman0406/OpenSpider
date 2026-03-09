@@ -61,34 +61,27 @@ export function readMemoryContext(): string {
         const ltm = fs.readFileSync(path.join(WORKSPACE_DIR, 'memory.md'), 'utf-8');
         context += `## memory.md (Long Term Key Information)\n${ltm}\n\n`;
 
-        // Read recent short-term daily logs (up to 3 days to prevent amnesia across midnight)
-        let recentLogs = '';
-        for (let i = 2; i >= 0; i--) {
-            const date = new Date();
-            date.setDate(date.getDate() - i);
-            const dateStr = date.toISOString().split('T')[0];
-            const logPath = path.join(MEMORY_DIR, `${dateStr}.md`);
-            if (fs.existsSync(logPath)) {
-                recentLogs += `## Conversation Log (${dateStr})\n${fs.readFileSync(logPath, 'utf-8')}\n\n`;
-            }
-        }
+        // Only load TODAY's log — multi-day lookback caused context bloat
+        const todayStr = new Date().toISOString().split('T')[0]!;
+        const logPath = path.join(MEMORY_DIR, `${todayStr}.md`);
 
-        if (recentLogs) {
-            let todayLog = recentLogs;
+        if (fs.existsSync(logPath)) {
+            let todayLog = fs.readFileSync(logPath, 'utf-8');
 
             // --- OpenClaw Cognitive Compaction ---
-            // Prevent runaway token bloat by applying a strict sliding window on raw transcripts.
-            const MAX_MEMORY_CHARS = 100000;
+            // Keep the MOST RECENT messages (bottom of log) within 15KB budget.
+            // Truncating from the top (oldest) preserves the most relevant recent context.
+            const MAX_MEMORY_CHARS = 15000;
             if (todayLog.length > MAX_MEMORY_CHARS) {
-                console.log(`[Compaction] Daily transcript exceeds token limit. Pruning historical chatter...`);
-                const truncatedIndex = todayLog.indexOf('\n\n', todayLog.length - MAX_MEMORY_CHARS);
-                todayLog = `...[EARLIER CONTEXT PRUNED BY OPENCLAW COMPACTION TO SAVE TOKENS]...\n` +
-                    (truncatedIndex !== -1 ? todayLog.substring(truncatedIndex) : todayLog.substring(todayLog.length - MAX_MEMORY_CHARS));
+                console.log(`[Compaction] Daily transcript (${Math.round(todayLog.length / 1024)}KB) exceeds limit \u2014 keeping last ${MAX_MEMORY_CHARS / 1000}KB.`);
+                const tail = todayLog.slice(-MAX_MEMORY_CHARS);
+                const firstNewline = tail.indexOf('\n');
+                todayLog = '...[EARLIER CONTEXT PRUNED TO SAVE TOKENS]...\n' +
+                    (firstNewline !== -1 ? tail.slice(firstNewline + 1) : tail);
             }
 
-            context += `${todayLog}\n\n`;
+            context += `## Conversation Log (${todayStr})\n${todayLog}\n\n`;
         } else {
-            const todayStr = new Date().toISOString().split('T')[0];
             context += `## Today's Conversation Log (${todayStr})\n(No prior interactions today.)\n\n`;
         }
 
@@ -99,6 +92,7 @@ export function readMemoryContext(): string {
     context += "----------------------\n";
     return context;
 }
+
 
 export function logMemory(sender: 'User' | 'Agent', message: string) {
     initWorkspace();
