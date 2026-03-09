@@ -1,8 +1,10 @@
 import { LLMProvider, ChatMessage, TokenUsage } from '../BaseProvider';
 
 /**
- * OpenAI Structured Outputs require `additionalProperties: false` on every
- * object schema (including nested ones). This helper enforces that recursively.
+ * OpenAI Structured Outputs require on every object schema:
+ *  1. `additionalProperties: false`
+ *  2. `required` must list every key in `properties`
+ * This helper enforces both rules recursively.
  * Only used by OpenAIProvider — does not affect Antigravity/Gemini providers.
  */
 function enforceAdditionalProperties(schema: Record<string, any>): Record<string, any> {
@@ -11,6 +13,8 @@ function enforceAdditionalProperties(schema: Record<string, any>): Record<string
     if (result.type === 'object' || result.properties) {
         result.additionalProperties = false;
         if (result.properties) {
+            // All property keys must be in required[]
+            result.required = Object.keys(result.properties);
             result.properties = Object.fromEntries(
                 Object.entries(result.properties).map(([k, v]) => [k, enforceAdditionalProperties(v as Record<string, any>)])
             );
