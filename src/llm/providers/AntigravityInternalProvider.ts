@@ -7,8 +7,17 @@ export class AntigravityInternalProvider implements LLMProvider {
     private model: string;
     private authState: AuthState | null = null;
 
+    // Fallback models in priority order — if primary has no capacity, try the next
+    private static readonly MODEL_FALLBACKS: string[] = [
+        'claude-sonnet-4-5',
+        'claude-opus-4-5',
+        'gemini-2.5-pro',
+        'gemini-2.5-flash',
+        'gemini-2.0-flash',
+    ];
+
     constructor() {
-        this.model = process.env.GEMINI_MODEL || 'claude-opus-4-6-thinking';
+        this.model = process.env.GEMINI_MODEL || 'claude-sonnet-4-5';
     }
 
     private async ensureAuth(): Promise<AuthState> {
@@ -151,6 +160,20 @@ export class AntigravityInternalProvider implements LLMProvider {
 
             if (!response.ok) {
                 const errBody = await response.text();
+                // 503 MODEL_CAPACITY_EXHAUSTED: try next fallback model silently
+                if (response.status === 503) {
+                    let isCapacity = false;
+                    try { isCapacity = errBody.includes('MODEL_CAPACITY_EXHAUSTED'); } catch (_) {}
+                    if (isCapacity) {
+                        const currentModel = wrappedBody.model;
+                        const fallbacks = AntigravityInternalProvider.MODEL_FALLBACKS.filter(m => m !== currentModel);
+                        const nextModel = fallbacks[attempt] ?? fallbacks[fallbacks.length - 1] ?? 'gemini-2.0-flash';
+                        console.warn(`⚠️  [Antigravity] ${currentModel} capacity exhausted — switching to ${nextModel} (attempt ${attempt + 1}/${maxAttempts})`);
+                        wrappedBody.model = nextModel;
+                        attempt++;
+                        continue;
+                    }
+                }
                 throw new Error(`Internal IDE API Error: ${response.status} - ${errBody}`);
             }
             break;
@@ -296,6 +319,20 @@ export class AntigravityInternalProvider implements LLMProvider {
 
             if (!response.ok) {
                 const errBody = await response.text();
+                // 503 MODEL_CAPACITY_EXHAUSTED: try next fallback model silently
+                if (response.status === 503) {
+                    let isCapacity = false;
+                    try { isCapacity = errBody.includes('MODEL_CAPACITY_EXHAUSTED'); } catch (_) {}
+                    if (isCapacity) {
+                        const currentModel = wrappedBody.model;
+                        const fallbacks = AntigravityInternalProvider.MODEL_FALLBACKS.filter(m => m !== currentModel);
+                        const nextModel = fallbacks[attempt] ?? fallbacks[fallbacks.length - 1] ?? 'gemini-2.0-flash';
+                        console.warn(`⚠️  [Antigravity] ${currentModel} capacity exhausted — switching to ${nextModel} (attempt ${attempt + 1}/${maxAttempts})`);
+                        wrappedBody.model = nextModel;
+                        attempt++;
+                        continue;
+                    }
+                }
                 throw new Error(`Internal IDE API Error: ${response.status} - ${errBody}`);
             }
             break;
