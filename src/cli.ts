@@ -324,6 +324,15 @@ channelsMenu
                         console.log('\n❌ Session rejected. Please try again.');
                         process.exit(1);
                     }
+                    // 515 = "restart required" — this is NORMAL after a successful pairing.
+                    // WhatsApp sends it after the new device is registered. Creds are already saved.
+                    if (code === 515 || code === 428) {
+                        clearTimeout(hardTimeout);
+                        console.log('\n✅ WhatsApp paired successfully!');
+                        console.log('📁 Credentials saved to baileys_auth_info/');
+                        console.log('\n📱 Now run: pm2 start openspider-gateway\n');
+                        setTimeout(() => process.exit(0), 2000);
+                    }
                 }
             });
 
