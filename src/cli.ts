@@ -504,12 +504,12 @@ modelsMenu
 
         // Pick the primary model based on the active provider
         const primaryModel =
-            provider === 'antigravity' ? (process.env.GEMINI_MODEL || 'Not Set') :
-                provider === 'antigravity-internal' ? (process.env.GEMINI_MODEL || 'Not Set') :
-                    provider === 'ollama' ? (process.env.OLLAMA_MODEL || 'Not Set') :
-                        provider === 'openai' ? (process.env.OPENAI_MODEL || 'Not Set') :
-                            provider === 'anthropic' ? (process.env.ANTHROPIC_MODEL || 'Not Set') :
-                                provider === 'custom' ? (process.env.CUSTOM_MODEL || 'Not Set') : 'Unknown';
+            provider === 'antigravity' ? (process.env.GEMINI_MODEL || 'gemini-2.0-flash') :
+                provider === 'antigravity-internal' ? (process.env.GEMINI_MODEL || 'claude-opus-4-6-thinking') :
+                    provider === 'ollama' ? (process.env.OLLAMA_MODEL || 'llama3') :
+                        provider === 'openai' ? (process.env.OPENAI_MODEL || 'gpt-4o') :
+                            provider === 'anthropic' ? (process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet') :
+                                provider === 'custom' ? (process.env.CUSTOM_MODEL || 'N/A') : 'Unknown';
 
         // Build list of all configured providers
         const configured: string[] = [];
@@ -553,12 +553,12 @@ program
 
         const provider = process.env.DEFAULT_PROVIDER || 'Not Set';
         const primaryModel =
-            provider === 'antigravity' ? (process.env.GEMINI_MODEL || 'Not Set') :
+            provider === 'antigravity' ? (process.env.GEMINI_MODEL || 'gemini-2.0-flash') :
                 provider === 'antigravity-internal' ? (process.env.GEMINI_MODEL || 'claude-opus-4-6-thinking') :
-                    provider === 'ollama' ? (process.env.OLLAMA_MODEL || 'Not Set') :
-                        provider === 'openai' ? (process.env.OPENAI_MODEL || 'Not Set') :
-                            provider === 'anthropic' ? (process.env.ANTHROPIC_MODEL || 'Not Set') :
-                                provider === 'custom' ? (process.env.CUSTOM_MODEL || 'Not Set') : 'Unknown';
+                    provider === 'ollama' ? (process.env.OLLAMA_MODEL || 'llama3') :
+                        provider === 'openai' ? (process.env.OPENAI_MODEL || 'gpt-4o') :
+                            provider === 'anthropic' ? (process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet') :
+                                provider === 'custom' ? (process.env.CUSTOM_MODEL || 'N/A') : 'Unknown';
 
         const providerDisplay = provider === 'Not Set'
             ? '⚠️  Not configured (run: openspider onboard)'
