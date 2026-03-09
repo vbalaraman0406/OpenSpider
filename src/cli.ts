@@ -241,16 +241,26 @@ channelsMenu
 
             const { state, saveCreds } = await useMultiFileAuthState(authDir);
             const { version } = await fetchLatestBaileysVersion();
+            const { makeCacheableSignalKeyStore } = await import('@whiskeysockets/baileys');
+            const NodeCache = require('node-cache');
 
             const pino = require('pino');
             const silentLogger = pino({ level: 'silent' });
+            const msgRetryCounterCache = new NodeCache();
 
             const sock = makeWASocket({
                 version,
-                auth: state,
+                auth: {
+                    creds: state.creds,
+                    keys: makeCacheableSignalKeyStore(state.keys, silentLogger),
+                },
                 printQRInTerminal: false,
                 qrTimeout: 60000,
                 logger: silentLogger,
+                browser: ['OpenSpider', 'Chrome', '122.0.0'],
+                syncFullHistory: false,
+                markOnlineOnConnect: true,
+                msgRetryCounterCache,
             });
 
             sock.ev.on('creds.update', saveCreds);
