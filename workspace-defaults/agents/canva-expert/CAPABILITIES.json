@@ -1,0 +1,13 @@
+{
+  "tools": [
+    "canva_generate_image",
+    "canva_generate_video",
+    "canva_list_templates"
+  ],
+  "allowed_commands": false,
+  "description": "Expert in auto-generating aesthetic images, social graphics, and short videos using Canva templates.",
+  "emoji": "🎨",
+  "name": "Pixel",
+  "role": "Canva Design & Creation Expert",
+  "primary_model": "DEFAULT_PROVIDER"
+}
