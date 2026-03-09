@@ -5,8 +5,10 @@ import open from 'open';
 import fs from 'fs';
 import path from 'path';
 
-const ANTIGRAVITY_CLIENT_ID = "REDACTED_GOOGLE_CLIENT_ID";
-const ANTIGRAVITY_CLIENT_SECRET = "REDACTED_GOOGLE_SECRET";
+// Read from .env so credentials survive `git pull` / `openspider update`.
+// Set ANTIGRAVITY_CLIENT_ID and ANTIGRAVITY_CLIENT_SECRET in your .env file.
+const ANTIGRAVITY_CLIENT_ID = process.env.ANTIGRAVITY_CLIENT_ID || '';
+const ANTIGRAVITY_CLIENT_SECRET = process.env.ANTIGRAVITY_CLIENT_SECRET || '';
 const ANTIGRAVITY_SCOPES = [
     "https://www.googleapis.com/auth/cloud-platform",
     "https://www.googleapis.com/auth/userinfo.email",
@@ -143,7 +145,13 @@ export async function refreshAntigravityToken(state: AuthState): Promise<AuthSta
     });
 
     if (!refreshResponse.ok) {
-        throw new Error(`Failed to refresh token: ${await refreshResponse.text()}`);
+        const body = await refreshResponse.text();
+        // If the OAuth client itself is invalid/revoked, clear stale token so caller can do fresh browser login
+        if (body.includes('invalid_client') || body.includes('invalid_grant')) {
+            console.warn('[Antigravity] Token refresh failed (invalid_client/grant) — clearing stale auth for re-login.');
+            try { fs.unlinkSync(AUTH_FILE_PATH); } catch (e) { }
+        }
+        throw new Error(`Failed to refresh token: ${body}`);
     }
 
     const payload: any = await refreshResponse.json();
@@ -174,12 +182,25 @@ export function saveAuthState(state: AuthState) {
 }
 
 export async function loginToAntigravity(): Promise<AuthState> {
+    if (!ANTIGRAVITY_CLIENT_ID || !ANTIGRAVITY_CLIENT_SECRET) {
+        throw new Error(
+            'Antigravity credentials not configured. ' +
+            'Add ANTIGRAVITY_CLIENT_ID and ANTIGRAVITY_CLIENT_SECRET to your .env file.'
+        );
+    }
+
     const existing = loadAuthState();
     if (existing) {
         if (existing.expires < Date.now()) {
-            return await refreshAntigravityToken(existing);
+            try {
+                return await refreshAntigravityToken(existing);
+            } catch (e: any) {
+                // Refresh failed (invalid_client, revoked, etc.) — fall through to fresh browser login
+                console.warn('[Antigravity] Refresh failed, attempting fresh browser login...');
+            }
+        } else {
+            return existing;
         }
-        return existing;
     }
 
     console.log("🕷️ Initializing Internal Google IDE Authentication...");
