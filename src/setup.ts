@@ -319,7 +319,7 @@ export async function runSetup() {
     process.exit(0);
   }
 
-  envContent += `AGENT_PERSONA = "${persona}"\\n\\n`;
+  envContent += `AGENT_PERSONA = "${persona}"\n\n`;
 
   const fallback = await p.text({
     message: 'Enter a Fallback Model to use if the primary model fails (e.g. gpt-4o-mini, gemini-flash), or leave blank for none:',
