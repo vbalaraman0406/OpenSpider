@@ -191,6 +191,56 @@ export function saveAuthState(state: AuthState) {
     fs.writeFileSync(AUTH_FILE_PATH, JSON.stringify(state, null, 2));
 }
 
+/**
+ * TRUE STEALTH MODE: Read the live access token directly from the Antigravity IDE's
+ * globalStorage SQLite database. This piggybacks on the IDE's existing authenticated
+ * session — no OAuth browser flow needed.
+ */
+async function borrowTokenFromIDE(): Promise<AuthState | null> {
+    const os = require('os');
+    const homeDir = os.homedir();
+    const dbCandidates = [
+        path.join(homeDir, 'Library', 'Application Support', 'Antigravity', 'User', 'globalStorage', 'state.vscdb'),
+        path.join(homeDir, '.config', 'Antigravity', 'User', 'globalStorage', 'state.vscdb'),
+    ];
+
+    for (const dbPath of dbCandidates) {
+        if (!fs.existsSync(dbPath)) continue;
+        try {
+            // Read SQLite without requiring the sqlite3 npm package — parse the raw file for the JSON value
+            const dbContent = fs.readFileSync(dbPath);
+            // Search for the antirgavityAuthStatus JSON blob containing "apiKey"
+            const marker = Buffer.from('antigravityAuthStatus');
+            let idx = dbContent.indexOf(marker);
+            if (idx < 0) continue;
+
+            // Find the JSON object after the marker (SQLite stores as |key|value| with JSON)
+            const slice = dbContent.slice(idx + marker.length, idx + marker.length + 4096).toString('utf-8', 0, 4096);
+            const jsonMatch = slice.match(/\{[^}]+apiKey[^}]+\}/s);
+            if (!jsonMatch) continue;
+
+            const authData = JSON.parse(jsonMatch[0]);
+            const accessToken: string = authData.apiKey || '';
+            if (!accessToken || !accessToken.startsWith('ya29.')) continue;
+
+            console.log('🕵️  [Antigravity] Borrowed live token from IDE session (stealth mode)');
+            const { projectId, endpoint } = await fetchManagedProjectId(accessToken);
+            const state: AuthState = {
+                access: accessToken,
+                refresh: '',
+                expires: Date.now() + 55 * 60 * 1000, // 55 min — re-borrow before 1hr expiry
+                projectId,
+                endpoint,
+            };
+            saveAuthState(state);
+            return state;
+        } catch (e) {
+            // Continue to next candidate
+        }
+    }
+    return null;
+}
+
 export async function loginToAntigravity(): Promise<AuthState> {
     if (!ANTIGRAVITY_CLIENT_ID) {
         throw new Error(
@@ -202,16 +252,24 @@ export async function loginToAntigravity(): Promise<AuthState> {
     const existing = loadAuthState();
     if (existing) {
         if (existing.expires < Date.now()) {
+            // Token expired — try to re-borrow from IDE first (silent, no browser)
+            const ideToken = await borrowTokenFromIDE();
+            if (ideToken) return ideToken;
+
+            // Fall back to OAuth refresh
             try {
                 return await refreshAntigravityToken(existing);
             } catch (e: any) {
-                // Refresh failed (invalid_client, revoked, etc.) — fall through to fresh browser login
                 console.warn('[Antigravity] Refresh failed, attempting fresh browser login...');
             }
         } else {
             return existing;
         }
     }
+
+    // No valid token — try borrowing from IDE (silent, no browser)
+    const ideToken = await borrowTokenFromIDE();
+    if (ideToken) return ideToken;
 
     console.log("🕷️ Initializing Internal Google IDE Authentication...");
 
