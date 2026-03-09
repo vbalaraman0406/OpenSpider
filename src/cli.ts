@@ -236,22 +236,30 @@ channelsMenu
             const fs = await import('node:fs');
             const path = await import('node:path');
 
-            // Store creds alongside the main gateway's auth so they share the same session
+            // Wipe auth entirely so Baileys ALWAYS generates a fresh QR
+            // (just clearing session- files isn't enough — creds.json causes a silent reconnect)
             const authDir = path.join(process.cwd(), 'baileys_auth_info');
             if (fs.existsSync(authDir)) {
-                // Clear stale session files so Baileys forces a fresh QR instead of reconnecting silently
-                const staleFiles = fs.readdirSync(authDir).filter((f: string) => f.startsWith('session-'));
-                staleFiles.forEach((f: string) => { try { fs.unlinkSync(path.join(authDir, f)); } catch (e) { } });
+                const filesToWipe = fs.readdirSync(authDir);
+                filesToWipe.forEach((f: string) => {
+                    try { fs.unlinkSync(path.join(authDir, f)); } catch (e) { }
+                });
+                console.log('🧹 Cleared existing session to generate fresh QR...\n');
             }
 
             const { state, saveCreds } = await useMultiFileAuthState(authDir);
             const { version } = await fetchLatestBaileysVersion();
+
+            // Use a completely silent pino logger — prevents Baileys from dumping raw JSON to the terminal
+            const pino = require('pino');
+            const silentLogger = pino({ level: 'silent' });
 
             const sock = makeWASocket({
                 version,
                 auth: state,
                 printQRInTerminal: false,
                 qrTimeout: 60000,
+                logger: silentLogger,
             });
 
             sock.ev.on('creds.update', saveCreds);
