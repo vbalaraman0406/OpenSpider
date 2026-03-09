@@ -4,6 +4,7 @@ import { Server } from 'http';
 import open from 'open';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 
 // Read from .env so credentials survive `git pull` / `openspider update`.
 // Set ANTIGRAVITY_CLIENT_ID and ANTIGRAVITY_CLIENT_SECRET in your .env file.
@@ -195,47 +196,100 @@ export function saveAuthState(state: AuthState) {
  * TRUE STEALTH MODE: Read the live access token directly from the Antigravity IDE's
  * globalStorage SQLite database. This piggybacks on the IDE's existing authenticated
  * session — no OAuth browser flow needed.
+ *
+ * Uses better-sqlite3 for reliable parsing. Falls back to raw binary scan if the
+ * native module is unavailable.
  */
 async function borrowTokenFromIDE(): Promise<AuthState | null> {
-    const os = require('os');
     const homeDir = os.homedir();
     const dbCandidates = [
         path.join(homeDir, 'Library', 'Application Support', 'Antigravity', 'User', 'globalStorage', 'state.vscdb'),
         path.join(homeDir, '.config', 'Antigravity', 'User', 'globalStorage', 'state.vscdb'),
+        path.join(homeDir, 'AppData', 'Roaming', 'Antigravity', 'User', 'globalStorage', 'state.vscdb'),
     ];
+
+    // Keys to check in priority order — first match with a ya29. token wins
+    const AUTH_KEYS = ['antigravityAuthStatus', 'antigravityUnifiedStateSync.oauthToken'];
 
     for (const dbPath of dbCandidates) {
         if (!fs.existsSync(dbPath)) continue;
+
+        // ── Strategy 1: better-sqlite3 (reliable, preferred) ──────────────────
+        let accessToken = '';
         try {
-            // Read SQLite without requiring the sqlite3 npm package — parse the raw file for the JSON value
-            const dbContent = fs.readFileSync(dbPath);
-            // Search for the antirgavityAuthStatus JSON blob containing "apiKey"
-            const marker = Buffer.from('antigravityAuthStatus');
-            let idx = dbContent.indexOf(marker);
-            if (idx < 0) continue;
+            // Dynamic import so the module error is caught here; prevents crash if binding
+            // fails to load on an unsupported platform.
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const Database = require('better-sqlite3') as typeof import('better-sqlite3');
+            const db = new Database(dbPath, { readonly: true, fileMustExist: true });
 
-            // Find the JSON object after the marker (SQLite stores as |key|value| with JSON)
-            const slice = dbContent.slice(idx + marker.length, idx + marker.length + 4096).toString('utf-8', 0, 4096);
-            const jsonMatch = slice.match(/\{[^}]+apiKey[^}]+\}/s);
-            if (!jsonMatch) continue;
+            for (const key of AUTH_KEYS) {
+                try {
+                    const row = db.prepare("SELECT value FROM ItemTable WHERE key=?").get(key) as { value: string } | undefined;
+                    if (!row) continue;
 
-            const authData = JSON.parse(jsonMatch[0]);
-            const accessToken: string = authData.apiKey || '';
-            if (!accessToken || !accessToken.startsWith('ya29.')) continue;
+                    // The value may be a raw JSON string or a base64-encoded protobuf blob
+                    let raw = row.value;
 
-            console.log('🕵️  [Antigravity] Borrowed live token from IDE session (stealth mode)');
+                    // Try direct JSON parse first
+                    try {
+                        const parsed = JSON.parse(raw);
+                        if (parsed && typeof parsed.apiKey === 'string' && parsed.apiKey.startsWith('ya29.')) {
+                            accessToken = parsed.apiKey;
+                            break;
+                        }
+                    } catch (_) { /* Not JSON — try regex */ }
+
+                    // Regex fallback: find "apiKey":"ya29.xxx" anywhere in the string
+                    const m = raw.match(/"apiKey"\s*:\s*"(ya29\.[^"]+)"/);
+                    if (m && m[1]) {
+                        accessToken = m[1];
+                        break;
+                    }
+                } catch (_) { /* Key missing, try next */ }
+            }
+
+            db.close();
+        } catch (sqliteErr) {
+            // better-sqlite3 unavailable or binding failed — fall through to raw scan
+        }
+
+        // ── Strategy 2: Raw binary scan (fallback) ────────────────────────────
+        if (!accessToken) {
+            try {
+                const dbContent = fs.readFileSync(dbPath);
+                // Scan for the JSON blob containing "apiKey":"ya29..." directly in file bytes
+                const raw = dbContent.toString('binary');
+                const m = raw.match(/"apiKey"\s*:\s*"(ya29\.[^"\x00-\x1f]+)"/);
+                if (m && m[1]) accessToken = m[1];
+            } catch (_) { /* Continue to next candidate */ }
+        }
+
+        if (!accessToken || !accessToken.startsWith('ya29.')) continue;
+
+        console.log('🕵️  [Antigravity] Borrowed live token from IDE session (stealth mode)');
+        try {
             const { projectId, endpoint } = await fetchManagedProjectId(accessToken);
             const state: AuthState = {
                 access: accessToken,
                 refresh: '',
-                expires: Date.now() + 55 * 60 * 1000, // 55 min — re-borrow before 1hr expiry
+                expires: Date.now() + 55 * 60 * 1000, // 55 min — re-borrow before Google's 1hr expiry
                 projectId,
                 endpoint,
             };
             saveAuthState(state);
             return state;
         } catch (e) {
-            // Continue to next candidate
+            // fetchManagedProjectId is non-fatal; token still valid for generate() calls
+            const state: AuthState = {
+                access: accessToken,
+                refresh: '',
+                expires: Date.now() + 55 * 60 * 1000,
+                projectId: '',
+                endpoint: 'https://cloudcode-pa.googleapis.com',
+            };
+            saveAuthState(state);
+            return state;
         }
     }
     return null;
