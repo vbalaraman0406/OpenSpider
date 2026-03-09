@@ -282,12 +282,28 @@ channelsMenu
                         console.error('⚠️  Could not save credentials:', e.message);
                     }
 
-                    // Auto-enable WhatsApp in workspace config
+                    // Auto-enable WhatsApp in workspace config + .env
                     try {
                         const configPath = path.join(process.cwd(), 'workspace', 'whatsapp_config.json');
                         let cfg: any = { enabled: true, dmPolicy: 'allowlist', allowedDMs: [], groupPolicy: 'disabled', allowedGroups: [], botMode: 'mention' };
                         if (fs.existsSync(configPath)) cfg = { ...JSON.parse(fs.readFileSync(configPath, 'utf-8')), enabled: true };
                         fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2));
+                    } catch (e) { }
+
+                    // Flip ENABLE_WHATSAPP=true in .env so the gateway activates WhatsApp on restart
+                    try {
+                        const envPath = path.join(process.cwd(), '.env');
+                        if (fs.existsSync(envPath)) {
+                            let envContent = fs.readFileSync(envPath, 'utf-8');
+                            if (/ENABLE_WHATSAPP\s*=\s*false/i.test(envContent)) {
+                                envContent = envContent.replace(/ENABLE_WHATSAPP\s*=\s*false/gi, 'ENABLE_WHATSAPP = true');
+                                fs.writeFileSync(envPath, envContent);
+                                console.log('⚙️  ENABLE_WHATSAPP set to true in .env');
+                            } else if (!/ENABLE_WHATSAPP/i.test(envContent)) {
+                                fs.appendFileSync(envPath, '\nENABLE_WHATSAPP = true\n');
+                                console.log('⚙️  ENABLE_WHATSAPP = true added to .env');
+                            }
+                        }
                     } catch (e) { }
 
                     // Clean up temp dir
