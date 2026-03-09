@@ -74,6 +74,22 @@ echo ""
 echo -e "${GREEN}Linking the 'openspider' global command...${NC}"
 npm link --unsafe-perm || sudo npm link --unsafe-perm
 
+# 5b. Create a system-wide symlink so ALL users on this machine can run openspider
+OPENSPIDER_BIN=$(which openspider 2>/dev/null || npm bin -g 2>/dev/null)/openspider
+if [ -f "$OPENSPIDER_BIN" ]; then
+    ln -sf "$OPENSPIDER_BIN" /usr/local/bin/openspider 2>/dev/null || sudo ln -sf "$OPENSPIDER_BIN" /usr/local/bin/openspider
+    echo -e "${GREEN}✔ System-wide symlink created at /usr/local/bin/openspider${NC}"
+else
+    # Fallback: find the binary and symlink it
+    OPENSPIDER_BIN=$(find "$HOME/.nvm" /usr/local/lib /usr/lib -name "openspider" -type f 2>/dev/null | head -1)
+    if [ -n "$OPENSPIDER_BIN" ]; then
+        ln -sf "$OPENSPIDER_BIN" /usr/local/bin/openspider 2>/dev/null || sudo ln -sf "$OPENSPIDER_BIN" /usr/local/bin/openspider
+        echo -e "${GREEN}✔ System-wide symlink created at /usr/local/bin/openspider${NC}"
+    else
+        echo -e "${YELLOW}⚠️  Could not create system-wide symlink. Other users may need to add NVM to their PATH manually.${NC}"
+    fi
+fi
+
 # 6. Ensure NVM and npm global bin are in PATH permanently and for this session
 NVM_SNIPPET='
 # NVM (Node Version Manager) - added by OpenSpider installer

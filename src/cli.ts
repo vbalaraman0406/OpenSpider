@@ -166,6 +166,15 @@ program
             console.log('\n🔗 4. Updating global CLI...');
             execSync('npm install -g .', { stdio: 'inherit', cwd: rootDir });
 
+            // Refresh system-wide symlink so all users on this Linux box can run openspider
+            try {
+                const openspiderBin = execSync('which openspider 2>/dev/null || echo ""', { cwd: rootDir }).toString().trim();
+                if (openspiderBin && openspiderBin !== '') {
+                    execSync(`ln -sf "${openspiderBin}" /usr/local/bin/openspider 2>/dev/null || true`, { stdio: 'pipe', cwd: rootDir });
+                    console.log('   ✅ Updated system-wide symlink at /usr/local/bin/openspider');
+                }
+            } catch (_) { /* non-fatal */ }
+
             console.log('\n♻️  5. Restarting engine...');
             execSync('openspider stop && openspider start', { stdio: 'inherit', cwd: rootDir });
 
