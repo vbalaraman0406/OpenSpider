@@ -29,6 +29,7 @@ export default defineConfig({
                     { text: 'Voice Messages', link: '/voice' },
                     { text: 'Dashboard', link: '/dashboard' },
                     { text: 'Tools & Skills', link: '/tools-and-skills' },
+                    { text: 'Browser Relay Extension', link: '/browser-relay' },
                 ]
             },
             {
@@ -58,6 +59,7 @@ export default defineConfig({
                     { text: 'Voice Messages', link: '/voice' },
                     { text: 'Dashboard', link: '/dashboard' },
                     { text: 'Tools & Skills', link: '/tools-and-skills' },
+                    { text: 'Browser Relay Extension', link: '/browser-relay' },
                 ],
             },
             {
