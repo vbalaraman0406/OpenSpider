@@ -112,8 +112,11 @@ ${context.join('\n')}
             { role: 'user', content: instruction }
         ];
 
-        const maxLoops = 80; // Raised from 40 — deeply nested SPAs like F1 Fantasy need many steps (navigate→read→click→read×N)
-        const warnAtIteration = 70; // Inject wrap-up warning when 10 iterations remain
+        // Coding tasks (write→run→fix→repeat) need far more iterations than browsing tasks.
+        // Detect coding-related roles and give them a much higher budget.
+        const isCodingRole = /coder|developer|engineer|programmer|backend|frontend|fullstack|software|code/i.test(this.role);
+        const maxLoops = isCodingRole ? 200 : 80;
+        const warnAtIteration = isCodingRole ? 175 : 70; // Warn when ~25 steps remain
 
         // Autonomy Loop
         for (let i = 0; i < maxLoops; i++) {
