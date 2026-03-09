@@ -61,28 +61,36 @@ export function readMemoryContext(): string {
         const ltm = fs.readFileSync(path.join(WORKSPACE_DIR, 'memory.md'), 'utf-8');
         context += `## memory.md (Long Term Key Information)\n${ltm}\n\n`;
 
-        // Only load TODAY's log — multi-day lookback caused context bloat
-        const todayStr = new Date().toISOString().split('T')[0]!;
-        const logPath = path.join(MEMORY_DIR, `${todayStr}.md`);
+        // Tiered memory window — balances cross-day awareness with token budget:
+        //   Today      → 15 000 chars (most recent, bottom of log)
+        //   Yesterday  → 2 000 chars tail (reminder of what was in-progress)
+        //   2 days ago → 1 500 chars tail (older context, very compressed)
+        const TODAY_LIMIT    = 15000;
+        const PREV_DAY_LIMIT = 2000;
+        const TWO_DAY_LIMIT  = 1500;
 
-        if (fs.existsSync(logPath)) {
-            let todayLog = fs.readFileSync(logPath, 'utf-8');
+        for (let i = 2; i >= 0; i--) {
+            const date = new Date();
+            date.setDate(date.getDate() - i);
+            const dateStr = date.toISOString().split('T')[0]!;
+            const logPath = path.join(MEMORY_DIR, `${dateStr}.md`);
+            if (!fs.existsSync(logPath)) continue;
 
-            // --- OpenClaw Cognitive Compaction ---
-            // Keep the MOST RECENT messages (bottom of log) within 15KB budget.
-            // Truncating from the top (oldest) preserves the most relevant recent context.
-            const MAX_MEMORY_CHARS = 15000;
-            if (todayLog.length > MAX_MEMORY_CHARS) {
-                console.log(`[Compaction] Daily transcript (${Math.round(todayLog.length / 1024)}KB) exceeds limit \u2014 keeping last ${MAX_MEMORY_CHARS / 1000}KB.`);
-                const tail = todayLog.slice(-MAX_MEMORY_CHARS);
+            let log = fs.readFileSync(logPath, 'utf-8');
+            const limit = i === 0 ? TODAY_LIMIT : i === 1 ? PREV_DAY_LIMIT : TWO_DAY_LIMIT;
+
+            if (log.length > limit) {
+                const tail = log.slice(-limit);
                 const firstNewline = tail.indexOf('\n');
-                todayLog = '...[EARLIER CONTEXT PRUNED TO SAVE TOKENS]...\n' +
-                    (firstNewline !== -1 ? tail.slice(firstNewline + 1) : tail);
+                const prefix = i === 0
+                    ? '...[EARLIER TODAY PRUNED TO SAVE TOKENS]...\n'
+                    : `...[SUMMARY: only last ${limit / 1000}KB shown for ${dateStr}]...\n`;
+                log = prefix + (firstNewline !== -1 ? tail.slice(firstNewline + 1) : tail);
+                if (i === 0) console.log(`[Compaction] Today's log pruned to ${limit / 1000}KB.`);
             }
 
-            context += `## Conversation Log (${todayStr})\n${todayLog}\n\n`;
-        } else {
-            context += `## Today's Conversation Log (${todayStr})\n(No prior interactions today.)\n\n`;
+            const label = i === 0 ? 'Today' : i === 1 ? 'Yesterday' : '2 Days Ago';
+            context += `## Conversation Log — ${label} (${dateStr})\n${log}\n\n`;
         }
 
     } catch (e) {
