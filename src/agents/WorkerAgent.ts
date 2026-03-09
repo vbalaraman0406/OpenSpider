@@ -180,7 +180,7 @@ ${context.join('\n')}
             }
 
             // Log the thought process (useful for the DB / Dashboard later)
-            console.log(`[Worker - ${this.role}] Thought: ${response.thought.substring(0, 200)}`);
+            console.log(`[Worker - ${this.role}] Thought: ${(response.thought || '').substring(0, 200)}`);
             // MED-4: Do NOT log raw LLM response to console — it may contain user PII,
             // un-sanitized input data, or partial API key/credential content from tool outputs.
 
