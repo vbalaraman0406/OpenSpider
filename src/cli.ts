@@ -234,16 +234,14 @@ channelsMenu
             const qrcode = (await import('qrcode-terminal')).default;
             const fs = await import('node:fs');
             const path = await import('node:path');
-            const os = await import('node:os');
 
-            // Use a TEMPORARY isolated dir — never touch the live gateway's baileys_auth_info
-            const tempAuthDir = fs.mkdtempSync(path.join(os.tmpdir(), 'openspider-login-'));
-            const finalAuthDir = path.join(process.cwd(), 'baileys_auth_info');
+            // Write auth directly to live baileys_auth_info — no temp dir copy needed
+            const authDir = path.join(process.cwd(), 'baileys_auth_info');
+            if (!fs.existsSync(authDir)) fs.mkdirSync(authDir, { recursive: true });
 
-            const { state, saveCreds } = await useMultiFileAuthState(tempAuthDir);
+            const { state, saveCreds } = await useMultiFileAuthState(authDir);
             const { version } = await fetchLatestBaileysVersion();
 
-            // Completely silent logger — no JSON dumped to stdout
             const pino = require('pino');
             const silentLogger = pino({ level: 'silent' });
 
@@ -257,6 +255,13 @@ channelsMenu
 
             sock.ev.on('creds.update', saveCreds);
 
+            // Hard timeout — never hang more than 90s after QR appears
+            const hardTimeout = setTimeout(() => {
+                console.log('\n⚠️  Login timed out. Please try again.');
+                try { sock.end(undefined); } catch (_) {}
+                process.exit(1);
+            }, 90000);
+
             sock.ev.on('connection.update', async (update: any) => {
                 const { connection, lastDisconnect, qr } = update;
 
@@ -265,60 +270,47 @@ channelsMenu
                     console.log('\n🕷️  Scan this QR code in WhatsApp → Linked Devices → Link a Device:\n');
                     qrcode.generate(qr, { small: true });
                     console.log('\n⏳ Waiting for scan... (QR expires in 60s, a new one will appear automatically)');
+                    // Reset timeout on each new QR so user has 90s from the latest QR
+                    hardTimeout.refresh();
                 }
 
                 if (connection === 'open') {
+                    clearTimeout(hardTimeout);
                     console.log('\n✅ WhatsApp paired successfully!');
+                    console.log('📁 Credentials saved to baileys_auth_info/');
 
+                    // Auto-update whatsapp_config.json enabled flag
                     try {
-                        // Copy the new creds to the live auth dir
-                        try {
-                            if (!fs.existsSync(finalAuthDir)) fs.mkdirSync(finalAuthDir, { recursive: true });
-                            const newFiles = fs.readdirSync(tempAuthDir);
-                            newFiles.forEach((f: string) => {
-                                fs.copyFileSync(path.join(tempAuthDir, f), path.join(finalAuthDir, f));
-                            });
-                            console.log('📁 Credentials saved.');
-                        } catch (e: any) {
-                            console.error('⚠️  Could not save credentials:', e.message);
-                        }
+                        const configPath = path.join(process.cwd(), 'workspace', 'whatsapp_config.json');
+                        let cfg: any = { enabled: true, dmPolicy: 'allowlist', allowedDMs: [], groupPolicy: 'disabled', allowedGroups: [], botMode: 'respond' };
+                        if (fs.existsSync(configPath)) cfg = { ...JSON.parse(fs.readFileSync(configPath, 'utf-8')), enabled: true };
+                        fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2));
+                    } catch (e) { }
 
-                        // Auto-enable WhatsApp in workspace config + .env
-                        try {
-                            const configPath = path.join(process.cwd(), 'workspace', 'whatsapp_config.json');
-                            let cfg: any = { enabled: true, dmPolicy: 'allowlist', allowedDMs: [], groupPolicy: 'disabled', allowedGroups: [], botMode: 'mention' };
-                            if (fs.existsSync(configPath)) cfg = { ...JSON.parse(fs.readFileSync(configPath, 'utf-8')), enabled: true };
-                            fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2));
-                        } catch (e) { }
-
-                        // Flip ENABLE_WHATSAPP=true in .env
-                        try {
-                            const envPath = path.join(process.cwd(), '.env');
-                            if (fs.existsSync(envPath)) {
-                                let envContent = fs.readFileSync(envPath, 'utf-8');
-                                if (/ENABLE_WHATSAPP\s*=\s*false/i.test(envContent)) {
-                                    envContent = envContent.replace(/ENABLE_WHATSAPP\s*=\s*false/gi, 'ENABLE_WHATSAPP = true');
-                                    fs.writeFileSync(envPath, envContent);
-                                    console.log('⚙️  ENABLE_WHATSAPP set to true in .env');
-                                } else if (!/ENABLE_WHATSAPP/i.test(envContent)) {
-                                    fs.appendFileSync(envPath, '\nENABLE_WHATSAPP = true\n');
-                                    console.log('⚙️  ENABLE_WHATSAPP = true added to .env');
-                                }
+                    // Flip ENABLE_WHATSAPP=true in .env
+                    try {
+                        const envPath = path.join(process.cwd(), '.env');
+                        if (fs.existsSync(envPath)) {
+                            let envContent = fs.readFileSync(envPath, 'utf-8');
+                            if (/ENABLE_WHATSAPP\s*=\s*false/i.test(envContent)) {
+                                envContent = envContent.replace(/ENABLE_WHATSAPP\s*=\s*false/gi, 'ENABLE_WHATSAPP = true');
+                                fs.writeFileSync(envPath, envContent);
+                            } else if (!/ENABLE_WHATSAPP/i.test(envContent)) {
+                                fs.appendFileSync(envPath, '\nENABLE_WHATSAPP = true\n');
                             }
-                        } catch (e) { }
+                        }
+                    } catch (e) { }
 
-                        console.log('\n📱 Run `openspider restart` to activate WhatsApp in the gateway.\n');
-                    } finally {
-                        // Always exit — even if a file operation above threw
-                        try { fs.rmSync(tempAuthDir, { recursive: true, force: true }); } catch (e) { }
-                        try { sock.end(undefined); } catch (e) { }
-                        process.exit(0);
-                    }
+                    console.log('\n📱 Now run: pm2 start openspider-gateway\n');
+
+                    // Force-exit after 3s — gives saveCreds time to flush, avoids sock.end() hang
+                    setTimeout(() => process.exit(0), 3000);
                 }
 
                 if (connection === 'close') {
                     const code = (lastDisconnect?.error as any)?.output?.statusCode;
                     if (code === DisconnectReason.loggedOut) {
+                        clearTimeout(hardTimeout);
                         console.log('\n❌ Session rejected. Please try again.');
                         process.exit(1);
                     }
