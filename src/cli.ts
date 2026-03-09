@@ -142,7 +142,8 @@ program
             execSync('git reset --hard HEAD', { stdio: 'inherit', cwd: rootDir });
 
             console.log('\n⬇️  1. Pulling latest code from GitHub...');
-            execSync('git pull origin main', { stdio: 'inherit', cwd: rootDir });
+            execSync('git fetch origin main', { stdio: 'inherit', cwd: rootDir });
+            execSync('git reset --hard origin/main', { stdio: 'inherit', cwd: rootDir });
 
             console.log('\n📦 2. Installing dependencies...');
             execSync('npm install', { stdio: 'inherit', cwd: rootDir });
