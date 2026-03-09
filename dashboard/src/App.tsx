@@ -2314,6 +2314,20 @@ export default function App() {
                                                     <Send className="w-3.5 h-3.5" />
                                                     Send
                                                 </button>
+                                                {isTyping && (
+                                                    <button
+                                                        onClick={() => {
+                                                            if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+                                                                wsRef.current.send(JSON.stringify({ type: 'cancel' }));
+                                                                setIsTyping(false);
+                                                            }
+                                                        }}
+                                                        className="bg-red-600/80 hover:bg-red-500 text-white px-3 py-1.5 rounded-full text-xs font-semibold transition-all flex items-center gap-1.5 border border-red-500/50 animate-pulse hover:animate-none"
+                                                        title="Cancel current agent task"
+                                                    >
+                                                        ✕ Cancel
+                                                    </button>
+                                                )}
                                             </div>
                                         </div>
 

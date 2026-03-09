@@ -209,6 +209,14 @@ export function startServer() {
                     };
                     bufferEvent({ type: 'chat', data: `[Agent] ${response}`, timestamp: chatResponseEvent.timestamp });
                     ws.send(JSON.stringify(chatResponseEvent));
+                } else if (parsed.type === 'cancel') {
+                    // User clicked the Cancel button in the dashboard
+                    manager.cancel();
+                    ws.send(JSON.stringify({
+                        type: 'chat_response',
+                        data: '⛔ Cancellation requested — the agent will stop at the next safe checkpoint.',
+                        timestamp: new Date().toISOString()
+                    }));
                 }
             } catch (err: any) {
                 console.error('[Web Chat] Error processing message:', err.message);

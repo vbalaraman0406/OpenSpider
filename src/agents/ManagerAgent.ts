@@ -8,12 +8,25 @@ import { PersonaShell } from './PersonaShell';
 
 export class ManagerAgent {
     private llm: LLMProvider;
+    public cancelRequested: boolean = false;
 
     constructor() {
         this.llm = getProvider();
     }
 
+    /** Signal the agent to stop at the next safe checkpoint */
+    cancel() {
+        this.cancelRequested = true;
+        console.log('[Manager] ⛔ Cancel requested — will stop at next safe checkpoint.');
+    }
+
+    /** Reset cancel flag for the next request */
+    private resetCancel() {
+        this.cancelRequested = false;
+    }
+
     async processUserRequest(prompt: string, imagesBase64: string[] = []): Promise<string> {
+        this.resetCancel(); // Clear any previous cancel flag
         console.log(`\n[Manager] Analyzing request: "${prompt}"`);
         const agentPersona = process.env.AGENT_PERSONA || "You are a helpful multi-agent assistant designed to write excellent code and utilize terminals.";
 
@@ -240,6 +253,12 @@ Example output:
             for (let i = 0; i < planResult.plan.length; i++) {
                 const step = planResult.plan[i];
                 if (!step) continue;
+
+                // Check for user-requested cancellation
+                if (this.cancelRequested) {
+                    console.log('[Manager] ⛔ Execution cancelled by user before step', i + 1);
+                    return '⛔ Task cancelled by user.';
+                }
 
                 if (step.type === 'task' && step.role && step.instruction) {
                     const taskId = `${i + 1}`;
