@@ -538,7 +538,7 @@ export function startServer() {
     app.get('/api/whatsapp/config', (req, res) => {
         try {
             if (!fs.existsSync(whatsappConfigPath)) {
-                return res.json({ dmPolicy: "allowlist", allowedDMs: [], groupPolicy: "disabled", allowedGroups: [], botMode: "mention" });
+                return res.json({ enabled: false, dmPolicy: "allowlist", allowedDMs: [], groupPolicy: "disabled", allowedGroups: [], botMode: "mention" });
             }
             const config = JSON.parse(fs.readFileSync(whatsappConfigPath, 'utf-8'));
             res.json(config);
@@ -556,7 +556,16 @@ export function startServer() {
                 return res.status(400).json({ error: "Invalid schema for DM constraints." });
             }
 
+            // Preserve existing fields (especially 'enabled') that aren't part of security settings
+            let existingConfig: any = {};
+            try {
+                if (fs.existsSync(whatsappConfigPath)) {
+                    existingConfig = JSON.parse(fs.readFileSync(whatsappConfigPath, 'utf-8'));
+                }
+            } catch (e) { }
+
             const newConfig = {
+                ...existingConfig, // Preserve enabled, owner phone, etc.
                 dmPolicy,
                 allowedDMs,
                 groupPolicy: groupPolicy || 'disabled',
