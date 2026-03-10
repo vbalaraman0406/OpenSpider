@@ -96,18 +96,60 @@ export function startServer() {
     // Store connected clients
     const clients: Set<WebSocket> = new Set();
 
-    // In-memory event buffer for chat persistence across page refreshes
-    // Stores the last 500 chat-relevant events so new dashboard connections
-    // instantly receive the full conversation context.
-    const eventBuffer: Array<{ type: string; data: string; timestamp: string }> = [];
+    // Persistent chat event buffer — survives gateway restarts by writing to disk
+    // Stores the last 500 chat-relevant events so dashboard connections
+    // instantly receive the full conversation context, even after restart.
+    const CHAT_BUFFER_PATH = path.join(process.cwd(), 'workspace', 'chat_buffer.json');
     const MAX_BUFFER_SIZE = 500;
+
+    // Load persisted buffer from disk on startup
+    let eventBuffer: Array<{ type: string; data: string; timestamp: string }> = [];
+    try {
+        if (fs.existsSync(CHAT_BUFFER_PATH)) {
+            const raw = fs.readFileSync(CHAT_BUFFER_PATH, 'utf-8');
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+                eventBuffer = parsed.slice(-MAX_BUFFER_SIZE);
+                console.log(`[Server] Restored ${eventBuffer.length} chat events from disk.`);
+            }
+        }
+    } catch (e) {
+        console.warn('[Server] Could not restore chat buffer from disk, starting fresh.');
+    }
+
+    // Debounced disk persistence to avoid excessive I/O
+    let bufferDirty = false;
+    let flushTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const flushBufferToDisk = () => {
+        if (!bufferDirty) return;
+        try {
+            fs.writeFileSync(CHAT_BUFFER_PATH, JSON.stringify(eventBuffer), 'utf-8');
+            bufferDirty = false;
+        } catch (e) {
+            console.error('[Server] Failed to persist chat buffer:', e);
+        }
+    };
 
     const bufferEvent = (event: { type: string; data: string; timestamp: string }) => {
         eventBuffer.push(event);
         if (eventBuffer.length > MAX_BUFFER_SIZE) {
             eventBuffer.shift(); // Remove oldest event
         }
+        bufferDirty = true;
+
+        // Debounce: flush to disk at most once every 2 seconds
+        if (!flushTimer) {
+            flushTimer = setTimeout(() => {
+                flushBufferToDisk();
+                flushTimer = null;
+            }, 2000);
+        }
     };
+
+    // Also flush on process exit
+    process.on('SIGINT', () => { flushBufferToDisk(); process.exit(); });
+    process.on('SIGTERM', () => { flushBufferToDisk(); process.exit(); });
 
     const manager = new ManagerAgent();
 

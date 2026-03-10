@@ -115,8 +115,9 @@ export function logMemory(sender: 'User' | 'Agent', message: string) {
     const todayStr = now.toISOString().split('T')[0];
     const todayPath = path.join(MEMORY_DIR, `${todayStr}.md`);
 
-    // Truncate long messages (error traces, API responses) to prevent context bloat
-    const truncated = message.length > 500 ? message.slice(0, 500) + '...[TRUNCATED]' : message;
+    // Truncate very long messages (huge error traces, massive API dumps) to prevent context bloat
+    // Raised from 500 to 4000 to preserve links, tables, and structured agent responses
+    const truncated = message.length > 4000 ? message.slice(0, 4000) + '...[TRUNCATED]' : message;
     const logEntry = `[${now.toLocaleTimeString()}] **${sender}**: ${truncated}\n\n`;
     fs.appendFileSync(todayPath, logEntry, 'utf-8');
 }
