@@ -235,8 +235,14 @@ channelsMenu
             const fs = await import('node:fs');
             const path = await import('node:path');
 
+            // Resolve project root from the compiled script location, NOT process.cwd()
+            // This prevents files being created in the wrong directory when users
+            // run 'openspider channels login' from ~ instead of the project root
+            const projectRoot = __dirname.endsWith('src') || __dirname.endsWith('dist')
+                ? path.join(__dirname, '..') : __dirname;
+
             // Always start fresh — stale credentials cause "Session rejected" errors
-            const authDir = path.join(process.cwd(), 'baileys_auth_info');
+            const authDir = path.join(projectRoot, 'baileys_auth_info');
             if (fs.existsSync(authDir)) {
                 fs.rmSync(authDir, { recursive: true, force: true });
                 console.log('🧹 Cleared old WhatsApp sessions.');
@@ -306,7 +312,7 @@ channelsMenu
 
                         // Auto-update whatsapp_config.json enabled flag
                         try {
-                            const configPath = path.join(process.cwd(), 'workspace', 'whatsapp_config.json');
+                            const configPath = path.join(projectRoot, 'workspace', 'whatsapp_config.json');
                             let cfg: any = { enabled: true, dmPolicy: 'allowlist', allowedDMs: [], groupPolicy: 'disabled', allowedGroups: [], botMode: 'respond' };
                             if (fs.existsSync(configPath)) cfg = { ...JSON.parse(fs.readFileSync(configPath, 'utf-8')), enabled: true };
                             fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2));
@@ -314,7 +320,7 @@ channelsMenu
 
                         // Flip ENABLE_WHATSAPP=true in .env
                         try {
-                            const envPath = path.join(process.cwd(), '.env');
+                            const envPath = path.join(projectRoot, '.env');
                             if (fs.existsSync(envPath)) {
                                 let envContent = fs.readFileSync(envPath, 'utf-8');
                                 if (/ENABLE_WHATSAPP\s*=\s*false/i.test(envContent)) {
