@@ -841,58 +841,87 @@ export async function startWhatsApp() {
                             }
                         }
 
-                        // Layer 4: Auto-accept + Auto-learn @lid DMs
-                        // WhatsApp's LID migration means we can NEVER reliably resolve
-                        // LID→phone via Baileys. Instead of blocking legitimate contacts,
-                        // auto-accept the DM and save the LID for instant future matching.
+                        // Layer 4: Bounded auto-accept for @lid DMs
+                        // Security: ONLY auto-accept if there are allowlisted entries that
+                        // don't yet have a LID mapped. This bounds auto-accepts to exactly
+                        // the number of contacts in the allowlist. Once every entry has a
+                        // LID, any new unknown LID is blocked (it's a stranger).
                         if (!matchedContact) {
                             const pushName = msg.pushName || 'Unknown';
-                            console.log(`[FIREWALL] 🔓 Auto-accepting @lid DM from ${pushName} (LID: ${senderRaw}). Saving for future matching.`);
 
-                            // Auto-save LID to config for permanent future matching
-                            try {
-                                const cfgPath = './workspace/whatsapp_config.json';
-                                const rawCfg = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
-                                const dms = rawCfg.allowedDMs || [];
-                                let saved = false;
+                            // Count unmapped entries (entries without a lid field)
+                            const unmappedEntries = config.allowedDMs.filter((e: any) =>
+                                typeof e === 'string' || (typeof e === 'object' && !e.lid)
+                            );
 
-                                // Try to attach LID to an existing entry that doesn't have one yet
-                                for (let i = 0; i < dms.length; i++) {
-                                    if (typeof dms[i] === 'object' && !dms[i].lid) {
-                                        dms[i].lid = senderRaw;
-                                        matchedContact = dms[i];
-                                        saved = true;
-                                        console.log(`[FIREWALL] Auto-mapped LID ${senderRaw} → ${dms[i].number}`);
-                                        break;
-                                    }
-                                }
+                            if (unmappedEntries.length > 0) {
+                                // There are allowlisted contacts without LID mappings.
+                                // This @lid sender is likely one of them — auto-accept
+                                // and assign the LID to the first unmapped entry.
+                                console.log(`[FIREWALL] 🔓 Auto-accepting @lid DM from ${pushName} (LID: ${senderRaw}). ${unmappedEntries.length} unmapped entries remain.`);
 
-                                if (!saved) {
-                                    // Add as new LID-only entry
-                                    const newEntry = { number: `lid-${senderRaw}`, lid: senderRaw, mode: 'always', pushName };
-                                    dms.push(newEntry);
-                                    matchedContact = newEntry;
-                                    console.log(`[FIREWALL] Added new LID entry: ${senderRaw} (${pushName})`);
-                                }
-
-                                rawCfg.allowedDMs = dms;
-                                fs.writeFileSync(cfgPath, JSON.stringify(rawCfg, null, 2), 'utf-8');
-                            } catch (e) {
-                                matchedContact = { number: `lid-${senderRaw}`, lid: senderRaw, mode: 'always' };
-                            }
-
-                            // Notify admin once per new LID
-                            if (!lidNotifiedCache.has(senderRaw)) {
-                                lidNotifiedCache.add(senderRaw);
                                 try {
-                                    const ownerCfg = config.allowedDMs[0];
-                                    const ownerNum = (typeof ownerCfg === 'string' ? ownerCfg : ownerCfg?.number || '').replace(/\D/g, '');
-                                    if (ownerNum && !ownerNum.startsWith('lid-')) {
-                                        await sock.sendMessage(`${ownerNum}@s.whatsapp.net`, {
-                                            text: `🕷️ *OpenSpider — New Contact Auto-Accepted*\n\n📱 *${pushName}* messaged via WhatsApp LID.\n🔑 LID: \`${senderRaw}\`\n\n✅ Auto-accepted and saved for future matching.\nTo map to their phone: curl -X POST http://localhost:4001/api/whatsapp/lid-map -H "Content-Type: application/json" -d '{"lid":"${senderRaw}","phone":"THEIR_PHONE"}'`
-                                        });
+                                    const cfgPath = './workspace/whatsapp_config.json';
+                                    const rawCfg = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
+                                    const dms = rawCfg.allowedDMs || [];
+
+                                    for (let i = 0; i < dms.length; i++) {
+                                        if (typeof dms[i] === 'string') {
+                                            // Upgrade legacy string to object with LID
+                                            dms[i] = { number: dms[i], lid: senderRaw, mode: 'always' };
+                                            matchedContact = dms[i];
+                                            console.log(`[FIREWALL] Auto-mapped LID ${senderRaw} → ${dms[i].number} (${pushName})`);
+                                            break;
+                                        } else if (typeof dms[i] === 'object' && !dms[i].lid) {
+                                            dms[i].lid = senderRaw;
+                                            matchedContact = dms[i];
+                                            console.log(`[FIREWALL] Auto-mapped LID ${senderRaw} → ${dms[i].number} (${pushName})`);
+                                            break;
+                                        }
                                     }
-                                } catch (e) { /* non-critical */ }
+
+                                    rawCfg.allowedDMs = dms;
+                                    fs.writeFileSync(cfgPath, JSON.stringify(rawCfg, null, 2), 'utf-8');
+                                    addLidMapping(senderRaw, matchedContact?.number || '');
+                                } catch (e) {
+                                    // Accept anyway on first occurrence
+                                    matchedContact = unmappedEntries[0];
+                                    if (typeof matchedContact === 'string') {
+                                        matchedContact = { number: matchedContact, lid: senderRaw, mode: 'always' };
+                                    }
+                                }
+
+                                // Notify admin about the auto-mapping
+                                if (!lidNotifiedCache.has(senderRaw)) {
+                                    lidNotifiedCache.add(senderRaw);
+                                    try {
+                                        const ownerCfg = config.allowedDMs[0];
+                                        const ownerNum = (typeof ownerCfg === 'string' ? ownerCfg : ownerCfg?.number || '').replace(/\D/g, '');
+                                        if (ownerNum) {
+                                            await sock.sendMessage(`${ownerNum}@s.whatsapp.net`, {
+                                                text: `🕷️ *OpenSpider — LID Auto-Mapped*\n\n📱 *${pushName}* (LID: ${senderRaw}) messaged via WhatsApp's new LID system.\n\n✅ Auto-mapped to an allowlisted contact.\n⚠️ If this mapping is wrong, fix it via:\ncurl -X POST http://localhost:4001/api/whatsapp/lid-map -H "Content-Type: application/json" -d '{"lid":"${senderRaw}","phone":"CORRECT_PHONE"}'`
+                                            });
+                                        }
+                                    } catch (e) { /* non-critical */ }
+                                }
+                            } else {
+                                // ALL allowlisted entries already have LIDs mapped.
+                                // This is a truly unknown sender — BLOCK.
+                                console.log(`[FIREWALL] 🚫 Blocked unknown LID ${senderRaw} (${pushName}). All ${config.allowedDMs.length} entries have LIDs mapped — this is a stranger.`);
+
+                                // Notify admin about the blocked stranger (once)
+                                if (!lidNotifiedCache.has(senderRaw)) {
+                                    lidNotifiedCache.add(senderRaw);
+                                    try {
+                                        const ownerCfg = config.allowedDMs[0];
+                                        const ownerNum = (typeof ownerCfg === 'string' ? ownerCfg : ownerCfg?.number || '').replace(/\D/g, '');
+                                        if (ownerNum) {
+                                            await sock.sendMessage(`${ownerNum}@s.whatsapp.net`, {
+                                                text: `🕷️ *OpenSpider Security Alert*\n\n🚫 Blocked DM from *${pushName}* (LID: ${senderRaw}).\n\nAll allowlisted contacts already have LIDs mapped.\nIf this is a legitimate contact, add them via:\ncurl -X POST http://localhost:4001/api/whatsapp/lid-map -H "Content-Type: application/json" -d '{"lid":"${senderRaw}","phone":"THEIR_PHONE"}'`
+                                            });
+                                        }
+                                    } catch (e) { /* non-critical */ }
+                                }
                             }
                         }
                     }
@@ -940,7 +969,7 @@ export async function startWhatsApp() {
                     const mentionedJidList = msg.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
                     const dmBotNumber = sock.user?.id ? sock.user.id.split(':')[0] : '';
                     const dmBotJid = dmBotNumber ? `${dmBotNumber}@s.whatsapp.net` : '';
-                    const isTaggedViaJid = dmBotJid ? mentionedJidList.includes(dmBotJid) : false;
+                    const isTaggedViaJid = (dmBotJid ? mentionedJidList.includes(dmBotJid) : false) || (myLid ? mentionedJidList.includes(myLid) : false);
                     // Permissive plain text match: allow zero-width spaces, unicode chars between @ and name
                     const isMentionedViaText = new RegExp(`@[\\s\\u200b\\u200c]*${agentName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i').test(textMessage);
                     if (!isTaggedViaJid && !isMentionedViaText) {
