@@ -25,6 +25,32 @@ export class ManagerAgent {
         this.cancelRequested = false;
     }
 
+    /**
+     * Compress a worker result into a compact summary for inter-step context.
+     * Preserves URLs, numbers, table headers, and key findings.
+     * Avoids an extra LLM call by using intelligent truncation.
+     */
+    private compactResult(result: string, maxLen: number = 600): string {
+        if (result.length <= maxLen) return result;
+
+        // Extract and preserve URLs
+        const urls = result.match(/https?:\/\/[^\s)]+/g) || [];
+        const urlBlock = urls.length > 0 ? `\nURLs: ${urls.slice(0, 5).join(', ')}` : '';
+
+        // Extract and preserve table headers (first row of markdown tables)
+        const tableHeaders = result.match(/\|[^\n]+\|/g);
+        const headerLine = tableHeaders && tableHeaders.length > 0 ? `\nTable: ${tableHeaders[0]}` : '';
+
+        // Take the first and last portions, preserving boundaries
+        const headBudget = Math.floor((maxLen - urlBlock.length - headerLine.length) * 0.6);
+        const tailBudget = maxLen - headBudget - urlBlock.length - headerLine.length - 30;
+
+        const head = result.substring(0, headBudget);
+        const tail = tailBudget > 50 ? result.substring(result.length - tailBudget) : '';
+
+        return `${head}\n...[COMPACTED ${result.length - maxLen} chars]...\n${tail}${urlBlock}${headerLine}`;
+    }
+
     async processUserRequest(prompt: string, imagesBase64: string[] = []): Promise<string> {
         this.resetCancel(); // Clear any previous cancel flag
         console.log(`\n[Manager] Analyzing request: "${prompt}"`);
@@ -306,7 +332,9 @@ Example output:
                         result: result
                     }));
 
-                    globalContext.push(`Task ${taskId} Result from ${step.role}: ${result}`);
+                    // Compact result to prevent unbounded context growth in multi-step plans
+                    const compacted = this.compactResult(result);
+                    globalContext.push(`Task ${taskId} (${step.role}): ${compacted}`);
                     finalOutput = result;
 
                 } else if (step.type === 'parallel' && step.subtasks) {
@@ -335,11 +363,13 @@ Example output:
                             result: result
                         }));
 
-                        return `Parallel Task ${taskId} Result from ${subtask.role}: ${result}`;
+                        return `${subtask.role}: ${result}`;
                     });
 
                     const parallelResults = await Promise.all(promises);
-                    globalContext.push(`Parallel Block '${step.name}' Results:\n${parallelResults.join('\n\n')}`);
+                    // Compact parallel results before pushing to context
+                    const compactedParallel = parallelResults.map(r => this.compactResult(r)).join('\n---\n');
+                    globalContext.push(`Parallel Block '${step.name}': ${compactedParallel}`);
                     finalOutput = parallelResults.join('\n\n');
                 }
             }

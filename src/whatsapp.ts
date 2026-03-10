@@ -764,7 +764,7 @@ export async function startWhatsApp() {
 
         // --- MESSAGE LOGGING & FIREWALL ---
         console.log(`[You] 📱 (WhatsApp) ${textMessage}`);
-        logMemory('User', `📱 (WhatsApp) ${textMessage}`);
+        logMemory('User', textMessage, 'whatsapp');
 
         // Extract Media Payload
         let mediaBase64String: string | undefined = undefined;
@@ -885,7 +885,7 @@ export async function startWhatsApp() {
             if (cleanResponse.length > 0) {
                 // Broadcast to Web Dashboard UI!
                 console.log(`[Agent] ${cleanResponse.trim()}`);
-                logMemory('Agent', cleanResponse.trim());
+                logMemory('Agent', cleanResponse.trim(), 'whatsapp');
 
                 // If a voice note was already sent by the Worker, don't send a duplicate text reply
                 const lowerResponse = cleanResponse.toLowerCase();

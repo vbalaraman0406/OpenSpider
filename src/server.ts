@@ -179,7 +179,7 @@ export function startServer() {
                     console.log(`\n\n[Web Chat] Received message: ${parsed.text}`);
 
                     // Log user message to session memory
-                    logMemory('User', parsed.text);
+                    logMemory('User', parsed.text, 'dashboard');
 
                     // Extract attached images (base64 data URLs) if present
                     const images: string[] = parsed.images || [];
@@ -240,7 +240,7 @@ export function startServer() {
                     const response = await manager.processUserRequest(userText, images);
 
                     // Log agent response to session memory
-                    logMemory('Agent', response);
+                    logMemory('Agent', response, 'dashboard');
 
                     // Send final result
                     const chatResponseEvent = {

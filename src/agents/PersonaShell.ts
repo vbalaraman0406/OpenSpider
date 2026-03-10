@@ -182,7 +182,14 @@ export class PersonaShell {
         prompt += `[USER CONTEXT]\n${user}\n\n`;
 
         if (caps && Object.keys(caps).length > 0) {
-            prompt += `[CAPABILITIES & LOADOUT]\n${JSON.stringify(caps, null, 2)}\n\n`;
+            // Only inject LLM-relevant fields — strip operational metadata to save tokens
+            const llmCaps: any = {};
+            if (caps.name) llmCaps.name = caps.name;
+            if (caps.role) llmCaps.role = caps.role;
+            if (caps.description) llmCaps.description = caps.description;
+            if (caps.emoji) llmCaps.emoji = caps.emoji;
+            if (caps.allowedTools || caps.tools) llmCaps.tools = caps.allowedTools || caps.tools;
+            prompt += `[CAPABILITIES]\n${JSON.stringify(llmCaps)}\n\n`;
         }
 
         return prompt;

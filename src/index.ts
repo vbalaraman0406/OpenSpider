@@ -5,7 +5,7 @@ import 'dotenv/config'; // Automatically loads .env if it exists
 import { runSetup } from './setup';
 import { startServer } from './server';
 import { startWhatsApp } from './whatsapp';
-import { initWorkspace } from './memory';
+import { initWorkspace, cleanupOldMemoryLogs, compactYesterdayLog } from './memory';
 
 export async function bootstrap() {
     console.clear();
@@ -34,6 +34,11 @@ export async function bootstrap() {
     // 2. Start the API & WebSocket Dashboard Server
     console.log("Initializing Workspace & Dashboard API Server...");
     initWorkspace();
+
+    // Memory maintenance: clean old logs and compact yesterday's conversation
+    cleanupOldMemoryLogs(30);
+    compactYesterdayLog();
+
     startServer();
 
     // 3. Start the WhatsApp Gateway conditionally

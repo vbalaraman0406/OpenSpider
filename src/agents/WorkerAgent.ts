@@ -35,14 +35,17 @@ export class WorkerAgent {
                 const workerProfile = agents.find((a: any) => a.role.toLowerCase().includes(this.role.toLowerCase()) || a.name.toLowerCase() === this.role.toLowerCase());
 
                 if (workerProfile && workerProfile.skills && workerProfile.skills.length > 0) {
-                    assignedSkillsContext = "\\n\\nYOUR ASSIGNED SKILLS:\\nYou have access to the following specialized tools. To use them, invoke `execute_script` with the listed filename.\\n";
+                    // Lazy loading: inject only skill names + filenames to save tokens.
+                    // Full metadata is available via execute_script --help at runtime.
+                    assignedSkillsContext = "\n\nYOUR ASSIGNED SKILLS:\nYou have these specialized Python scripts. Use `execute_script` with the filename to run them.\n";
                     const skillsDir = path.join(process.cwd(), 'skills');
                     for (const skill of workerProfile.skills) {
                         try {
                             const metadata = JSON.parse(fs.readFileSync(path.join(skillsDir, `${skill}.json`), 'utf-8'));
-                            assignedSkillsContext += `\\n### Skill: ${skill}\\nFile: ${skill}.py\\nDescription: ${metadata.description}\\nInstructions: ${metadata.instructions}\\n`;
+                            assignedSkillsContext += `- ${skill}.py — ${metadata.description || skill}\n`;
                         } catch (e) { }
                     }
+                    assignedSkillsContext += "\nTo see full usage for any skill, run: execute_script with filename \"<skill>.py\" and args \"--help\"\n";
                 }
             }
         } catch (e) { console.error("Could not load worker profile."); }

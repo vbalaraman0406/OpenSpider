@@ -109,7 +109,7 @@ export function readMemoryContext(): string {
 }
 
 
-export function logMemory(sender: 'User' | 'Agent', message: string) {
+export function logMemory(sender: 'User' | 'Agent', message: string, channel?: 'whatsapp' | 'dashboard' | 'cron') {
     initWorkspace();
     const now = new Date();
     const todayStr = now.toISOString().split('T')[0];
@@ -118,6 +118,96 @@ export function logMemory(sender: 'User' | 'Agent', message: string) {
     // Truncate very long messages (huge error traces, massive API dumps) to prevent context bloat
     // Raised from 500 to 4000 to preserve links, tables, and structured agent responses
     const truncated = message.length > 4000 ? message.slice(0, 4000) + '...[TRUNCATED]' : message;
-    const logEntry = `[${now.toLocaleTimeString()}] **${sender}**: ${truncated}\n\n`;
+
+    // Channel tag for cross-channel awareness
+    const channelTag = channel === 'whatsapp' ? ' 📱' : channel === 'dashboard' ? ' 🖥️' : channel === 'cron' ? ' ⏰' : '';
+
+    const logEntry = `[${now.toLocaleTimeString()}] **${sender}**${channelTag}: ${truncated}\n\n`;
     fs.appendFileSync(todayPath, logEntry, 'utf-8');
+}
+
+
+/**
+ * Memory Retention Policy: auto-delete old daily logs to prevent unbounded disk growth.
+ * Keeps the last 30 days, called during workspace initialization.
+ */
+export function cleanupOldMemoryLogs(retentionDays: number = 30) {
+    try {
+        if (!fs.existsSync(MEMORY_DIR)) return;
+
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - retentionDays);
+        const cutoffStr = cutoff.toISOString().split('T')[0]!;
+
+        let cleaned = 0;
+        for (const file of fs.readdirSync(MEMORY_DIR)) {
+            // Only touch YYYY-MM-DD.md files
+            if (!/^\d{4}-\d{2}-\d{2}\.md$/.test(file)) continue;
+            const fileDate = file.replace('.md', '');
+            if (fileDate < cutoffStr) {
+                fs.unlinkSync(path.join(MEMORY_DIR, file));
+                cleaned++;
+            }
+        }
+
+        if (cleaned > 0) {
+            console.log(`[Memory] Retention cleanup: removed ${cleaned} log file(s) older than ${retentionDays} days.`);
+        }
+    } catch (e) {
+        console.error("[Memory] Retention cleanup error:", e);
+    }
+}
+
+
+/**
+ * End-of-day compaction: compress yesterday's raw conversation log into
+ * a compact digest. Removes redundant timestamps and intermediate system
+ * messages, keeping only User/Agent exchanges.
+ * Called once per day during workspace initialization.
+ */
+export function compactYesterdayLog() {
+    try {
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const dateStr = yesterday.toISOString().split('T')[0]!;
+        const logPath = path.join(MEMORY_DIR, `${dateStr}.md`);
+        const compactedMarker = '[COMPACTED]';
+
+        if (!fs.existsSync(logPath)) return;
+
+        const raw = fs.readFileSync(logPath, 'utf-8');
+
+        // Skip if already compacted or too small to bother
+        if (raw.startsWith(compactedMarker) || raw.length < 2000) return;
+
+        // Extract User/Agent lines, strip timestamps, deduplicate
+        const lines = raw.split('\n');
+        const exchanges: string[] = [];
+        const seen = new Set<string>();
+
+        for (const line of lines) {
+            const match = line.match(/\[.*?\] \*\*(User|Agent)\*\*(.*?):\s*(.*)/);
+            if (match) {
+                const [, sender, channelTag, content] = match;
+                const key = `${sender}:${content!.substring(0, 100)}`;
+                if (!seen.has(key)) {
+                    seen.add(key);
+                    // Compact: remove timestamp, keep sender + channel + short content
+                    const shortContent = content!.length > 300 ? content!.substring(0, 300) + '...' : content!;
+                    exchanges.push(`**${sender}**${channelTag}: ${shortContent}`);
+                }
+            }
+        }
+
+        if (exchanges.length === 0) return;
+
+        const compacted = `${compactedMarker} ${dateStr} — ${exchanges.length} exchanges\n\n${exchanges.join('\n')}\n`;
+        fs.writeFileSync(logPath, compacted, 'utf-8');
+
+        const savings = Math.round((1 - compacted.length / raw.length) * 100);
+        console.log(`[Memory] Compacted ${dateStr} log: ${raw.length} → ${compacted.length} chars (${savings}% reduction, ${exchanges.length} exchanges kept).`);
+
+    } catch (e) {
+        console.error("[Memory] Compaction error:", e);
+    }
 }
