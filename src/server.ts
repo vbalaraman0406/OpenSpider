@@ -580,6 +580,67 @@ export function startServer() {
         }
     });
 
+    // Map a WhatsApp LID to a phone number in the allowlist
+    // Used when Baileys can't automatically resolve LID↔phone mappings
+    app.post('/api/whatsapp/lid-map', (req, res) => {
+        try {
+            const { lid, phone } = req.body;
+            if (!lid || !phone) {
+                return res.status(400).json({ error: "Both 'lid' and 'phone' are required." });
+            }
+
+            const cleanLid = String(lid).replace(/\D/g, '');
+            const cleanPhone = String(phone).replace(/\D/g, '');
+
+            if (!fs.existsSync(whatsappConfigPath)) {
+                return res.status(404).json({ error: "WhatsApp config not found. Configure WhatsApp first." });
+            }
+
+            const config = JSON.parse(fs.readFileSync(whatsappConfigPath, 'utf-8'));
+            const dms = config.allowedDMs || [];
+            let mapped = false;
+
+            // Find matching phone entry and add LID
+            for (let i = 0; i < dms.length; i++) {
+                const entry = dms[i];
+                const entryNum = (typeof entry === 'string' ? entry : entry?.number || '').replace(/\D/g, '');
+                if (entryNum === cleanPhone) {
+                    if (typeof dms[i] === 'string') {
+                        // Upgrade from legacy string to object format
+                        dms[i] = { number: dms[i], lid: cleanLid, mode: 'always' };
+                    } else {
+                        dms[i].lid = cleanLid;
+                    }
+                    mapped = true;
+                    break;
+                }
+            }
+
+            if (!mapped) {
+                // Phone not in allowlist — add it with LID
+                dms.push({ number: cleanPhone, lid: cleanLid, mode: 'always' });
+            }
+
+            config.allowedDMs = dms;
+            fs.writeFileSync(whatsappConfigPath, JSON.stringify(config, null, 2), 'utf-8');
+
+            // Also update lid_cache.json for the in-memory cache
+            try {
+                const rootDir = __dirname.endsWith('src') || __dirname.endsWith('dist') ? path.join(__dirname, '..') : __dirname;
+                const cachePath = path.join(rootDir, 'workspace', 'lid_cache.json');
+                let cache: Record<string, string> = {};
+                if (fs.existsSync(cachePath)) cache = JSON.parse(fs.readFileSync(cachePath, 'utf-8'));
+                cache[cleanLid] = cleanPhone;
+                fs.writeFileSync(cachePath, JSON.stringify(cache, null, 2), 'utf-8');
+            } catch (e) { /* non-critical */ }
+
+            console.log(`[API] LID mapped: ${cleanLid} → ${cleanPhone}`);
+            res.json({ success: true, message: `LID ${cleanLid} mapped to phone ${cleanPhone}. Restart gateway to apply.` });
+        } catch (e: any) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
     // API Route to fetch aggregated usage summary
     app.get('/api/usage', (req, res) => {
         try {
