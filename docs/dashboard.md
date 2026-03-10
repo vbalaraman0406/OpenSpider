@@ -12,7 +12,7 @@ Or navigate to [http://localhost:4001](http://localhost:4001) in your browser.
 
 ## Version Badge
 
-The dashboard displays the current OpenSpider version (e.g. **v2.0.0**) next to the logo in the sidebar. The version is fetched live from the `/api/health` endpoint and reflects what's in `package.json`.
+The dashboard displays the current OpenSpider version (e.g. **v2.2.0**) next to the logo in the sidebar. The version is fetched live from the `/api/health` endpoint and reflects what's in `package.json`.
 
 ## Theme Toggle 🎨
 
@@ -114,8 +114,12 @@ Visual interface for managing WhatsApp access controls:
 - **DM Allowlist** — Add/remove permitted phone numbers
 - **Group Allowlist** — Add/remove permitted groups
 - **Per-group mode toggles** — Switch each group between Mention and Listen mode
+- **LID Identity Mappings** — View pending blocked LIDs and assign phone numbers. When an unknown LID tries to DM, it appears here as a pending amber card. Type the phone number and click "Map" to allow access. Resolved mappings are listed with delete buttons.
 - **Voice Settings** — Configure ElevenLabs voice responses (see [Voice Messages](/voice))
-- Changes save directly to `workspace/whatsapp_config.json`
+- **Email Notification Settings** — Configure email recipients:
+  - **Cron Job Results To** — Email address where automated cron job results are delivered
+  - **Vendor & Friends To** — Default email address for outbound emails to vendors/contacts
+- Changes save directly to `workspace/whatsapp_config.json` and `workspace/email_config.json`
 
 ### Cron Jobs ⏰
 
@@ -162,8 +166,9 @@ The dashboard is a single-page React application:
 
 | Component | File | Description |
 |---|---|---|
-| Main App | `dashboard/src/App.tsx` | All tabs and views (~2300 lines) |
-| WhatsApp Security | `dashboard/src/components/WhatsAppSecurity.tsx` | Channel config UI |
+| Main App | `dashboard/src/App.tsx` | All tabs and views (~2450 lines) |
+| WhatsApp Security | `dashboard/src/components/WhatsAppSecurity.tsx` | Channel config + LID mapping UI |
+| Email Settings | `dashboard/src/components/EmailSettings.tsx` | Email notification config |
 | Voice Settings | `dashboard/src/components/VoiceSettings.tsx` | ElevenLabs voice config |
 | Agent Flow Graph | `dashboard/src/components/AgentFlowGraph.tsx` | Mermaid flow visualization |
 | Usage View | `dashboard/src/components/UsageView.tsx` | Token usage analytics |
@@ -189,6 +194,12 @@ The dashboard connects to the server via WebSocket for:
 | `/api/cron` | GET | Cron job configurations |
 | `/api/processes` | GET | Running processes |
 | `/api/whatsapp/config` | GET | WhatsApp security config |
+| `/api/whatsapp/lid-mappings` | GET | All LID→phone mappings |
+| `/api/whatsapp/lid-pending` | GET | Unmapped pending LIDs |
+| `/api/whatsapp/lid-map` | POST | Add a LID→phone mapping |
+| `/api/whatsapp/lid-map/:lid` | DELETE | Remove a LID mapping |
+| `/api/email/config` | GET | Email notification settings |
+| `/api/email/config` | POST | Save email notification settings |
 | `/api/voice/config` | GET | Voice response config |
 
 ### Build & Serve

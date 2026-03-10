@@ -157,6 +157,84 @@ Changes made in the dashboard are saved directly to `workspace/whatsapp_config.j
 
 See [Dashboard](/dashboard) for more details.
 
+## LID Identity Resolution
+
+WhatsApp has migrated DMs from phone-based JIDs (`1234@s.whatsapp.net`) to LID-based JIDs (`177472511426665@lid`). OpenSpider's firewall handles this seamlessly through a multi-layer resolution system.
+
+### How It Works
+
+When an incoming DM arrives from an `@lid` JID, OpenSpider resolves it through 4 layers:
+
+1. **LID Cache Lookup** — checks `workspace/lid_cache.json` for a known mapping
+2. **Config Field Match** — checks if any `allowedDMs` entry has a matching `lid` field
+3. **Group Participant Scan** — cross-references the LID against group participant lists
+4. **Block + Admin Notify** — if all layers fail, the message is blocked and the admin receives a WhatsApp notification with:
+   - The LID number
+   - The sender's push name
+   - A ready-to-use `map <LID> <PHONE>` command
+
+### Mapping LIDs (3 Methods)
+
+**1. Dashboard UI (recommended)**
+
+Navigate to **Channels → Configure WhatsApp → LID Identity Mappings**. Pending blocked LIDs appear as amber cards. Type the phone number and click **Map**.
+
+**2. WhatsApp Command**
+
+Reply to the bot via WhatsApp DM:
+
+```
+map 177472511426665 61423475992
+```
+
+The admin (first entry in `allowedDMs`) can send this command. The bot confirms with ✅.
+
+**3. CLI Command**
+
+```bash
+openspider lid-map 177472511426665 61423475992
+```
+
+Maps the LID to the phone number via the running gateway API.
+
+### LID Configuration Files
+
+| File | Purpose |
+|---|---|
+| `workspace/lid_cache.json` | Persistent LID→phone mappings |
+| `workspace/lid_notified_cache.json` | LIDs already notified to admin (dedup, survives restarts) |
+| `workspace/whatsapp_config.json` | `allowedDMs[].lid` field on mapped contacts |
+
+## Email Notification Settings
+
+Configure email delivery for automated outputs and outbound emails.
+
+### Dashboard Configuration
+
+In **Channels → Configure WhatsApp → Email Notification Settings**, set:
+
+| Field | Purpose |
+|---|---|
+| **Cron Job Results To** | Email address where automated cron job results are delivered |
+| **Vendor & Friends To** | Default email address for outbound emails to vendors/contacts |
+
+Leave a field empty to disable that email destination.
+
+Settings are stored in `workspace/email_config.json`.
+
+### API
+
+```bash
+# Read current config
+curl http://localhost:4001/api/email/config -H "x-api-key: YOUR_KEY"
+
+# Save config
+curl -X POST http://localhost:4001/api/email/config \
+  -H "x-api-key: YOUR_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"cronResultsTo":"admin@example.com","vendorEmailTo":"vendor@example.com"}'
+```
+
 ## Message Handling Flow
 
 ```

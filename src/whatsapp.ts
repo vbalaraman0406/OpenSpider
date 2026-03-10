@@ -72,7 +72,71 @@ function resolvePhoneFromLid(lid: string): string | undefined {
 }
 
 // Track which LIDs we've already notified the admin about (avoid spamming)
+// Persisted to disk so dedup survives gateway restarts.
 const lidNotifiedCache = new Set<string>();
+
+function getLidNotifiedCachePath(): string {
+    const rootDir = __dirname.endsWith('src') || __dirname.endsWith('dist') ? path.join(__dirname, '..') : __dirname;
+    return path.join(rootDir, 'workspace', 'lid_notified_cache.json');
+}
+
+function loadLidNotifiedCache() {
+    try {
+        const cachePath = getLidNotifiedCachePath();
+        if (fs.existsSync(cachePath)) {
+            const data = JSON.parse(fs.readFileSync(cachePath, 'utf-8'));
+            if (Array.isArray(data)) {
+                for (const lid of data) lidNotifiedCache.add(lid);
+                console.log(`[LID Notified Cache] Loaded ${lidNotifiedCache.size} notified LIDs from disk.`);
+            }
+        }
+    } catch (e) { /* fresh install, no cache yet */ }
+}
+
+let lidNotifiedDirty = false;
+let lidNotifiedFlushTimer: ReturnType<typeof setTimeout> | null = null;
+
+function saveLidNotifiedCache() {
+    lidNotifiedDirty = true;
+    if (!lidNotifiedFlushTimer) {
+        lidNotifiedFlushTimer = setTimeout(() => {
+            try {
+                fs.writeFileSync(getLidNotifiedCachePath(), JSON.stringify([...lidNotifiedCache], null, 2), 'utf-8');
+                lidNotifiedDirty = false;
+            } catch (e) { /* non-critical */ }
+            lidNotifiedFlushTimer = null;
+        }, 2000); // Debounce: flush at most every 2s
+    }
+}
+
+// Export for API access
+export function getLidMappings(): Record<string, string> {
+    const obj: Record<string, string> = {};
+    for (const [lid, phone] of lidPhoneCache.entries()) obj[lid] = phone;
+    return obj;
+}
+
+export function removeLidMapping(lid: string): boolean {
+    const cleanLid = lid.split('@')[0]!.split(':')[0]!;
+    const phone = lidPhoneCache.get(cleanLid);
+    if (!phone && !lidPhoneCache.has(cleanLid)) return false;
+    lidPhoneCache.delete(cleanLid);
+    if (phone) phoneLidCache.delete(phone);
+    saveLidCache();
+    return true;
+}
+
+// Returns LIDs that tried to DM but haven't been mapped yet (pending admin action)
+export function getPendingLids(): string[] {
+    const pending: string[] = [];
+    for (const lid of lidNotifiedCache) {
+        const cleanLid = lid.split('@')[0]!.split(':')[0]!;
+        if (!lidPhoneCache.has(cleanLid)) {
+            pending.push(cleanLid);
+        }
+    }
+    return pending;
+}
 
 // Stores the proto content of sent messages so Baileys can re-relay them on retry requests.
 // Without this, getMessage returns undefined and Baileys gives up on retries silently.
@@ -505,6 +569,7 @@ export async function startWhatsApp() {
     //   3. messaging-history.set — historical message sync
     // ═══════════════════════════════════════════════════════════════════════════
     loadLidCache();
+    loadLidNotifiedCache();
 
     sock.ev.on('contacts.upsert', (contacts: any[]) => {
         for (const c of contacts) {
@@ -913,6 +978,7 @@ export async function startWhatsApp() {
                             // Notify admin with easy map command (once per LID)
                             if (!lidNotifiedCache.has(senderRaw)) {
                                 lidNotifiedCache.add(senderRaw);
+                                saveLidNotifiedCache();
                                 try {
                                     const ownerCfg = config.allowedDMs[0];
                                     const ownerNum = (typeof ownerCfg === 'string' ? ownerCfg : ownerCfg?.number || '').replace(/\D/g, '');

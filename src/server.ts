@@ -641,6 +641,130 @@ export function startServer() {
         }
     });
 
+    // List all LID↔phone mappings (for dashboard UI)
+    app.get('/api/whatsapp/lid-mappings', (req, res) => {
+        try {
+            const { getLidMappings } = require('./whatsapp');
+            const mappings = getLidMappings();
+
+            // Also include LID fields from whatsapp_config.json allowedDMs
+            if (fs.existsSync(whatsappConfigPath)) {
+                const config = JSON.parse(fs.readFileSync(whatsappConfigPath, 'utf-8'));
+                const dms = config.allowedDMs || [];
+                for (const entry of dms) {
+                    if (typeof entry === 'object' && entry.lid && entry.number) {
+                        const cleanLid = String(entry.lid).replace(/\D/g, '');
+                        const cleanPhone = String(entry.number).replace(/\D/g, '');
+                        if (cleanLid && cleanPhone && !mappings[cleanLid]) {
+                            mappings[cleanLid] = cleanPhone;
+                        }
+                    }
+                }
+            }
+
+            res.json({ mappings });
+        } catch (e: any) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    // Get pending (unmapped) LIDs that tried to DM
+    app.get('/api/whatsapp/lid-pending', (req, res) => {
+        try {
+            const { getPendingLids } = require('./whatsapp');
+            const pending = getPendingLids();
+            res.json({ pending });
+        } catch (e: any) {
+            res.json({ pending: [] }); // Gracefully degrade if whatsapp module not loaded
+        }
+    });
+
+    // Remove a LID mapping
+    app.delete('/api/whatsapp/lid-map/:lid', (req, res) => {
+        try {
+            const lid = req.params.lid.replace(/\D/g, '');
+            if (!lid) return res.status(400).json({ error: 'Invalid LID' });
+
+            const { removeLidMapping } = require('./whatsapp');
+            removeLidMapping(lid);
+
+            // Also remove from whatsapp_config.json allowedDMs[].lid
+            if (fs.existsSync(whatsappConfigPath)) {
+                const config = JSON.parse(fs.readFileSync(whatsappConfigPath, 'utf-8'));
+                const dms = config.allowedDMs || [];
+                for (const entry of dms) {
+                    if (typeof entry === 'object' && entry.lid && String(entry.lid).replace(/\D/g, '') === lid) {
+                        delete entry.lid;
+                    }
+                }
+                config.allowedDMs = dms;
+                fs.writeFileSync(whatsappConfigPath, JSON.stringify(config, null, 2), 'utf-8');
+            }
+
+            // Also remove from lid_cache.json
+            try {
+                const rootDir = __dirname.endsWith('src') || __dirname.endsWith('dist') ? path.join(__dirname, '..') : __dirname;
+                const cachePath = path.join(rootDir, 'workspace', 'lid_cache.json');
+                if (fs.existsSync(cachePath)) {
+                    const cache = JSON.parse(fs.readFileSync(cachePath, 'utf-8'));
+                    delete cache[lid];
+                    fs.writeFileSync(cachePath, JSON.stringify(cache, null, 2), 'utf-8');
+                }
+            } catch (e) { /* non-critical */ }
+
+            console.log(`[API] LID mapping removed: ${lid}`);
+            res.json({ success: true, message: `LID ${lid} mapping removed.` });
+        } catch (e: any) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    // --- EMAIL CONFIG ENDPOINTS ---
+    const emailConfigPath = path.join(process.cwd(), 'workspace', 'email_config.json');
+
+    app.get('/api/email/config', (req, res) => {
+        try {
+            if (!fs.existsSync(emailConfigPath)) {
+                return res.json({ cronResultsTo: '', vendorEmailTo: '' });
+            }
+            const config = JSON.parse(fs.readFileSync(emailConfigPath, 'utf-8'));
+            res.json(config);
+        } catch (e: any) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    app.post('/api/email/config', (req, res) => {
+        try {
+            const { cronResultsTo, vendorEmailTo } = req.body;
+
+            // Basic email validation (allow empty = unset)
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (cronResultsTo && !emailRegex.test(cronResultsTo)) {
+                return res.status(400).json({ error: 'Invalid cronResultsTo email address.' });
+            }
+            if (vendorEmailTo && !emailRegex.test(vendorEmailTo)) {
+                return res.status(400).json({ error: 'Invalid vendorEmailTo email address.' });
+            }
+
+            const newConfig = {
+                cronResultsTo: cronResultsTo || '',
+                vendorEmailTo: vendorEmailTo || ''
+            };
+
+            // Ensure workspace directory exists
+            const wsDir = path.join(process.cwd(), 'workspace');
+            if (!fs.existsSync(wsDir)) fs.mkdirSync(wsDir, { recursive: true });
+
+            fs.writeFileSync(emailConfigPath, JSON.stringify(newConfig, null, 2), 'utf-8');
+
+            console.log(`[API] Email config saved: cronResultsTo=${newConfig.cronResultsTo}, vendorEmailTo=${newConfig.vendorEmailTo}`);
+            res.json({ success: true, config: newConfig });
+        } catch (e: any) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
     // API Route to fetch aggregated usage summary
     app.get('/api/usage', (req, res) => {
         try {

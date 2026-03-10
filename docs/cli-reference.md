@@ -101,13 +101,29 @@ openspider status
 ```
 🕷️  OpenSpider Status
 ──────────────────────────────────────────────────
-Version:          v2.0.2
+Version:          v2.2.0
 Provider:         anthropic
 API Port:         4001
 Dashboard:        http://localhost:4001
 ──────────────────────────────────────────────────
 Gateway:          ✅ online  (uptime: 142 min, restarts: 0)
 ```
+
+---
+
+### `openspider lid-map <LID> <PHONE>`
+
+Map a WhatsApp LID (Linked Identity) to a phone number in the allowlist via the running gateway.
+
+```bash
+openspider lid-map 177472511426665 61423475992
+```
+
+The command sends a POST request to the running gateway's `/api/whatsapp/lid-map` endpoint. Requires the gateway to be running.
+
+::: tip
+You typically don't need to know the LID number yourself. Use the **Dashboard UI** (Channels → Configure WhatsApp → LID Identity Mappings) to see pending LIDs and assign phone numbers visually.
+:::
 
 ---
 
@@ -281,6 +297,7 @@ openspider <command> --help
 | `channels whatsapp login` | Direct WhatsApp connection |
 | `tools email setup` | Gmail OAuth setup |
 | `tools email test` | Send test email |
+| `lid-map <LID> <PHONE>` | Map a WhatsApp LID to phone |
 | `webhooks gmail setup` | GCP Pub/Sub setup |
 | `webhooks gmail run` | Start webhook listener |
 | `models list` | Show configured models |

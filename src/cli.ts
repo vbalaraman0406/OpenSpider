@@ -15,7 +15,7 @@ const program = new Command();
 program
     .name('openspider')
     .description('Autonomous Multi-Agent System tailored for WhatsApp')
-    .version('2.0.2');
+    .version('2.2.0');
 
 program
     .command('onboard')
@@ -883,6 +883,59 @@ program
             console.log('Copy and paste this into the OpenSpider Browser Relay Chrome Extension.');
         }
         process.exit(0);
+    });
+
+program
+    .command('lid-map <lid> <phone>')
+    .description('Map a WhatsApp LID to a phone number in the allowlist')
+    .action((lid: string, phone: string) => {
+        const rootDir = __dirname.endsWith('src') ? path.join(__dirname, '..') : path.join(__dirname, '..');
+        const envPath = path.join(rootDir, '.env');
+        require('dotenv').config({ path: envPath });
+
+        const port = process.env.PORT || '4001';
+        const apiKey = process.env.DASHBOARD_API_KEY || '';
+        const http = require('http');
+
+        const payload = JSON.stringify({ lid, phone });
+        const options = {
+            hostname: 'localhost',
+            port: parseInt(port),
+            path: '/api/whatsapp/lid-map',
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': apiKey,
+                'Content-Length': Buffer.byteLength(payload)
+            }
+        };
+
+        const req = http.request(options, (res: any) => {
+            let body = '';
+            res.on('data', (chunk: any) => body += chunk);
+            res.on('end', () => {
+                try {
+                    const result = JSON.parse(body);
+                    if (result.success) {
+                        console.log(`\n✅ ${result.message}`);
+                    } else {
+                        console.error(`\n❌ ${result.error || 'Unknown error'}`);
+                    }
+                } catch (e) {
+                    console.error(`\n❌ Failed to parse response: ${body}`);
+                }
+                process.exit(0);
+            });
+        });
+
+        req.on('error', (e: Error) => {
+            console.error(`\n❌ Could not reach OpenSpider gateway at localhost:${port}.`);
+            console.error('   Is the gateway running? Start it with: openspider start');
+            process.exit(1);
+        });
+
+        req.write(payload);
+        req.end();
     });
 
 program.parse(process.argv);

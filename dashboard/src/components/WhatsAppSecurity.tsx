@@ -389,7 +389,184 @@ export function WhatsAppSecurity({ isRunning }: { isRunning: boolean }) {
                 </div>
             </div>
 
+            {/* LID Identity Mappings Card */}
+            <LidMappingsPanel />
+
             {/* Global Bot Attention Span removed — now per-group via individual toggles above */}
         </div>
     );
 }
+
+function LidMappingsPanel() {
+    const [mappings, setMappings] = useState<Record<string, string>>({});
+    const [pendingLids, setPendingLids] = useState<string[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [phoneInputs, setPhoneInputs] = useState<Record<string, string>>({});
+    const [error, setError] = useState('');
+    const [successMsg, setSuccessMsg] = useState('');
+
+    const fetchAll = async () => {
+        try {
+            const [mappingsRes, pendingRes] = await Promise.all([
+                apiFetch('/api/whatsapp/lid-mappings'),
+                apiFetch('/api/whatsapp/lid-pending')
+            ]);
+            const mappingsData = await mappingsRes.json();
+            const pendingData = await pendingRes.json();
+            setMappings(mappingsData.mappings || {});
+            setPendingLids(pendingData.pending || []);
+        } catch (e) {
+            console.error("Failed to fetch LID data", e);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    useEffect(() => { fetchAll(); }, []);
+
+    const handleMap = async (lid: string) => {
+        const phone = (phoneInputs[lid] || '').trim().replace(/\D/g, '');
+        if (!phone || phone.length < 5) { setError(`Enter a valid phone number (5+ digits) for LID ${lid}.`); return; }
+
+        try {
+            const res = await apiFetch('/api/whatsapp/lid-map', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ lid, phone })
+            });
+            const data = await res.json();
+            if (data.success) {
+                setPhoneInputs(prev => { const n = { ...prev }; delete n[lid]; return n; });
+                setError('');
+                setSuccessMsg(`Mapped LID ${lid} → +${phone}`);
+                setTimeout(() => setSuccessMsg(''), 3000);
+                fetchAll();
+            } else {
+                setError(data.error || 'Failed to add mapping');
+            }
+        } catch (e) {
+            setError('Network error — is the gateway running?');
+        }
+    };
+
+    const handleRemove = async (lid: string) => {
+        try {
+            await apiFetch(`/api/whatsapp/lid-map/${lid}`, { method: 'DELETE' });
+            fetchAll();
+        } catch (e) { }
+    };
+
+    const entries = Object.entries(mappings);
+
+    return (
+        <div className="bg-slate-950/50 rounded-2xl border border-slate-800 p-6 flex flex-col shadow-inner mt-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 rounded-lg border bg-violet-500/10 text-violet-400 border-violet-500/20 flex items-center justify-center">
+                    <Fingerprint className="w-5 h-5" />
+                </div>
+                <div>
+                    <h4 className="text-base font-bold text-white">LID Identity Mappings</h4>
+                    <p className="text-xs text-slate-500">Resolve WhatsApp Linked Identity JIDs to phone numbers</p>
+                </div>
+                <div className="ml-auto flex gap-2">
+                    {pendingLids.length > 0 && (
+                        <div className="text-xs text-amber-400 font-bold bg-amber-500/10 px-2 py-1 rounded border border-amber-500/20 animate-pulse">
+                            {pendingLids.length} pending
+                        </div>
+                    )}
+                    <div className="text-xs text-slate-500 font-mono bg-slate-900 px-2 py-1 rounded border border-slate-800">
+                        {entries.length} mapped
+                    </div>
+                </div>
+            </div>
+
+            {isLoading ? (
+                <div className="text-center text-slate-500 animate-pulse py-6">Loading mappings...</div>
+            ) : (
+                <>
+                    {/* Pending LIDs — need phone assignment */}
+                    {pendingLids.length > 0 && (
+                        <div className="mb-4">
+                            <div className="text-[10px] uppercase tracking-widest text-amber-400 font-bold mb-2 flex items-center gap-1.5">
+                                <AlertTriangle className="w-3 h-3" />
+                                Blocked — Awaiting Phone Assignment
+                            </div>
+                            <div className="flex flex-col gap-2">
+                                {pendingLids.map(lid => (
+                                    <div key={lid} className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-3 flex items-center gap-3">
+                                        <div className="min-w-0 flex-shrink-0">
+                                            <div className="text-amber-400 text-[10px] font-bold uppercase tracking-wider">LID</div>
+                                            <div className="text-slate-200 font-mono text-sm truncate max-w-[200px]" title={lid}>{lid}</div>
+                                        </div>
+                                        <span className="text-slate-600 shrink-0">→</span>
+                                        <input
+                                            type="text"
+                                            placeholder="Enter phone number..."
+                                            value={phoneInputs[lid] || ''}
+                                            onChange={e => setPhoneInputs(prev => ({ ...prev, [lid]: e.target.value }))}
+                                            onKeyDown={e => { if (e.key === 'Enter') handleMap(lid); }}
+                                            className="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 font-mono focus:ring-1 focus:ring-amber-500 focus:border-amber-500 outline-none placeholder:text-slate-600"
+                                        />
+                                        <button
+                                            onClick={() => handleMap(lid)}
+                                            className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-sm font-semibold transition-all shadow-md shadow-amber-900/30 border border-amber-500/50 whitespace-nowrap"
+                                        >
+                                            Map
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Existing mapped entries */}
+                    {entries.length > 0 && (
+                        <div className="flex flex-col gap-2 mb-4">
+                            <div className="text-[10px] uppercase tracking-widest text-emerald-400 font-bold mb-1 flex items-center gap-1.5">
+                                <CheckCircle className="w-3 h-3" />
+                                Resolved Mappings
+                            </div>
+                            {entries.map(([lid, phone]) => (
+                                <div key={lid} className="bg-slate-900/80 border border-slate-800 rounded-xl p-3 flex items-center justify-between gap-3 group hover:border-slate-700 transition-colors">
+                                    <div className="flex items-center gap-3 min-w-0 flex-1 font-mono text-sm">
+                                        <div className="min-w-0">
+                                            <div className="text-violet-400 text-xs font-bold uppercase tracking-wider">LID</div>
+                                            <div className="text-slate-200 truncate">{lid}</div>
+                                        </div>
+                                        <span className="text-slate-600 shrink-0">→</span>
+                                        <div className="min-w-0">
+                                            <div className="text-emerald-400 text-xs font-bold uppercase tracking-wider">Phone</div>
+                                            <div className="text-slate-200 truncate">+{phone}</div>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => handleRemove(lid)}
+                                        className="p-1.5 text-slate-600 hover:text-red-400 transition-colors rounded-lg hover:bg-red-500/10"
+                                        title="Remove mapping"
+                                    >
+                                        &times;
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {pendingLids.length === 0 && entries.length === 0 && (
+                        <div className="text-center text-slate-500 text-sm py-4 bg-slate-900/50 rounded-xl border border-slate-800/50 mb-4">
+                            No LID mappings yet. When someone DMs from an unknown LID, it will appear here for you to assign a phone number.
+                        </div>
+                    )}
+
+                    {error && <p className="text-xs text-red-500 font-medium mt-2 animate-in fade-in">{error}</p>}
+                    {successMsg && <p className="text-xs text-emerald-400 font-medium mt-2 animate-in fade-in">✓ {successMsg}</p>}
+
+                    <div className="text-[10px] text-slate-500 leading-snug flex items-start gap-1.5 mt-3 bg-slate-950/50 p-3 rounded-lg border border-slate-800">
+                        <Fingerprint className="w-3 h-3 shrink-0 mt-0.5" />
+                        <span>When an unknown LID tries to DM, it's blocked and shown here as <strong className="text-amber-400">pending</strong>. Type the phone number and click Map to allow. Or use WhatsApp: <strong className="text-violet-400">map &lt;LID&gt; &lt;PHONE&gt;</strong></span>
+                    </div>
+                </>
+            )}
+        </div>
+    );
+}
+

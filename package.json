@@ -1,6 +1,6 @@
 {
   "name": "openspider",
-  "version": "2.0.2",
+  "version": "2.2.0",
   "description": "Autonomous Multi-Agent System tailored for WhatsApp",
   "main": "src/index.ts",
   "bin": {

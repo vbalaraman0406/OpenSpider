@@ -6,6 +6,7 @@ import AgentFlowGraph, { AgentFlowEvent } from './components/AgentFlowGraph';
 import { UsageView } from './components/UsageView';
 import { WhatsAppSecurity } from './components/WhatsAppSecurity';
 import { VoiceSettings } from './components/VoiceSettings';
+import { EmailSettings } from './components/EmailSettings';
 import { ProcessMonitor } from './components/ProcessMonitor';
 
 // SECURITY: Authenticated fetch wrapper - attaches the dashboard API key to every request
@@ -2378,6 +2379,7 @@ export default function App() {
                                             <>
                                                 <WhatsAppSecurity isRunning={mockChannels.find(c => c.id === 'wa')?.status === 'running'} />
                                                 <VoiceSettings />
+                                                <EmailSettings />
                                             </>
                                         )}
                                     </div>
