@@ -679,8 +679,14 @@ export async function startWhatsApp() {
                 // Per-contact mention mode check
                 const contactMode = matchedContact.mode || 'always';
                 if (!isNoteToSelf && contactMode === 'mention') {
-                    const isMentionedViaText = new RegExp(`@\\s*${agentName}`, 'i').test(textMessage);
-                    if (!isMentionedViaText) {
+                    // Check both protobuf @mentions AND plain text @name (users often type @Name without using WhatsApp's suggestion popup)
+                    const mentionedJidList = msg.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
+                    const dmBotNumber = sock.user?.id ? sock.user.id.split(':')[0] : '';
+                    const dmBotJid = dmBotNumber ? `${dmBotNumber}@s.whatsapp.net` : '';
+                    const isTaggedViaJid = dmBotJid ? mentionedJidList.includes(dmBotJid) : false;
+                    // Permissive plain text match: allow zero-width spaces, unicode chars between @ and name
+                    const isMentionedViaText = new RegExp(`@[\\s\\u200b\\u200c]*${agentName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i').test(textMessage);
+                    if (!isTaggedViaJid && !isMentionedViaText) {
                         console.log(`[FIREWALL] Blocked: Contact mode is "mention", but @${agentName} was not found in: "${textMessage}"`);
                         return;
                     }
