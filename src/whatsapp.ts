@@ -639,6 +639,74 @@ export async function startWhatsApp() {
                             }
                         }
                     }
+
+                    // LID Reverse Resolution: if message is from @lid and no match found,
+                    // try to resolve the LID to a phone number using Baileys' store.
+                    // WhatsApp is gradually migrating DMs from phone-based to LID-based JIDs.
+                    if (!matchedContact && isLidJid) {
+                        try {
+                            // Approach: read Baileys auth store for lid-phone mappings
+                            const authDir = path.join(process.cwd(), 'baileys_auth_info');
+                            const storeFiles = fs.existsSync(authDir) ? fs.readdirSync(authDir) : [];
+                            
+                            // Baileys stores contact→LID mappings in its session files.
+                            // Scan for any file that maps this LID to a phone number.
+                            let resolvedPhone = '';
+                            
+                            for (const file of storeFiles) {
+                                if (!file.endsWith('.json')) continue;
+                                try {
+                                    const content = fs.readFileSync(path.join(authDir, file), 'utf-8');
+                                    // Check if this file references our LID sender
+                                    if (content.includes(senderRaw)) {
+                                        // Try to extract a phone number from the filename or content
+                                        // Baileys stores sessions as "<phone>.0.json" or "sender-key-<jid>.json"
+                                        const phoneMatch = file.match(/^(\d{10,15})\./);
+                                        if (phoneMatch && phoneMatch[1]) {
+                                            resolvedPhone = phoneMatch[1];
+                                            break;
+                                        }
+                                    }
+                                } catch (e) { /* skip unreadable files */ }
+                            }
+
+                            // If we resolved a phone number, retry the allowlist match
+                            if (resolvedPhone) {
+                                console.log(`[FIREWALL] LID ${senderRaw} resolved to phone ${resolvedPhone} via session store`);
+                                for (const entry of config.allowedDMs) {
+                                    const entryNum = (typeof entry === 'string' ? entry : entry.number || '').replace(/\D/g, '');
+                                    if (entryNum === resolvedPhone) {
+                                        matchedContact = typeof entry === 'string' ? { number: entry, mode: 'always' } : entry;
+                                        break;
+                                    }
+                                }
+                            }
+
+                            // Last resort: if still no match, try onWhatsApp to query the LID
+                            // and also just check if the sender is ANY known phone with matching LID
+                            if (!matchedContact) {
+                                // Try all allowlisted phones via Baileys onWhatsApp to find who owns this LID
+                                for (const entry of config.allowedDMs) {
+                                    const entryNum = (typeof entry === 'string' ? entry : entry.number || '').replace(/\D/g, '');
+                                    if (!entryNum) continue;
+                                    try {
+                                        const results = await sock.onWhatsApp(`${entryNum}@s.whatsapp.net`);
+                                        const result = results?.[0];
+                                        if (result && result.jid) {
+                                            const resultLid = result.jid!.split('@')[0]!.split(':')[0];
+                                            if (resultLid === senderRaw || result.jid!.includes(senderRaw)) {
+                                                console.log(`[FIREWALL] LID ${senderRaw} matched to allowlisted phone ${entryNum} via onWhatsApp lookup`);
+                                                matchedContact = typeof entry === 'string' ? { number: entry, lid: senderRaw, mode: 'always' } : { ...entry, lid: senderRaw };
+                                                break;
+                                            }
+                                        }
+                                    } catch (e) { /* skip failed lookups */ }
+                                }
+                            }
+                        } catch (e) {
+                            console.log(`[FIREWALL] LID resolution failed: ${(e as Error).message}`);
+                        }
+                    }
                 } else {
                     matchedContact = { number: 'self', mode: 'always' }; // Self-chat always passes
                 }
