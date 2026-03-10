@@ -689,6 +689,68 @@ export async function startWhatsApp() {
             }
         } catch (e) { console.error("[WhatsApp] Failed to load Security Config. Defaulting to strict."); }
 
+        // --- ADMIN COMMANDS (intercept before firewall) ---
+        // Admin can reply with commands like "map <LID> <PHONE>" to map LID→phone
+        if (!isGroup && !msg.key.fromMe) {
+            const ownerEntry = config.allowedDMs?.[0];
+            const ownerNum = (typeof ownerEntry === 'string' ? ownerEntry : ownerEntry?.number || '').replace(/\D/g, '');
+            const senderNum = msg.key.remoteJid?.split('@')[0]?.split(':')[0]?.replace(/\D/g, '') || '';
+
+            // Check if sender is the admin (first entry in allowlist) by phone or LID
+            const isAdmin = (ownerNum && senderNum === ownerNum) ||
+                            (typeof ownerEntry === 'object' && ownerEntry?.lid && ownerEntry.lid === senderNum);
+
+            if (isAdmin && textMessage) {
+                const mapMatch = textMessage.trim().match(/^map\s+(\d+)\s+(\d+)$/i);
+                if (mapMatch) {
+                    const [, mapLid, mapPhone] = mapMatch;
+                    try {
+                        const cfgPath = './workspace/whatsapp_config.json';
+                        const rawCfg = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
+                        const dms = rawCfg.allowedDMs || [];
+                        let found = false;
+
+                        // Find the phone entry and add/update its LID
+                        for (let i = 0; i < dms.length; i++) {
+                            const entryNum = (typeof dms[i] === 'string' ? dms[i] : dms[i]?.number || '').replace(/\D/g, '');
+                            if (entryNum === mapPhone) {
+                                if (typeof dms[i] === 'string') {
+                                    dms[i] = { number: dms[i], lid: mapLid, mode: 'always' };
+                                } else {
+                                    dms[i].lid = mapLid;
+                                }
+                                found = true;
+                                break;
+                            }
+                        }
+
+                        if (!found) {
+                            // Phone not in allowlist — add it
+                            dms.push({ number: mapPhone, lid: mapLid, mode: 'always' });
+                        }
+
+                        rawCfg.allowedDMs = dms;
+                        fs.writeFileSync(cfgPath, JSON.stringify(rawCfg, null, 2), 'utf-8');
+                        addLidMapping(mapLid!, mapPhone!);
+
+                        await sock.sendMessage(msg.key.remoteJid!, {
+                            text: `✅ *LID Mapped Successfully*\n\n🔑 LID: ${mapLid}\n📱 Phone: ${mapPhone}\n\nThis contact can now message me. No restart needed — active immediately.`
+                        });
+                        console.log(`[ADMIN] LID mapped: ${mapLid} → ${mapPhone}`);
+
+                        // Reload config into memory
+                        config = rawCfg;
+                    } catch (e) {
+                        await sock.sendMessage(msg.key.remoteJid!, {
+                            text: `❌ Failed to map LID: ${(e as Error).message}`
+                        });
+                    }
+                    processingMessageIds.delete(msg.key.id!);
+                    return; // Command handled, don't process as regular message
+                }
+            }
+        }
+
         // --- SECURITY FIREWALL ---
         if (isGroup) {
             // Group Policy Check
@@ -841,87 +903,35 @@ export async function startWhatsApp() {
                             }
                         }
 
-                        // Layer 4: Bounded auto-accept for @lid DMs
-                        // Security: ONLY auto-accept if there are allowlisted entries that
-                        // don't yet have a LID mapped. This bounds auto-accepts to exactly
-                        // the number of contacts in the allowlist. Once every entry has a
-                        // LID, any new unknown LID is blocked (it's a stranger).
+                        // Layer 4: BLOCK unknown LID + notify admin with map command
+                        // NO auto-mapping — admin must verify the correct phone.
+                        // This prevents wrong LID→phone assignments.
                         if (!matchedContact) {
                             const pushName = msg.pushName || 'Unknown';
+                            console.log(`[FIREWALL] 🚫 Blocked unknown LID ${senderRaw} (${pushName}). Admin notified.`);
 
-                            // Count unmapped entries (entries without a lid field)
-                            const unmappedEntries = config.allowedDMs.filter((e: any) =>
-                                typeof e === 'string' || (typeof e === 'object' && !e.lid)
-                            );
-
-                            if (unmappedEntries.length > 0) {
-                                // There are allowlisted contacts without LID mappings.
-                                // This @lid sender is likely one of them — auto-accept
-                                // and assign the LID to the first unmapped entry.
-                                console.log(`[FIREWALL] 🔓 Auto-accepting @lid DM from ${pushName} (LID: ${senderRaw}). ${unmappedEntries.length} unmapped entries remain.`);
-
+                            // Notify admin with easy map command (once per LID)
+                            if (!lidNotifiedCache.has(senderRaw)) {
+                                lidNotifiedCache.add(senderRaw);
                                 try {
-                                    const cfgPath = './workspace/whatsapp_config.json';
-                                    const rawCfg = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
-                                    const dms = rawCfg.allowedDMs || [];
-
-                                    for (let i = 0; i < dms.length; i++) {
-                                        if (typeof dms[i] === 'string') {
-                                            // Upgrade legacy string to object with LID
-                                            dms[i] = { number: dms[i], lid: senderRaw, mode: 'always' };
-                                            matchedContact = dms[i];
-                                            console.log(`[FIREWALL] Auto-mapped LID ${senderRaw} → ${dms[i].number} (${pushName})`);
-                                            break;
-                                        } else if (typeof dms[i] === 'object' && !dms[i].lid) {
-                                            dms[i].lid = senderRaw;
-                                            matchedContact = dms[i];
-                                            console.log(`[FIREWALL] Auto-mapped LID ${senderRaw} → ${dms[i].number} (${pushName})`);
-                                            break;
-                                        }
+                                    const ownerCfg = config.allowedDMs[0];
+                                    const ownerNum = (typeof ownerCfg === 'string' ? ownerCfg : ownerCfg?.number || '').replace(/\D/g, '');
+                                    if (ownerNum) {
+                                        const ownerJid = ownerCfg?.lid
+                                            ? `${ownerCfg.lid}@lid`
+                                            : `${ownerNum}@s.whatsapp.net`;
+                                        await sock.sendMessage(ownerJid, {
+                                            text: `🕷️ *OpenSpider — Blocked DM (LID)*\n\n` +
+                                                  `📱 *${pushName}* tried to message but their WhatsApp LID isn't mapped.\n` +
+                                                  `🔑 LID: ${senderRaw}\n` +
+                                                  `💬 "${textMessage?.substring(0, 80) || '(empty)'}"\n\n` +
+                                                  `To allow, reply with:\n` +
+                                                  `*map ${senderRaw} THEIR_PHONE*\n\n` +
+                                                  `Example: map ${senderRaw} 61423475992`
+                                        });
+                                        console.log(`[FIREWALL] Admin notified. Reply 'map ${senderRaw} <phone>' to allow.`);
                                     }
-
-                                    rawCfg.allowedDMs = dms;
-                                    fs.writeFileSync(cfgPath, JSON.stringify(rawCfg, null, 2), 'utf-8');
-                                    addLidMapping(senderRaw, matchedContact?.number || '');
-                                } catch (e) {
-                                    // Accept anyway on first occurrence
-                                    matchedContact = unmappedEntries[0];
-                                    if (typeof matchedContact === 'string') {
-                                        matchedContact = { number: matchedContact, lid: senderRaw, mode: 'always' };
-                                    }
-                                }
-
-                                // Notify admin about the auto-mapping
-                                if (!lidNotifiedCache.has(senderRaw)) {
-                                    lidNotifiedCache.add(senderRaw);
-                                    try {
-                                        const ownerCfg = config.allowedDMs[0];
-                                        const ownerNum = (typeof ownerCfg === 'string' ? ownerCfg : ownerCfg?.number || '').replace(/\D/g, '');
-                                        if (ownerNum) {
-                                            await sock.sendMessage(`${ownerNum}@s.whatsapp.net`, {
-                                                text: `🕷️ *OpenSpider — LID Auto-Mapped*\n\n📱 *${pushName}* (LID: ${senderRaw}) messaged via WhatsApp's new LID system.\n\n✅ Auto-mapped to an allowlisted contact.\n⚠️ If this mapping is wrong, fix it via:\ncurl -X POST http://localhost:4001/api/whatsapp/lid-map -H "Content-Type: application/json" -d '{"lid":"${senderRaw}","phone":"CORRECT_PHONE"}'`
-                                            });
-                                        }
-                                    } catch (e) { /* non-critical */ }
-                                }
-                            } else {
-                                // ALL allowlisted entries already have LIDs mapped.
-                                // This is a truly unknown sender — BLOCK.
-                                console.log(`[FIREWALL] 🚫 Blocked unknown LID ${senderRaw} (${pushName}). All ${config.allowedDMs.length} entries have LIDs mapped — this is a stranger.`);
-
-                                // Notify admin about the blocked stranger (once)
-                                if (!lidNotifiedCache.has(senderRaw)) {
-                                    lidNotifiedCache.add(senderRaw);
-                                    try {
-                                        const ownerCfg = config.allowedDMs[0];
-                                        const ownerNum = (typeof ownerCfg === 'string' ? ownerCfg : ownerCfg?.number || '').replace(/\D/g, '');
-                                        if (ownerNum) {
-                                            await sock.sendMessage(`${ownerNum}@s.whatsapp.net`, {
-                                                text: `🕷️ *OpenSpider Security Alert*\n\n🚫 Blocked DM from *${pushName}* (LID: ${senderRaw}).\n\nAll allowlisted contacts already have LIDs mapped.\nIf this is a legitimate contact, add them via:\ncurl -X POST http://localhost:4001/api/whatsapp/lid-map -H "Content-Type: application/json" -d '{"lid":"${senderRaw}","phone":"THEIR_PHONE"}'`
-                                            });
-                                        }
-                                    } catch (e) { /* non-critical */ }
-                                }
+                                } catch (e) { console.log(`[FIREWALL] Admin notify failed: ${(e as Error).message}`); }
                             }
                         }
                     }
