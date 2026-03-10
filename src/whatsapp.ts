@@ -71,6 +71,9 @@ function resolvePhoneFromLid(lid: string): string | undefined {
     return lidPhoneCache.get(cleanLid);
 }
 
+// Track which LIDs we've already notified the admin about (avoid spamming)
+const lidNotifiedCache = new Set<string>();
+
 // Stores the proto content of sent messages so Baileys can re-relay them on retry requests.
 // Without this, getMessage returns undefined and Baileys gives up on retries silently.
 const sentMessageStore = new Map<string, any>(); // msgId -> proto message content
@@ -771,12 +774,19 @@ export async function startWhatsApp() {
                         }
                     }
 
-                    // LID Reverse Resolution: if message is from @lid and no match found,
-                    // use the LID↔phone cache built from Baileys contact events.
+                    // ══════════════════════════════════════════════════════════════
+                    // LID Resolution: Multi-layer fallback when @lid DM doesn't
+                    // match any phone number in the allowlist.
+                    // Layer 1: LID↔phone cache (populated from contact events)
+                    // Layer 2: Config lid field (manually or auto-mapped)
+                    // Layer 3: Live group participant cross-reference
+                    // Layer 4: Admin notification with manual mapping instructions
+                    // ══════════════════════════════════════════════════════════════
                     if (!matchedContact && isLidJid) {
+                        // Layer 1: LID cache
                         const resolvedPhone = resolvePhoneFromLid(senderRaw);
                         if (resolvedPhone) {
-                            console.log(`[FIREWALL] LID ${senderRaw} resolved to phone ${resolvedPhone} via LID cache`);
+                            console.log(`[FIREWALL] LID ${senderRaw} → phone ${resolvedPhone} (LID cache)`);
                             for (const entry of config.allowedDMs) {
                                 const entryNum = (typeof entry === 'string' ? entry : entry.number || '').replace(/\D/g, '');
                                 if (entryNum === resolvedPhone) {
@@ -786,8 +796,75 @@ export async function startWhatsApp() {
                                     break;
                                 }
                             }
-                        } else {
-                            console.log(`[FIREWALL] LID ${senderRaw} not found in cache (${lidPhoneCache.size} entries). Will auto-discover on future contact events.`);
+                        }
+
+                        // Layer 3: Live group participant scanning
+                        // If the sender is in any mutual group, Baileys knows
+                        // their phone number from the group's participant list.
+                        if (!matchedContact) {
+                            try {
+                                const groups = await sock.groupFetchAllParticipating();
+                                const groupEntries = Object.values(groups);
+                                let discoveredPhone = '';
+
+                                for (const group of groupEntries) {
+                                    if (discoveredPhone) break;
+                                    const participants = (group as any).participants || [];
+                                    for (const p of participants) {
+                                        // Participants have `id` (phone@s.whatsapp.net) and
+                                        // sometimes `lid` (lid@lid) fields
+                                        const pLid = (p.lid || '').split('@')[0]?.split(':')[0] || '';
+                                        if (pLid === senderRaw) {
+                                            discoveredPhone = (p.id || '').split('@')[0]?.split(':')[0]?.replace(/\D/g, '') || '';
+                                            if (discoveredPhone) {
+                                                console.log(`[FIREWALL] LID ${senderRaw} → phone ${discoveredPhone} (group scan: ${(group as any).subject})`);
+                                                addLidMapping(senderRaw, discoveredPhone);
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if (discoveredPhone) {
+                                    for (const entry of config.allowedDMs) {
+                                        const entryNum = (typeof entry === 'string' ? entry : entry.number || '').replace(/\D/g, '');
+                                        if (entryNum === discoveredPhone) {
+                                            matchedContact = typeof entry === 'string'
+                                                ? { number: entry, lid: senderRaw, mode: 'always' }
+                                                : { ...entry, lid: senderRaw };
+                                            break;
+                                        }
+                                    }
+                                }
+                            } catch (e) {
+                                console.log(`[FIREWALL] Group scan failed: ${(e as Error).message}`);
+                            }
+                        }
+
+                        // Layer 4: Admin notification on blocked LID
+                        if (!matchedContact) {
+                            console.log(`[FIREWALL] LID ${senderRaw} unresolved after all layers. Cache: ${lidPhoneCache.size} entries.`);
+                            // Notify admin once per LID (avoid spam)
+                            const pushName = msg.pushName || 'Unknown';
+                            if (!lidNotifiedCache.has(senderRaw)) {
+                                lidNotifiedCache.add(senderRaw);
+                                try {
+                                    const ownerConfig = config.allowedDMs[0];
+                                    const ownerNum = (typeof ownerConfig === 'string' ? ownerConfig : ownerConfig?.number || '').replace(/\D/g, '');
+                                    if (ownerNum) {
+                                        const ownerJid = `${ownerNum}@s.whatsapp.net`;
+                                        await sock.sendMessage(ownerJid, {
+                                            text: `🕷️ *OpenSpider Security Alert*\n\nA contact tried to DM me but their WhatsApp LID doesn't match any phone in your allowlist.\n\n` +
+                                                  `📱 Name: *${pushName}*\n` +
+                                                  `🔑 LID: \`${senderRaw}\`\n` +
+                                                  `💬 Message: "${textMessage?.substring(0, 100) || '(empty)'}"\n\n` +
+                                                  `To allow this contact, add their phone number to the Dashboard allowlist and include this LID, or update your config:\n` +
+                                                  `\`{ "number": "PHONE", "lid": "${senderRaw}", "mode": "always" }\``
+                                        });
+                                        console.log(`[FIREWALL] Admin notified about blocked LID ${senderRaw} (${pushName})`);
+                                    }
+                                } catch (e) { console.log(`[FIREWALL] Failed to notify admin: ${(e as Error).message}`); }
+                            }
                         }
                     }
                 } else {
