@@ -14,6 +14,63 @@ export function getWhatsAppStatus(): 'connected' | 'disconnected' {
     return globalSocket ? 'connected' : 'disconnected';
 }
 export const sentMessageIds = new Set<string>(); // Global cache for outbound messages to prevent echo loops
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// LID ↔ Phone Cache: WhatsApp migrated DMs from phone-based JIDs to Linked
+// Identity (LID) JIDs. This cache maps LIDs to phone numbers so the firewall
+// can allowlist contacts regardless of which JID format WhatsApp uses.
+// Persisted to disk so it survives restarts.
+// ═══════════════════════════════════════════════════════════════════════════════
+const lidPhoneCache = new Map<string, string>(); // LID → phone number
+const phoneLidCache = new Map<string, string>(); // phone → LID (reverse)
+
+function getLidCachePath(): string {
+    const rootDir = __dirname.endsWith('src') || __dirname.endsWith('dist') ? path.join(__dirname, '..') : __dirname;
+    return path.join(rootDir, 'workspace', 'lid_cache.json');
+}
+
+function loadLidCache() {
+    try {
+        const cachePath = getLidCachePath();
+        if (fs.existsSync(cachePath)) {
+            const data = JSON.parse(fs.readFileSync(cachePath, 'utf-8'));
+            for (const [lid, phone] of Object.entries(data)) {
+                lidPhoneCache.set(lid, phone as string);
+                phoneLidCache.set(phone as string, lid);
+            }
+            console.log(`[LID Cache] Loaded ${lidPhoneCache.size} LID↔phone mappings from disk.`);
+        }
+    } catch (e) { /* fresh install, no cache yet */ }
+}
+
+function saveLidCache() {
+    try {
+        const obj: Record<string, string> = {};
+        for (const [lid, phone] of lidPhoneCache.entries()) obj[lid] = phone;
+        fs.writeFileSync(getLidCachePath(), JSON.stringify(obj, null, 2), 'utf-8');
+    } catch (e) { /* non-critical */ }
+}
+
+function addLidMapping(lid: string, phone: string) {
+    // Normalize: strip @lid / @s.whatsapp.net suffixes, strip device suffix (e.g. :32)
+    const cleanLid = lid.split('@')[0]!.split(':')[0]!;
+    const cleanPhone = phone.split('@')[0]!.split(':')[0]!.replace(/\D/g, '');
+    if (!cleanLid || !cleanPhone || cleanLid === cleanPhone) return;
+    // Don't overwrite with bad data
+    if (cleanPhone.length < 8) return; // Too short to be a phone number
+    if (!lidPhoneCache.has(cleanLid)) {
+        console.log(`[LID Cache] New mapping: ${cleanLid} → ${cleanPhone}`);
+    }
+    lidPhoneCache.set(cleanLid, cleanPhone);
+    phoneLidCache.set(cleanPhone, cleanLid);
+    saveLidCache();
+}
+
+function resolvePhoneFromLid(lid: string): string | undefined {
+    const cleanLid = lid.split('@')[0]!.split(':')[0]!;
+    return lidPhoneCache.get(cleanLid);
+}
+
 // Stores the proto content of sent messages so Baileys can re-relay them on retry requests.
 // Without this, getMessage returns undefined and Baileys gives up on retries silently.
 const sentMessageStore = new Map<string, any>(); // msgId -> proto message content
@@ -351,13 +408,24 @@ export async function startWhatsApp() {
                                 await sock.presenceSubscribe(jid).catch(() => { });
                                 await sock.sendPresenceUpdate('available', jid).catch(() => { });
                                 await sock.fetchStatus(jid).catch(() => { });
+                                // Proactive LID discovery: onWhatsApp triggers internal Baileys
+                                // contact resolution which fires contacts.update with LID data
+                                try {
+                                    const results = await sock.onWhatsApp(jid);
+                                    if (results?.[0]?.jid && results[0].jid !== jid) {
+                                        // If Baileys returned a different JID (e.g. LID), cache it
+                                        addLidMapping(results[0].jid, cleanNumber);
+                                    }
+                                } catch (e) { /* non-critical */ }
                                 warmCount++;
                             }
-                            // Also warm up LID if known
+                            // Also warm up LID if known, and pre-populate cache
                             const lid = typeof entry === 'object' ? entry.lid : undefined;
                             if (lid) {
                                 const lidJid = `${lid}@lid`;
                                 await sock.presenceSubscribe(lidJid).catch(() => { });
+                                // Pre-populate cache from config
+                                if (cleanNumber) addLidMapping(lid, cleanNumber);
                             }
                         }
                         // Group session warm-up: subscribe to allowed group JIDs
@@ -425,6 +493,69 @@ export async function startWhatsApp() {
             }
         } catch (e) { }
     });
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // LID Cache Population: Listen for Baileys events that reveal LID↔phone
+    // mappings. Three sources:
+    //   1. contacts.upsert — new contacts (bulk, on initial sync)
+    //   2. contacts.update — contact changes (name, status, etc)
+    //   3. messaging-history.set — historical message sync
+    // ═══════════════════════════════════════════════════════════════════════════
+    loadLidCache();
+
+    sock.ev.on('contacts.upsert', (contacts: any[]) => {
+        for (const c of contacts) {
+            // Contact can have: id (JID or LID), lid, phoneNumber, name, etc.
+            const id = c.id || '';
+            const lid = c.lid || '';
+            const phoneNumber = c.phoneNumber || '';
+
+            // Case 1: Contact has explicit lid + phone number fields
+            if (lid && phoneNumber) {
+                addLidMapping(lid, phoneNumber);
+            }
+            // Case 2: Contact ID is a phone JID and lid field exists
+            else if (id.endsWith('@s.whatsapp.net') && lid) {
+                addLidMapping(lid, id);
+            }
+            // Case 3: Contact ID is a LID and phoneNumber exists
+            else if (id.endsWith('@lid') && phoneNumber) {
+                addLidMapping(id, phoneNumber);
+            }
+        }
+    });
+
+    sock.ev.on('contacts.update', (updates: any[]) => {
+        for (const c of updates) {
+            const id = c.id || '';
+            const lid = c.lid || '';
+            const phoneNumber = c.phoneNumber || '';
+
+            if (lid && phoneNumber) {
+                addLidMapping(lid, phoneNumber);
+            } else if (id.endsWith('@s.whatsapp.net') && lid) {
+                addLidMapping(lid, id);
+            } else if (id.endsWith('@lid') && phoneNumber) {
+                addLidMapping(id, phoneNumber);
+            }
+        }
+    });
+
+    // Some Baileys versions fire this during initial history sync
+    try {
+        (sock.ev as any).on('messaging-history.set', (data: any) => {
+            if (data?.contacts) {
+                for (const c of data.contacts) {
+                    const id = c.id || '';
+                    const lid = c.lid || '';
+                    const phoneNumber = c.phoneNumber || '';
+                    if (lid && phoneNumber) addLidMapping(lid, phoneNumber);
+                    else if (id.endsWith('@s.whatsapp.net') && lid) addLidMapping(lid, id);
+                    else if (id.endsWith('@lid') && phoneNumber) addLidMapping(id, phoneNumber);
+                }
+            }
+        });
+    } catch (e) { /* event may not exist in all Baileys versions */ }
 
     // Local LRU Caches to prevent Double-Messages and Infinite Loops
     const processedMessageIds = new Set<string>();
@@ -641,70 +772,22 @@ export async function startWhatsApp() {
                     }
 
                     // LID Reverse Resolution: if message is from @lid and no match found,
-                    // try to resolve the LID to a phone number using Baileys' store.
-                    // WhatsApp is gradually migrating DMs from phone-based to LID-based JIDs.
+                    // use the LID↔phone cache built from Baileys contact events.
                     if (!matchedContact && isLidJid) {
-                        try {
-                            // Approach: read Baileys auth store for lid-phone mappings
-                            const authDir = path.join(process.cwd(), 'baileys_auth_info');
-                            const storeFiles = fs.existsSync(authDir) ? fs.readdirSync(authDir) : [];
-                            
-                            // Baileys stores contact→LID mappings in its session files.
-                            // Scan for any file that maps this LID to a phone number.
-                            let resolvedPhone = '';
-                            
-                            for (const file of storeFiles) {
-                                if (!file.endsWith('.json')) continue;
-                                try {
-                                    const content = fs.readFileSync(path.join(authDir, file), 'utf-8');
-                                    // Check if this file references our LID sender
-                                    if (content.includes(senderRaw)) {
-                                        // Try to extract a phone number from the filename or content
-                                        // Baileys stores sessions as "<phone>.0.json" or "sender-key-<jid>.json"
-                                        const phoneMatch = file.match(/^(\d{10,15})\./);
-                                        if (phoneMatch && phoneMatch[1]) {
-                                            resolvedPhone = phoneMatch[1];
-                                            break;
-                                        }
-                                    }
-                                } catch (e) { /* skip unreadable files */ }
-                            }
-
-                            // If we resolved a phone number, retry the allowlist match
-                            if (resolvedPhone) {
-                                console.log(`[FIREWALL] LID ${senderRaw} resolved to phone ${resolvedPhone} via session store`);
-                                for (const entry of config.allowedDMs) {
-                                    const entryNum = (typeof entry === 'string' ? entry : entry.number || '').replace(/\D/g, '');
-                                    if (entryNum === resolvedPhone) {
-                                        matchedContact = typeof entry === 'string' ? { number: entry, mode: 'always' } : entry;
-                                        break;
-                                    }
+                        const resolvedPhone = resolvePhoneFromLid(senderRaw);
+                        if (resolvedPhone) {
+                            console.log(`[FIREWALL] LID ${senderRaw} resolved to phone ${resolvedPhone} via LID cache`);
+                            for (const entry of config.allowedDMs) {
+                                const entryNum = (typeof entry === 'string' ? entry : entry.number || '').replace(/\D/g, '');
+                                if (entryNum === resolvedPhone) {
+                                    matchedContact = typeof entry === 'string'
+                                        ? { number: entry, lid: senderRaw, mode: 'always' }
+                                        : { ...entry, lid: senderRaw };
+                                    break;
                                 }
                             }
-
-                            // Last resort: if still no match, try onWhatsApp to query the LID
-                            // and also just check if the sender is ANY known phone with matching LID
-                            if (!matchedContact) {
-                                // Try all allowlisted phones via Baileys onWhatsApp to find who owns this LID
-                                for (const entry of config.allowedDMs) {
-                                    const entryNum = (typeof entry === 'string' ? entry : entry.number || '').replace(/\D/g, '');
-                                    if (!entryNum) continue;
-                                    try {
-                                        const results = await sock.onWhatsApp(`${entryNum}@s.whatsapp.net`);
-                                        const result = results?.[0];
-                                        if (result && result.jid) {
-                                            const resultLid = result.jid!.split('@')[0]!.split(':')[0];
-                                            if (resultLid === senderRaw || result.jid!.includes(senderRaw)) {
-                                                console.log(`[FIREWALL] LID ${senderRaw} matched to allowlisted phone ${entryNum} via onWhatsApp lookup`);
-                                                matchedContact = typeof entry === 'string' ? { number: entry, lid: senderRaw, mode: 'always' } : { ...entry, lid: senderRaw };
-                                                break;
-                                            }
-                                        }
-                                    } catch (e) { /* skip failed lookups */ }
-                                }
-                            }
-                        } catch (e) {
-                            console.log(`[FIREWALL] LID resolution failed: ${(e as Error).message}`);
+                        } else {
+                            console.log(`[FIREWALL] LID ${senderRaw} not found in cache (${lidPhoneCache.size} entries). Will auto-discover on future contact events.`);
                         }
                     }
                 } else {
