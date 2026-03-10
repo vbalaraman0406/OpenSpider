@@ -1517,6 +1517,8 @@ export default function App() {
     const [chatHistory, setChatHistory] = useState<string[]>([]);
     const [historyIndex, setHistoryIndex] = useState(-1);
     const [isTyping, setIsTyping] = useState(false);
+    // Ref to prevent late-arriving log messages from re-locking chat after task completes
+    const chatDoneRef = useRef(true);
     const [isVerbose, setIsVerbose] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
     const chatEndRef = useRef<HTMLDivElement>(null);
@@ -1629,20 +1631,27 @@ export default function App() {
                     const isCronLog = typeof msg.data === 'string' && msg.data.startsWith('[CRON]');
 
                     if (msg.data.includes('Emulating human typing delay') || msg.data.includes('Sending structured request')) {
-                        // We can also trigger typing state here for internal logs if we want
-                        if (!isCronLog && msg.data.includes('Sending structured request')) setIsTyping(true);
+                        // Only trigger typing if we haven't already received the chat_response
+                        if (!isCronLog && msg.data.includes('Sending structured request') && !chatDoneRef.current) {
+                            setIsTyping(true);
+                        }
                         return;
                     }
 
                     if (!isCronLog) {
-                        if (msg.data.includes('[You]')) setIsTyping(true);
-                        if (msg.data.includes('[Agent]')) setIsTyping(false);
+                        // Only set typing=true if chat hasn't completed yet
+                        if (msg.data.includes('[You]') && !chatDoneRef.current) setIsTyping(true);
+                        if (msg.data.includes('[Agent]')) {
+                            setIsTyping(false);
+                            chatDoneRef.current = true; // Mark as done to block re-locking
+                        }
                     }
 
                     setLogs(prev => [...prev.slice(-49999), msg]); // Keep last 50000 logs to prevent chat eviction
                 } else if (msg.type === 'chat_response') {
                     setLogs(prev => [...prev.slice(-49999), { type: 'chat', data: `[Agent] ${msg.data}`, timestamp: msg.timestamp }]);
                     setIsTyping(false);
+                    chatDoneRef.current = true; // Authoritative: task is done, prevent re-lock
                 } else if (msg.type === 'usage') {
                     const u = msg.data.usage;
                     setLogs(prev => [...prev.slice(-49999), { type: 'usage', data: `[API Token Usage] Model: ${msg.data.model} | In: ${u.promptTokens} | Out: ${u.completionTokens} | Total: ${u.totalTokens}`, timestamp: msg.timestamp }]);
@@ -1747,12 +1756,18 @@ export default function App() {
         setChatInput('');
         setAttachments([]);
         setIsTyping(true);
+        chatDoneRef.current = false; // New message: allow typing state changes
 
         // Safety timeout: unlock input if agent never responds (e.g. crash, network issue)
-        setTimeout(() => setIsTyping(prev => {
-            if (prev) console.warn('[Chat] Safety timeout: unlocking input after 120s');
-            return false;
-        }), 120_000);
+        // Uses chatDoneRef to avoid unlocking if a response already arrived and re-locked for a new request
+        const sentTimestamp = Date.now();
+        setTimeout(() => {
+            if (!chatDoneRef.current) {
+                console.warn('[Chat] Safety timeout: unlocking input after 180s');
+                setIsTyping(false);
+                chatDoneRef.current = true;
+            }
+        }, 180_000);
     };
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
