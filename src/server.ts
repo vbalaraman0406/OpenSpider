@@ -12,6 +12,7 @@ import { ChatMessage } from './llm/BaseProvider';
 import { logMemory } from './memory';
 import { initScheduler, runJobForcefully, activeCronJobs } from './scheduler';
 import { logUsage, getUsageSummary } from './usage';
+import { readJobsSync, writeJobsSync } from './CronStore';
 import { PersonaShell } from './agents/PersonaShell';
 import gmailWebhookRouter from './webhooks/gmail';
 import { apiKeyAuth, validateWsConnection } from './middleware/auth';
@@ -1286,8 +1287,7 @@ Return ONLY the raw Python code.`;
 
     app.get('/api/cron', (req, res) => {
         try {
-            if (!fs.existsSync(cronJobsPath)) return res.json([]);
-            const jobs = JSON.parse(fs.readFileSync(cronJobsPath, 'utf-8'));
+            const jobs = readJobsSync();
             res.json(jobs);
         } catch (e: any) {
             res.status(500).json({ error: e.message });
@@ -1303,10 +1303,7 @@ Return ONLY the raw Python code.`;
             if (typeof description !== 'string' || description.length > 200) return res.status(400).json({ error: 'description must be a string under 200 chars.' });
             if (typeof prompt !== 'string' || prompt.length > 2000) return res.status(400).json({ error: 'prompt must be a string under 2000 chars.' });
 
-            let jobs: any[] = [];
-            if (fs.existsSync(cronJobsPath)) {
-                jobs = JSON.parse(fs.readFileSync(cronJobsPath, 'utf-8'));
-            }
+            let jobs = readJobsSync();
 
             // SECURITY: Cap the maximum number of cron jobs to prevent resource exhaustion
             const MAX_JOBS = 20;
@@ -1338,7 +1335,7 @@ Return ONLY the raw Python code.`;
             if (safePreferredTime) newJob.preferredTime = safePreferredTime;
 
             jobs.push(newJob);
-            fs.writeFileSync(cronJobsPath, JSON.stringify(jobs, null, 2));
+            writeJobsSync(jobs);
             res.json({ success: true, job: newJob });
         } catch (e: any) {
             res.status(500).json({ error: 'Internal server error' });
@@ -1347,11 +1344,9 @@ Return ONLY the raw Python code.`;
 
     app.delete('/api/cron/:id', (req, res) => {
         try {
-            if (!fs.existsSync(cronJobsPath)) return res.status(404).json({ error: 'No jobs found' });
-
-            let jobs = JSON.parse(fs.readFileSync(cronJobsPath, 'utf-8'));
+            let jobs = readJobsSync();
             jobs = jobs.filter((j: any) => j.id !== req.params.id);
-            fs.writeFileSync(cronJobsPath, JSON.stringify(jobs, null, 2));
+            writeJobsSync(jobs);
             res.json({ success: true });
         } catch (e: any) {
             res.status(500).json({ error: 'Internal server error' });
@@ -1360,15 +1355,13 @@ Return ONLY the raw Python code.`;
 
     app.put('/api/cron/:id', (req, res) => {
         try {
-            if (!fs.existsSync(cronJobsPath)) return res.status(404).json({ error: 'No jobs found' });
-
-            let jobs = JSON.parse(fs.readFileSync(cronJobsPath, 'utf-8'));
+            let jobs = readJobsSync();
             const jobIndex = jobs.findIndex((j: any) => j.id === req.params.id);
 
             if (jobIndex === -1) return res.status(404).json({ error: 'Job not found' });
 
             jobs[jobIndex] = { ...jobs[jobIndex], ...req.body };
-            fs.writeFileSync(cronJobsPath, JSON.stringify(jobs, null, 2));
+            writeJobsSync(jobs);
             res.json({ success: true, job: jobs[jobIndex] });
         } catch (e: any) {
             res.status(500).json({ error: e.message });

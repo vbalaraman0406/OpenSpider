@@ -6,6 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { PersonaShell } from './PersonaShell';
 import { sendWhatsAppMessage, sendWhatsAppAudio, getParticipatingGroups } from '../whatsapp';
+import { readJobsSync, writeJobsSync } from '../CronStore';
 
 export class WorkerAgent {
     private llm: LLMProvider;
@@ -278,11 +279,7 @@ ${context.join('\n')}
                         toolOutput = 'Error: No task prompt provided for schedule_task. Provide the task description in the "content" field.';
                     } else {
                         try {
-                            const cronPath = path.join(process.cwd(), 'workspace', 'cron_jobs.json');
-                            let jobs: any[] = [];
-                            if (fs.existsSync(cronPath)) {
-                                jobs = JSON.parse(fs.readFileSync(cronPath, 'utf-8'));
-                            }
+                            let jobs = readJobsSync();
 
                             // Upsert: check for existing job with the same name (case-insensitive)
                             const existingIndex = jobs.findIndex(
@@ -291,7 +288,7 @@ ${context.join('\n')}
 
                             if (existingIndex !== -1) {
                                 // UPDATE existing job in-place
-                                const existing = jobs[existingIndex];
+                                const existing = jobs[existingIndex]!;
                                 existing.prompt = taskPrompt;
                                 existing.intervalHours = intervalHours;
                                 if (preferredTime) {
@@ -299,7 +296,7 @@ ${context.join('\n')}
                                 } else {
                                     delete existing.preferredTime; // Clear time-of-day if switching back to interval
                                 }
-                                fs.writeFileSync(cronPath, JSON.stringify(jobs, null, 2));
+                                writeJobsSync(jobs);
                                 const scheduleStr = preferredTime ? `daily at ${preferredTime}` : `every ${intervalHours}h`;
                                 console.log(`[Worker - ${this.role}] Updated existing cron job: "${jobName}" → ${scheduleStr}`);
                                 toolOutput = `✅ Successfully updated existing cron job!\n- Name: ${jobName}\n- Schedule: ${scheduleStr}\n- New Task: ${taskPrompt.substring(0, 100)}...\n- Status: ${existing.status || 'enabled'}\n- ID: ${existing.id}`;
@@ -320,7 +317,7 @@ ${context.join('\n')}
                                     };
                                     if (preferredTime) newJob.preferredTime = preferredTime;
                                     jobs.push(newJob);
-                                    fs.writeFileSync(cronPath, JSON.stringify(jobs, null, 2));
+                                    writeJobsSync(jobs);
                                     const scheduleStr = preferredTime ? `daily at ${preferredTime}` : `every ${intervalHours}h`;
                                     console.log(`[Worker - ${this.role}] Scheduled new recurring task: "${jobName}" ${scheduleStr}`);
                                     toolOutput = `✅ Successfully scheduled recurring task!\n- Name: ${jobName}\n- Schedule: ${scheduleStr}\n- Task: ${taskPrompt.substring(0, 100)}...\n- Status: Enabled\n- ID: ${newJob.id}`;

@@ -1,52 +1,19 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { ManagerAgent } from './agents/ManagerAgent';
+import { readJobsSync, writeJobsSync, CronJob } from './CronStore';
 
 const JOBS_FILE = path.join(process.cwd(), 'workspace', 'cron_jobs.json');
 
 // Track active cron jobs so the WebSocket broadcast can suppress agent_flow events during cron runs
 export let activeCronJobs = 0;
 
-// MED-3: Simple write-lock flag to prevent TOCTOU races when multiple cron ticks
-// fire close together and both read/modify/write cron_jobs.json simultaneously.
-let fileLocked = false;
-
-function safeWriteJobs(jobs: CronJob[]) {
-    if (fileLocked) {
-        console.warn('[Scheduler] File write skipped — another write is in progress.');
-        return;
-    }
-    fileLocked = true;
-    try {
-        fs.writeFileSync(JOBS_FILE, JSON.stringify(jobs, null, 2));
-    } finally {
-        fileLocked = false;
-    }
-}
-
-interface CronJob {
-    id: string;
-    description: string;
-    prompt: string;
-    intervalHours: number;
-    lastRunTimestamp: number;
-    agentId: string;
-    status?: 'enabled' | 'disabled';
-    // NEW: preferred time-of-day scheduling (e.g. "07:00", "14:30")
-    // When set, the job runs once per day at this time instead of using intervalHours.
-    // The intervalHours field is ignored when preferredTime is set.
-    preferredTime?: string;
-    // Timezone offset from UTC in hours (e.g. -8 for PST, -7 for PDT)
-    // Defaults to the server's local timezone if not set.
-    timezoneOffset?: number;
-}
-
 export function initScheduler() {
     const workspaceDir = path.join(process.cwd(), 'workspace');
     if (!fs.existsSync(workspaceDir)) fs.mkdirSync(workspaceDir, { recursive: true });
 
     if (!fs.existsSync(JOBS_FILE)) {
-        fs.writeFileSync(JOBS_FILE, JSON.stringify([], null, 2));
+        writeJobsSync([]);
     }
 
     console.log(`[Scheduler] Initializing Heartbeat loop (checking every 60s)...`);
@@ -97,14 +64,13 @@ function shouldRunTimeOfDay(job: CronJob, now: Date): boolean {
 
 async function checkAndExecuteJobs() {
     try {
-        if (!fs.existsSync(JOBS_FILE)) return;
-
-        const fileData = fs.readFileSync(JOBS_FILE, 'utf-8');
-        const jobs: CronJob[] = JSON.parse(fileData);
-        let jobsModified = false;
+        // Read jobs, decide which to run, then write back timestamps in one atomic block
+        const jobs = readJobsSync();
+        if (jobs.length === 0) return;
 
         const now = Date.now();
         const nowDate = new Date(now);
+        const jobsToRun: CronJob[] = [];
 
         for (const job of jobs) {
             if (job.status === 'disabled') continue;
@@ -112,13 +78,11 @@ async function checkAndExecuteJobs() {
             let shouldRun = false;
 
             if (job.preferredTime) {
-                // Time-of-day scheduling: run once per day at the preferred time
                 shouldRun = shouldRunTimeOfDay(job, nowDate);
                 if (shouldRun) {
                     console.log(`\n⏰ [Scheduler] Time-of-day trigger for: "${job.description}" (preferred: ${job.preferredTime})`);
                 }
             } else {
-                // Interval-based scheduling: run every N hours
                 const intervalMs = job.intervalHours * 60 * 60 * 1000;
                 const timeSinceLastRun = now - job.lastRunTimestamp;
 
@@ -131,32 +95,34 @@ async function checkAndExecuteJobs() {
             if (shouldRun) {
                 // Update timestamp immediately so if it crashes we don't rapid-fire
                 job.lastRunTimestamp = now;
-                jobsModified = true;
-
-                // Execute the job in the background via the Manager Agent
-                const manager = new ManagerAgent();
-                const cronPrompt = `[SYSTEM CRON TRIGGER] Wake up and execute your scheduled background task. Do not ask me for permission. Just do it and summarize the results.\n\nTask: ${job.prompt}`;
-
-                activeCronJobs++;
-                manager.processUserRequest(cronPrompt).then(result => {
-                    activeCronJobs--;
-                    console.log(`[Scheduler] Job "${job.description}" completed. Result:\n${result}`);
-                    // Broadcast cron result to dashboard chat window
-                    console.log(JSON.stringify({
-                        type: 'cron_result',
-                        jobName: job.description,
-                        result: result,
-                        timestamp: new Date().toISOString()
-                    }));
-                }).catch(err => {
-                    activeCronJobs--;
-                    console.error(`[Scheduler] Job "${job.description}" failed:`, err);
-                });
+                jobsToRun.push(job);
             }
         }
 
-        if (jobsModified) {
-            safeWriteJobs(jobs);
+        // Write back updated timestamps BEFORE executing (prevents re-fire on crash)
+        if (jobsToRun.length > 0) {
+            writeJobsSync(jobs);
+        }
+
+        // Execute jobs OUTSIDE the lock — the file is already updated
+        for (const job of jobsToRun) {
+            const manager = new ManagerAgent();
+            const cronPrompt = `[SYSTEM CRON TRIGGER] Wake up and execute your scheduled background task. Do not ask me for permission. Just do it and summarize the results.\n\nTask: ${job.prompt}`;
+
+            activeCronJobs++;
+            manager.processUserRequest(cronPrompt).then(result => {
+                activeCronJobs--;
+                console.log(`[Scheduler] Job "${job.description}" completed. Result:\n${result}`);
+                console.log(JSON.stringify({
+                    type: 'cron_result',
+                    jobName: job.description,
+                    result: result,
+                    timestamp: new Date().toISOString()
+                }));
+            }).catch(err => {
+                activeCronJobs--;
+                console.error(`[Scheduler] Job "${job.description}" failed:`, err);
+            });
         }
 
     } catch (e) {
@@ -165,10 +131,7 @@ async function checkAndExecuteJobs() {
 }
 
 export async function runJobForcefully(jobId: string) {
-    if (!fs.existsSync(JOBS_FILE)) return false;
-
-    const fileData = fs.readFileSync(JOBS_FILE, 'utf-8');
-    const jobs: CronJob[] = JSON.parse(fileData);
+    const jobs = readJobsSync();
 
     const job = jobs.find(j => j.id === jobId);
     if (!job) return false;
@@ -177,7 +140,7 @@ export async function runJobForcefully(jobId: string) {
 
     // Update timestamp
     job.lastRunTimestamp = Date.now();
-    safeWriteJobs(jobs);
+    writeJobsSync(jobs);
 
     const manager = new ManagerAgent();
     const cronPrompt = `[SYSTEM MANUAL TRIGGER] Wake up and execute your background task manually requested by the user. Do not ask me for permission. Just do it and summarize the results.\n\nTask: ${job.prompt}`;
