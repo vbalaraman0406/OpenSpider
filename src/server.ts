@@ -102,6 +102,11 @@ export function startServer() {
     const CHAT_BUFFER_PATH = path.join(process.cwd(), 'workspace', 'chat_buffer.json');
     const MAX_BUFFER_SIZE = 500;
 
+    // Dedicated conversation buffer — only stores [You]/[Agent] messages (not logs).
+    // This prevents 500 log events from pushing out the actual conversation history.
+    const CHAT_MESSAGES_PATH = path.join(process.cwd(), 'workspace', 'chat_messages.json');
+    const MAX_CHAT_MESSAGES = 200;
+
     // Load persisted buffer from disk on startup
     let eventBuffer: Array<{ type: string; data: string; timestamp: string }> = [];
     try {
@@ -117,17 +122,43 @@ export function startServer() {
         console.warn('[Server] Could not restore chat buffer from disk, starting fresh.');
     }
 
+    // Load persisted chat messages from disk
+    let chatBuffer: Array<{ type: string; data: string; timestamp: string }> = [];
+    try {
+        if (fs.existsSync(CHAT_MESSAGES_PATH)) {
+            const raw = fs.readFileSync(CHAT_MESSAGES_PATH, 'utf-8');
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+                chatBuffer = parsed.slice(-MAX_CHAT_MESSAGES);
+                console.log(`[Server] Restored ${chatBuffer.length} conversation messages from disk.`);
+            }
+        }
+    } catch (e) {
+        console.warn('[Server] Could not restore chat messages from disk, starting fresh.');
+    }
+
     // Debounced disk persistence to avoid excessive I/O
     let bufferDirty = false;
     let flushTimer: ReturnType<typeof setTimeout> | null = null;
+    let chatBufferDirty = false;
+    let chatFlushTimer: ReturnType<typeof setTimeout> | null = null;
 
     const flushBufferToDisk = () => {
-        if (!bufferDirty) return;
-        try {
-            fs.writeFileSync(CHAT_BUFFER_PATH, JSON.stringify(eventBuffer), 'utf-8');
-            bufferDirty = false;
-        } catch (e) {
-            console.error('[Server] Failed to persist chat buffer:', e);
+        if (bufferDirty) {
+            try {
+                fs.writeFileSync(CHAT_BUFFER_PATH, JSON.stringify(eventBuffer), 'utf-8');
+                bufferDirty = false;
+            } catch (e) {
+                console.error('[Server] Failed to persist chat buffer:', e);
+            }
+        }
+        if (chatBufferDirty) {
+            try {
+                fs.writeFileSync(CHAT_MESSAGES_PATH, JSON.stringify(chatBuffer), 'utf-8');
+                chatBufferDirty = false;
+            } catch (e) {
+                console.error('[Server] Failed to persist chat messages:', e);
+            }
         }
     };
 
@@ -143,6 +174,21 @@ export function startServer() {
             flushTimer = setTimeout(() => {
                 flushBufferToDisk();
                 flushTimer = null;
+            }, 2000);
+        }
+    };
+
+    // Buffer a user-facing conversation message (separate from log events)
+    const bufferChatMessage = (event: { type: string; data: string; timestamp: string }) => {
+        chatBuffer.push(event);
+        if (chatBuffer.length > MAX_CHAT_MESSAGES) {
+            chatBuffer.shift();
+        }
+        chatBufferDirty = true;
+        if (!chatFlushTimer) {
+            chatFlushTimer = setTimeout(() => {
+                flushBufferToDisk();
+                chatFlushTimer = null;
             }, 2000);
         }
     };
@@ -163,7 +209,10 @@ export function startServer() {
 
         clients.add(ws);
 
-        // Replay buffered events to new client so they see the full conversation
+        // Replay conversation messages FIRST (dedicated chat buffer), then log events
+        for (const msg of chatBuffer) {
+            try { ws.send(JSON.stringify(msg)); } catch (e) { }
+        }
         for (const event of eventBuffer) {
             try {
                 ws.send(JSON.stringify(event));
@@ -177,6 +226,10 @@ export function startServer() {
                 const parsed = JSON.parse(messageData.toString());
                 if (parsed.type === 'chat') {
                     console.log(`\n\n[Web Chat] Received message: ${parsed.text}`);
+
+                    // Buffer user message for conversation replay on reconnect
+                    const userLabel = parsed.text + (parsed.images?.length > 0 ? ' 📎' : '');
+                    bufferChatMessage({ type: 'chat', data: `[You] ${userLabel}`, timestamp: new Date().toISOString() });
 
                     // Log user message to session memory
                     logMemory('User', parsed.text, 'dashboard');
@@ -249,6 +302,7 @@ export function startServer() {
                         timestamp: new Date().toISOString()
                     };
                     bufferEvent({ type: 'chat', data: `[Agent] ${response}`, timestamp: chatResponseEvent.timestamp });
+                    bufferChatMessage({ type: 'chat', data: `[Agent] ${response}`, timestamp: chatResponseEvent.timestamp });
                     ws.send(JSON.stringify(chatResponseEvent));
                 } else if (parsed.type === 'cancel') {
                     // User clicked the Cancel button in the dashboard
