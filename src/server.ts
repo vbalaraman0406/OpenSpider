@@ -14,6 +14,7 @@ import { initScheduler, runJobForcefully, activeCronJobs } from './scheduler';
 import { logUsage, getUsageSummary } from './usage';
 import { readJobsSync, writeJobsSync } from './CronStore';
 import { PersonaShell } from './agents/PersonaShell';
+import { LinkedInService } from './services/LinkedInService';
 import gmailWebhookRouter from './webhooks/gmail';
 import { apiKeyAuth, validateWsConnection } from './middleware/auth';
 import { getManager } from './browser/manager';
@@ -1285,6 +1286,71 @@ Return ONLY the raw Python code.`;
         }
     });
 
+    // ─── LinkedIn OAuth Routes ───────────────────────────────────
+    app.get('/api/linkedin/auth', (req, res) => {
+        try {
+            const linkedin = LinkedInService.getInstance();
+            const authUrl = linkedin.getAuthUrl();
+            res.redirect(authUrl);
+        } catch (e: any) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    app.get('/api/linkedin/callback', async (req, res) => {
+        try {
+            const code = req.query.code as string;
+            if (!code) return res.status(400).send('Missing authorization code');
+
+            const linkedin = LinkedInService.getInstance();
+            const result = await linkedin.handleCallback(code);
+
+            if (result.success) {
+                res.send(`
+                    <html><body style="background:#0f172a;color:#e2e8f0;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
+                        <div style="text-align:center">
+                            <h1 style="color:#38bdf8">✅ LinkedIn Connected!</h1>
+                            <p>Authenticated as <strong>${result.name}</strong></p>
+                            <p style="color:#64748b">You can close this window and return to OpenSpider.</p>
+                        </div>
+                    </body></html>
+                `);
+            } else {
+                res.status(500).send(`LinkedIn auth failed: ${result.error}`);
+            }
+        } catch (e: any) {
+            res.status(500).send(`OAuth error: ${e.message}`);
+        }
+    });
+
+    app.post('/api/linkedin/post', async (req, res) => {
+        try {
+            const { text } = req.body;
+            if (!text) return res.status(400).json({ error: 'text is required' });
+
+            const linkedin = LinkedInService.getInstance();
+            const result = await linkedin.createPost(text);
+
+            if (result.success) {
+                res.json({ success: true, postId: result.postId });
+            } else {
+                res.status(500).json({ error: result.error });
+            }
+        } catch (e: any) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    app.get('/api/linkedin/status', (req, res) => {
+        try {
+            const linkedin = LinkedInService.getInstance();
+            res.json(linkedin.getTokenStatus());
+        } catch (e: any) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    // ─── Cron Routes ─────────────────────────────────────────────
     app.get('/api/cron', (req, res) => {
         try {
             const jobs = readJobsSync();

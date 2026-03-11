@@ -1,0 +1,7 @@
+{
+  "name": "linkedin_post",
+  "description": "Draft, approve, and publish LinkedIn posts. Use --draft to create a post for user approval, --post to publish after approval, --status to check connection.",
+  "filename": "linkedin_post.py",
+  "args": "--draft \"text\" | --post | --status",
+  "category": "social_media"
+}

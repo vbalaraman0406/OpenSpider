@@ -1,0 +1,13 @@
+{
+    "name": "Pulse",
+    "role": "LinkedIn Content Strategist",
+    "emoji": "💼",
+    "allowedTools": [
+        "execute_script",
+        "browse_web",
+        "send_whatsapp",
+        "write_script"
+    ],
+    "maxDelegationDepth": 0,
+    "budgetTokens": 50000
+}
