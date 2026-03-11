@@ -17,7 +17,7 @@ export default defineConfig({
     ],
     themeConfig: {
         logo: '/spider.svg',
-        siteTitle: 'OpenSpider v2.0 🕷️',
+        siteTitle: 'OpenSpider v2.2.0 🕷️',
         nav: [
             { text: 'Home', link: '/' },
             { text: 'Getting Started', link: '/getting-started' },
@@ -29,6 +29,7 @@ export default defineConfig({
                     { text: 'Voice Messages', link: '/voice' },
                     { text: 'Dashboard', link: '/dashboard' },
                     { text: 'Tools & Skills', link: '/tools-and-skills' },
+                    { text: 'LinkedIn Integration', link: '/linkedin' },
                     { text: 'Browser Relay Extension', link: '/browser-relay' },
                 ]
             },
@@ -59,6 +60,7 @@ export default defineConfig({
                     { text: 'Voice Messages', link: '/voice' },
                     { text: 'Dashboard', link: '/dashboard' },
                     { text: 'Tools & Skills', link: '/tools-and-skills' },
+                    { text: 'LinkedIn Integration', link: '/linkedin' },
                     { text: 'Browser Relay Extension', link: '/browser-relay' },
                 ],
             },
