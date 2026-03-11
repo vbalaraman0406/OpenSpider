@@ -47,7 +47,7 @@ const ALLOWED_CDP_METHODS = new Set([
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'attach') {
-        attachDebugger(request.tabId, request.token, request.port || 18792);
+        attachDebugger(request.tabId, request.token, request.port || 4001, request.host || '127.0.0.1');
         sendResponse({ success: true });
     } else if (request.action === 'detach') {
         detachDebugger(request.tabId);
@@ -58,7 +58,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
 });
 
-async function attachDebugger(tabId, token, port) {
+async function attachDebugger(tabId, token, port, host) {
     if (attachedTabId) {
         await detachDebugger(attachedTabId);
     }
@@ -68,12 +68,10 @@ async function attachDebugger(tabId, token, port) {
         console.log("Attached to tab", tabId);
         attachedTabId = tabId;
         chrome.action.setBadgeText({ text: "...", tabId: tabId });
-
-        connectWebSocket(tabId, token, port);
-
+        connectWebSocket(tabId, token, port, host);
     } catch (err) {
-        console.error("Failed to attach:", err);
-        chrome.action.setBadgeText({ text: "ERR", tabId: tabId });
+       console.error("Failed to attach:", err);
+       chrome.action.setBadgeText({ text: "ERR", tabId: tabId });
     }
 }
 
@@ -85,7 +83,6 @@ async function detachDebugger(tabId) {
     } catch (e) {
         console.warn("Detach warning", e);
     }
-
     if (ws) {
         ws.close();
         ws = null;
@@ -94,9 +91,11 @@ async function detachDebugger(tabId) {
     chrome.action.setBadgeText({ text: "", tabId: tabId });
 }
 
-function connectWebSocket(tabId, token, port) {
-    const wsUrl = `ws://127.0.0.1:${port}/?token=${token}`;
+function connectWebSocket(tabId, token, port, host) {
+    // Support both local and remote VPS connections
+    const wsUrl = `ws://${host}:${port}/?token=${token}`;
     console.log("Connecting to", wsUrl);
+
     ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {

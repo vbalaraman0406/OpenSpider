@@ -1,5 +1,6 @@
 // chrome-extension/popup.js
 document.addEventListener('DOMContentLoaded', async () => {
+    const hostInput = document.getElementById('host');
     const tokenInput = document.getElementById('token');
     const portInput = document.getElementById('port');
     const toggleBtn = document.getElementById('toggleBtn');
@@ -7,7 +8,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const statusText = document.getElementById('statusText');
 
     // Load saved settings
-    chrome.storage.local.get(['gatewayToken', 'relayPort'], (result) => {
+    chrome.storage.local.get(['gatewayHost', 'gatewayToken', 'relayPort'], (result) => {
+        if (result.gatewayHost) hostInput.value = result.gatewayHost;
         if (result.gatewayToken) tokenInput.value = result.gatewayToken;
         if (result.relayPort) portInput.value = result.relayPort;
     });
@@ -24,11 +26,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     toggleBtn.addEventListener('click', async () => {
+        const host = hostInput.value.trim() || '127.0.0.1';
         const token = tokenInput.value;
         const port = parseInt(portInput.value, 10) || 4001;
 
         // Save settings
-        chrome.storage.local.set({ gatewayToken: token, relayPort: port });
+        chrome.storage.local.set({ gatewayHost: host, gatewayToken: token, relayPort: port });
 
         if (toggleBtn.classList.contains('detach')) {
             chrome.runtime.sendMessage({ action: 'detach', tabId: tab.id }, () => {
@@ -36,19 +39,20 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
         } else {
             statusText.innerText = "Connecting...";
-            chrome.runtime.sendMessage({ action: 'attach', tabId: tab.id, token, port }, (res) => {
+            chrome.runtime.sendMessage({ action: 'attach', tabId: tab.id, token, port, host }, (res) => {
                 if (res && res.success) {
                     setAttachedState();
                 } else {
                     statusText.innerText = "Error requesting attach";
                 }
             });
-            // We'll close the popup to let let the badge tell the story, or let them see the error
+            // Close the popup to let the badge tell the story
             setTimeout(() => window.close(), 1000);
         }
     });
 
     cookieBtn.addEventListener('click', async () => {
+        const host = hostInput.value.trim() || '127.0.0.1';
         const port = parseInt(portInput.value, 10) || 4001;
         const token = tokenInput.value;
         const [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -57,6 +61,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             statusText.innerText = "Error: Cannot determine tab URL.";
             return;
         }
+
+        // Save settings
+        chrome.storage.local.set({ gatewayHost: host, gatewayToken: token, relayPort: port });
 
         try {
             statusText.innerText = "Exporting cookies...";
@@ -83,21 +90,21 @@ document.addEventListener('DOMContentLoaded', async () => {
                 expires: c.expirationDate || -1
             }));
 
-            // Send to OpenSpider Gateway API (default 4001)
-            const apiPort = 4001;
-            const response = await fetch(`http://127.0.0.1:${apiPort}/api/v1/browser/cookies`, {
+            // Send to OpenSpider Gateway API (uses configured host + port)
+            const response = await fetch(`http://${host}:${port}/api/v1/browser/cookies`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
+                    'x-api-key': token
                 },
                 body: JSON.stringify({ cookies: playwrightCookies })
             });
 
             if (response.ok) {
-                statusText.innerText = "✅ Cookies exported successfully!";
+                const data = await response.json();
+                statusText.innerText = `✅ ${data.count} cookies exported! (${data.persisted} total saved)`;
                 statusText.style.color = "#22c55e";
-                setTimeout(() => window.close(), 1500);
+                setTimeout(() => window.close(), 2000);
             } else {
                 throw new Error(`Server returned ${response.status}`);
             }
