@@ -129,6 +129,20 @@ export class BrowserManager {
             }, pConfig.color);
         }
 
+        // Auto-inject persisted cookies from disk (exported from real Chrome)
+        const cookieFile = path.join(process.cwd(), 'workspace', 'browser_cookies.json');
+        if (fs.existsSync(cookieFile)) {
+            try {
+                const savedCookies = JSON.parse(fs.readFileSync(cookieFile, 'utf-8'));
+                if (Array.isArray(savedCookies) && savedCookies.length > 0) {
+                    await context.addCookies(savedCookies);
+                    console.log(`[BrowserManager] Auto-injected ${savedCookies.length} persisted cookies into profile '${name}'`);
+                }
+            } catch (e) {
+                console.error(`[BrowserManager] Failed to auto-inject persisted cookies:`, e);
+            }
+        }
+
         return context;
     }
 

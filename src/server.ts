@@ -977,7 +977,27 @@ Return ONLY the raw Python code.`;
             const manager = getManager();
             await manager.injectCookies('default', cookies);
 
-            res.json({ success: true, count: cookies.length });
+            // Persist cookies to disk so they survive gateway restarts
+            const cookieFile = path.join(process.cwd(), 'workspace', 'browser_cookies.json');
+            let existing: any[] = [];
+            try {
+                if (fs.existsSync(cookieFile)) {
+                    existing = JSON.parse(fs.readFileSync(cookieFile, 'utf-8'));
+                }
+            } catch { }
+
+            // Merge: update existing cookies by domain+name+path, add new ones
+            for (const c of cookies) {
+                const key = `${c.domain}|${c.name}|${c.path || '/'}`;
+                const idx = existing.findIndex((e: any) => `${e.domain}|${e.name}|${e.path || '/'}` === key);
+                if (idx >= 0) existing[idx] = c;
+                else existing.push(c);
+            }
+
+            fs.writeFileSync(cookieFile, JSON.stringify(existing, null, 2));
+            console.log(`[Server] Persisted ${cookies.length} cookies to disk (total: ${existing.length})`);
+
+            res.json({ success: true, count: cookies.length, persisted: existing.length });
         } catch (e: any) {
             console.error('[Server] Failed to inject cookies:', e);
             res.status(500).json({ error: e.message });
