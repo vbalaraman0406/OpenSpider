@@ -89,6 +89,7 @@ export function startServer() {
     // /hooks/* uses its own token — handled inside the gmail router.
     app.use('/api', (req, res, next) => {
         if (req.path === '/health') return next(); // public health check
+        if (req.path === '/linkedin/auth' || req.path === '/linkedin/callback') return next(); // browser OAuth flow
         return apiKeyAuth(req, res, next);
     });
 
