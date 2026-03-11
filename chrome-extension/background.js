@@ -93,8 +93,8 @@ async function detachDebugger(tabId) {
 
 function connectWebSocket(tabId, token, port, host) {
     // Support both local and remote VPS connections
-    const wsUrl = `ws://${host}:${port}/?token=${token}`;
-    console.log("Connecting to", wsUrl);
+    const wsUrl = `ws://${host}:${port}/?apiKey=${token}`;
+    console.log("Connecting to", wsUrl.replace(token, '***'));
 
     ws = new WebSocket(wsUrl);
 
