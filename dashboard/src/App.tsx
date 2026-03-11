@@ -1277,6 +1277,9 @@ function CronView({ agents }: { agents: any[] }) {
     const [jobs, setJobs] = useState<any[]>([]);
     const [showModal, setShowModal] = useState(false);
     const [formData, setFormData] = useState({ description: '', prompt: '', intervalHours: '24', agentId: 'gateway', status: 'enabled', preferredTime: '' });
+    const [editJob, setEditJob] = useState<any>(null);
+    const [editFormData, setEditFormData] = useState({ description: '', prompt: '', intervalHours: '24', preferredTime: '' });
+    const [expandedPrompts, setExpandedPrompts] = useState<Set<string>>(new Set());
 
     useEffect(() => {
         fetchJobs();
@@ -1332,6 +1335,48 @@ function CronView({ agents }: { agents: any[] }) {
             setFormData({ description: '', prompt: '', intervalHours: '24', agentId: 'gateway', status: 'enabled', preferredTime: '' });
             fetchJobs();
         } catch (e) { }
+    };
+
+    const openEdit = (job: any) => {
+        setEditJob(job);
+        setEditFormData({
+            description: job.description || '',
+            prompt: job.prompt || '',
+            intervalHours: String(job.intervalHours || 24),
+            preferredTime: job.preferredTime || '',
+        });
+    };
+
+    const handleEdit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editJob) return;
+        try {
+            const payload: any = {
+                description: editFormData.description,
+                prompt: editFormData.prompt,
+                intervalHours: Number(editFormData.intervalHours) || 24,
+            };
+            if (editFormData.preferredTime) {
+                payload.preferredTime = editFormData.preferredTime;
+            } else {
+                payload.preferredTime = undefined;
+            }
+            await apiFetch(`/api/cron/${editJob.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            setEditJob(null);
+            fetchJobs();
+        } catch (e) { }
+    };
+
+    const togglePrompt = (id: string) => {
+        setExpandedPrompts(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id); else next.add(id);
+            return next;
+        });
     };
 
     const formatTimeDelta = (ms: number) => {
@@ -1415,7 +1460,12 @@ function CronView({ agents }: { agents: any[] }) {
                                 {/* Prompt Block */}
                                 <div className="mt-2 text-sm text-slate-400 leading-relaxed max-w-3xl">
                                     <span className="text-[10px] uppercase font-bold text-slate-500 tracking-widest block mb-1">Prompt</span>
-                                    {job.prompt}
+                                    <span>
+                                        {job.prompt.length > 150 && !expandedPrompts.has(job.id)
+                                            ? <>{job.prompt.substring(0, 150)}… <button onClick={() => togglePrompt(job.id)} className="text-rose-400 hover:text-rose-300 text-xs font-semibold ml-1">show more</button></>
+                                            : <>{job.prompt}{job.prompt.length > 150 && <button onClick={() => togglePrompt(job.id)} className="text-rose-400 hover:text-rose-300 text-xs font-semibold ml-1">show less</button>}</>
+                                        }
+                                    </span>
                                 </div>
 
                                 {/* Action Bar */}
@@ -1431,6 +1481,7 @@ function CronView({ agents }: { agents: any[] }) {
                                     </div>
                                     <div className="flex gap-2">
                                         <button className="px-4 py-1.5 text-xs font-semibold text-slate-300 hover:text-white bg-slate-800/50 hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors">Clone</button>
+                                        <button onClick={() => openEdit(job)} className="px-4 py-1.5 text-xs font-semibold text-sky-400 hover:text-white hover:bg-sky-600/80 bg-sky-500/10 rounded-lg border border-sky-500/20 transition-colors">Edit</button>
                                         <button onClick={() => toggleStatus(job)} className="px-4 py-1.5 text-xs font-semibold text-slate-300 hover:text-white bg-slate-800/50 hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors">{isEnabled ? 'Disable' : 'Enable'}</button>
                                         <button onClick={() => handleRunForcefully(job.id)} className="px-4 py-1.5 text-xs font-semibold text-slate-300 hover:text-white bg-slate-800/50 hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors">Run</button>
                                         <button onClick={() => handleDelete(job.id)} className="px-4 py-1.5 text-xs font-semibold text-red-400 hover:text-white hover:bg-red-500/80 bg-red-500/10 rounded-lg border border-red-500/20 transition-colors">Remove</button>
@@ -1483,6 +1534,46 @@ function CronView({ agents }: { agents: any[] }) {
                             <div className="pt-4 flex justify-end gap-3">
                                 <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 border border-slate-700 text-slate-300 rounded-lg text-sm hover:bg-slate-800 transition-colors">Cancel</button>
                                 <button type="submit" className="px-5 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-sm font-semibold transition-colors">Deploy Job</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Edit Job Modal */}
+            {editJob && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm fade-in">
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 w-full max-w-xl shadow-2xl relative overflow-hidden">
+                        <div className="absolute top-0 inset-x-0 h-px w-full bg-gradient-to-r from-transparent via-sky-500/50 to-transparent"></div>
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                                <Clock className="w-5 h-5 text-sky-500" />
+                                Edit Job
+                            </h3>
+                            <button onClick={() => setEditJob(null)} className="text-slate-500 hover:text-white transition-colors">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <form onSubmit={handleEdit} className="space-y-4">
+                            <div>
+                                <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Description</label>
+                                <input required type="text" value={editFormData.description} onChange={e => setEditFormData({ ...editFormData, description: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm text-slate-200 focus:ring-1 focus:ring-sky-500 focus:border-sky-500 outline-none" />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Preferred Time (e.g. 07:00) — leave blank for interval-based</label>
+                                <input type="time" value={editFormData.preferredTime} onChange={e => setEditFormData({ ...editFormData, preferredTime: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm text-slate-200 focus:ring-1 focus:ring-sky-500 focus:border-sky-500 outline-none" />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Interval (Hours) — used when no preferred time is set</label>
+                                <input type="number" min="1" max="8760" value={editFormData.intervalHours} onChange={e => setEditFormData({ ...editFormData, intervalHours: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm text-slate-200 focus:ring-1 focus:ring-sky-500 focus:border-sky-500 outline-none" />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Task Prompt</label>
+                                <textarea required rows={6} value={editFormData.prompt} onChange={e => setEditFormData({ ...editFormData, prompt: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm text-slate-200 focus:ring-1 focus:ring-sky-500 focus:border-sky-500 outline-none resize-none" />
+                            </div>
+                            <div className="pt-4 flex justify-end gap-3">
+                                <button type="button" onClick={() => setEditJob(null)} className="px-4 py-2 border border-slate-700 text-slate-300 rounded-lg text-sm hover:bg-slate-800 transition-colors">Cancel</button>
+                                <button type="submit" className="px-5 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-sm font-semibold transition-colors">Save Changes</button>
                             </div>
                         </form>
                     </div>
