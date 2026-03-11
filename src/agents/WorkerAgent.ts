@@ -56,6 +56,10 @@ export class WorkerAgent {
 
         const systemPrompt = `${compiledPersonaPrompt}
 
+[CURRENT DATE & TIME]
+Today is: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })} at ${new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZoneName: 'short' })}.
+IMPORTANT: Use this date for ALL time-sensitive searches and data lookups. Do NOT assume a different year.
+
 [TASK INSTRUCTIONS]
 Your Role: ${this.role}
 You have the ability to write scripts (Python, Node.js, Bash) and execute them to solve the user's task.
