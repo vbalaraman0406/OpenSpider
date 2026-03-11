@@ -18,6 +18,33 @@ export class PersonaShell {
     }
 
     /**
+     * Ensure an agent folder exists in workspace/agents/.
+     * Copies from workspace-defaults if available.
+     */
+    static ensureAgentFolder(agentId: string, existingFolders: string[]): string {
+        if (existingFolders.includes(agentId)) return agentId;
+
+        const agentsDir = path.join(process.cwd(), 'workspace', 'agents');
+        const defaultsDir = path.join(process.cwd(), 'workspace-defaults', 'agents', agentId);
+        const targetDir = path.join(agentsDir, agentId);
+
+        if (fs.existsSync(defaultsDir)) {
+            fs.mkdirSync(targetDir, { recursive: true });
+            for (const file of fs.readdirSync(defaultsDir)) {
+                const src = path.join(defaultsDir, file);
+                const dst = path.join(targetDir, file);
+                if (!fs.existsSync(dst) && fs.statSync(src).isFile()) {
+                    fs.copyFileSync(src, dst);
+                }
+            }
+            console.log(`[PersonaShell] Initialized agent "${agentId}" from workspace-defaults`);
+        } else {
+            fs.mkdirSync(targetDir, { recursive: true });
+        }
+        return agentId;
+    }
+
+    /**
      * Resolve a generic role name to an existing agent ID.
      * e.g. "Web Scraper" → "researcher", "File Writer" → "coder"
      * Falls back to lowercased + sanitized agentId if no match found.
@@ -57,7 +84,39 @@ export class PersonaShell {
             } catch { }
         }
 
-        // 3. Keyword-based matching for common role patterns
+        // 3. Check agents.json registry — matches by id, name, or role substring
+        const agentsJsonPath = path.join(process.cwd(), 'agents.json');
+        if (fs.existsSync(agentsJsonPath)) {
+            try {
+                const agents = JSON.parse(fs.readFileSync(agentsJsonPath, 'utf-8'));
+                for (const agent of agents) {
+                    const idLower = (agent.id || '').toLowerCase();
+                    const nameLower = (agent.name || '').toLowerCase();
+                    const roleLower = (agent.role || '').toLowerCase();
+                    const inputLower = roleOrId.toLowerCase();
+
+                    if (idLower === inputLower || nameLower === inputLower) {
+                        return PersonaShell.ensureAgentFolder(agent.id, folders);
+                    }
+                    // Substring/fuzzy: "Formula 1 Race Strategist" contains "pitwall"? No, but
+                    // the role "Formula 1 Race Strategist & Analyst" should match Pitwall's role field
+                    if (roleLower && (inputLower.includes(roleLower.substring(0, 20)) || roleLower.includes(inputLower.substring(0, 20)))) {
+                        return PersonaShell.ensureAgentFolder(agent.id, folders);
+                    }
+                    // Normalized match
+                    const normName = nameLower.replace(/[^a-z0-9]/g, '');
+                    const normRole = roleLower.replace(/[^a-z0-9]/g, '');
+                    if (normalized.includes(normName) || normName.includes(normalized)) {
+                        return PersonaShell.ensureAgentFolder(agent.id, folders);
+                    }
+                    if (normRole.length > 5 && (normalized.includes(normRole.substring(0, 15)) || normRole.includes(normalized.substring(0, 15)))) {
+                        return PersonaShell.ensureAgentFolder(agent.id, folders);
+                    }
+                }
+            } catch { }
+        }
+
+        // 4. Keyword-based matching for common role patterns
         const roleMapping: Record<string, string[]> = {
             'researcher': ['research', 'scraper', 'scraping', 'search', 'fetch', 'information', 'data gather', 'web', 'browse', 'lookup', 'find'],
             'coder': ['coder', 'developer', 'programmer', 'writer', 'file', 'script', 'code', 'build', 'implement', 'create', 'generate'],
