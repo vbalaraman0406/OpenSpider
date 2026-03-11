@@ -72,8 +72,9 @@ function resolvePhoneFromLid(lid: string): string | undefined {
 }
 
 // Track which LIDs we've already notified the admin about (avoid spamming)
+// Stores LID → pushName so the dashboard can show who tried to DM.
 // Persisted to disk so dedup survives gateway restarts.
-const lidNotifiedCache = new Set<string>();
+const lidNotifiedCache = new Map<string, string>(); // rawLID → pushName
 
 function getLidNotifiedCachePath(): string {
     const rootDir = __dirname.endsWith('src') || __dirname.endsWith('dist') ? path.join(__dirname, '..') : __dirname;
@@ -86,9 +87,15 @@ function loadLidNotifiedCache() {
         if (fs.existsSync(cachePath)) {
             const data = JSON.parse(fs.readFileSync(cachePath, 'utf-8'));
             if (Array.isArray(data)) {
-                for (const lid of data) lidNotifiedCache.add(lid);
-                console.log(`[LID Notified Cache] Loaded ${lidNotifiedCache.size} notified LIDs from disk.`);
+                // Legacy format: string[] → convert to Map with 'Unknown' pushName
+                for (const lid of data) lidNotifiedCache.set(lid, 'Unknown');
+            } else if (typeof data === 'object' && data !== null) {
+                // New format: { lid: pushName }
+                for (const [lid, pushName] of Object.entries(data)) {
+                    lidNotifiedCache.set(lid, pushName as string);
+                }
             }
+            console.log(`[LID Notified Cache] Loaded ${lidNotifiedCache.size} notified LIDs from disk.`);
         }
     } catch (e) { /* fresh install, no cache yet */ }
 }
@@ -101,11 +108,13 @@ function saveLidNotifiedCache() {
     if (!lidNotifiedFlushTimer) {
         lidNotifiedFlushTimer = setTimeout(() => {
             try {
-                fs.writeFileSync(getLidNotifiedCachePath(), JSON.stringify([...lidNotifiedCache], null, 2), 'utf-8');
+                const obj: Record<string, string> = {};
+                for (const [lid, pushName] of lidNotifiedCache.entries()) obj[lid] = pushName;
+                fs.writeFileSync(getLidNotifiedCachePath(), JSON.stringify(obj, null, 2), 'utf-8');
                 lidNotifiedDirty = false;
             } catch (e) { /* non-critical */ }
             lidNotifiedFlushTimer = null;
-        }, 2000); // Debounce: flush at most every 2s
+        }, 2000);
     }
 }
 
@@ -126,13 +135,50 @@ export function removeLidMapping(lid: string): boolean {
     return true;
 }
 
-// Returns LIDs that tried to DM but haven't been mapped yet (pending admin action)
-export function getPendingLids(): string[] {
-    const pending: string[] = [];
-    for (const lid of lidNotifiedCache) {
-        const cleanLid = lid.split('@')[0]!.split(':')[0]!;
+// Called from the API when a LID is mapped — updates in-memory caches AND clears pending
+export function addLidMappingFromApi(lid: string, phone: string) {
+    addLidMapping(lid, phone);
+    // Clear from pending notifications
+    const cleanLid = lid.split('@')[0]!.split(':')[0]!;
+    // Remove all entries that match this LID (may be stored as raw JID)
+    for (const key of lidNotifiedCache.keys()) {
+        const keyClean = key.split('@')[0]!.split(':')[0]!;
+        if (keyClean === cleanLid) {
+            lidNotifiedCache.delete(key);
+        }
+    }
+    saveLidNotifiedCache();
+}
+
+// Returns pending LIDs with push names + suggested phone from allowedDMs
+export function getPendingLids(): { lid: string, pushName: string, suggestedPhone: string }[] {
+    const pending: { lid: string, pushName: string, suggestedPhone: string }[] = [];
+
+    // Load allowedDMs to find unmatched contacts (those without LID fields)
+    let unmappedContacts: { number: string, mode: string }[] = [];
+    try {
+        const rootDir = __dirname.endsWith('src') || __dirname.endsWith('dist') ? path.join(__dirname, '..') : __dirname;
+        const cfgPath = path.join(rootDir, 'workspace', 'whatsapp_config.json');
+        if (fs.existsSync(cfgPath)) {
+            const config = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
+            const dms = config.allowedDMs || [];
+            for (const entry of dms) {
+                if (typeof entry === 'object' && entry.number && !entry.lid) {
+                    unmappedContacts.push({ number: entry.number, mode: entry.mode || 'always' });
+                } else if (typeof entry === 'string') {
+                    unmappedContacts.push({ number: entry, mode: 'always' });
+                }
+            }
+        }
+    } catch (e) { /* non-critical */ }
+
+    for (const [rawLid, pushName] of lidNotifiedCache.entries()) {
+        const cleanLid = rawLid.split('@')[0]!.split(':')[0]!;
         if (!lidPhoneCache.has(cleanLid)) {
-            pending.push(cleanLid);
+            // Auto-suggest: if there's exactly 1 unmapped contact, suggest it
+            // If multiple, suggest the first one (user can change)
+            const suggestedPhone = unmappedContacts.length > 0 ? unmappedContacts[0]!.number : '';
+            pending.push({ lid: cleanLid, pushName, suggestedPhone });
         }
     }
     return pending;
@@ -977,7 +1023,7 @@ export async function startWhatsApp() {
 
                             // Notify admin with easy map command (once per LID)
                             if (!lidNotifiedCache.has(senderRaw)) {
-                                lidNotifiedCache.add(senderRaw);
+                                lidNotifiedCache.set(senderRaw, pushName);
                                 saveLidNotifiedCache();
                                 try {
                                     const ownerCfg = config.allowedDMs[0];

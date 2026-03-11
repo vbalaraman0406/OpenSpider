@@ -399,7 +399,7 @@ export function WhatsAppSecurity({ isRunning }: { isRunning: boolean }) {
 
 function LidMappingsPanel() {
     const [mappings, setMappings] = useState<Record<string, string>>({});
-    const [pendingLids, setPendingLids] = useState<string[]>([]);
+    const [pendingLids, setPendingLids] = useState<{ lid: string, pushName: string, suggestedPhone: string }[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [phoneInputs, setPhoneInputs] = useState<Record<string, string>>({});
     const [error, setError] = useState('');
@@ -414,7 +414,18 @@ function LidMappingsPanel() {
             const mappingsData = await mappingsRes.json();
             const pendingData = await pendingRes.json();
             setMappings(mappingsData.mappings || {});
-            setPendingLids(pendingData.pending || []);
+            const pending = pendingData.pending || [];
+            setPendingLids(pending);
+            // Auto-fill phone inputs with server-suggested phones
+            const newInputs: Record<string, string> = {};
+            for (const p of pending) {
+                if (p.suggestedPhone && !phoneInputs[p.lid]) {
+                    newInputs[p.lid] = p.suggestedPhone;
+                }
+            }
+            if (Object.keys(newInputs).length > 0) {
+                setPhoneInputs(prev => ({ ...newInputs, ...prev }));
+            }
         } catch (e) {
             console.error("Failed to fetch LID data", e);
         } finally {
@@ -492,23 +503,28 @@ function LidMappingsPanel() {
                                 Blocked — Awaiting Phone Assignment
                             </div>
                             <div className="flex flex-col gap-2">
-                                {pendingLids.map(lid => (
-                                    <div key={lid} className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-3 flex items-center gap-3">
+                                {pendingLids.map(p => (
+                                    <div key={p.lid} className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-3 flex items-center gap-3">
                                         <div className="min-w-0 flex-shrink-0">
-                                            <div className="text-amber-400 text-[10px] font-bold uppercase tracking-wider">LID</div>
-                                            <div className="text-slate-200 font-mono text-sm truncate max-w-[200px]" title={lid}>{lid}</div>
+                                            <div className="text-amber-400 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                                                <span>LID</span>
+                                                {p.pushName && p.pushName !== 'Unknown' && (
+                                                    <span className="text-white font-normal normal-case tracking-normal ml-1 text-xs">({p.pushName})</span>
+                                                )}
+                                            </div>
+                                            <div className="text-slate-200 font-mono text-sm truncate max-w-[200px]" title={p.lid}>{p.lid}</div>
                                         </div>
                                         <span className="text-slate-600 shrink-0">→</span>
                                         <input
                                             type="text"
                                             placeholder="Enter phone number..."
-                                            value={phoneInputs[lid] || ''}
-                                            onChange={e => setPhoneInputs(prev => ({ ...prev, [lid]: e.target.value }))}
-                                            onKeyDown={e => { if (e.key === 'Enter') handleMap(lid); }}
+                                            value={phoneInputs[p.lid] || ''}
+                                            onChange={e => setPhoneInputs(prev => ({ ...prev, [p.lid]: e.target.value }))}
+                                            onKeyDown={e => { if (e.key === 'Enter') handleMap(p.lid); }}
                                             className="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 font-mono focus:ring-1 focus:ring-amber-500 focus:border-amber-500 outline-none placeholder:text-slate-600"
                                         />
                                         <button
-                                            onClick={() => handleMap(lid)}
+                                            onClick={() => handleMap(p.lid)}
                                             className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-sm font-semibold transition-all shadow-md shadow-amber-900/30 border border-amber-500/50 whitespace-nowrap"
                                         >
                                             Map

@@ -624,6 +624,12 @@ export function startServer() {
             config.allowedDMs = dms;
             fs.writeFileSync(whatsappConfigPath, JSON.stringify(config, null, 2), 'utf-8');
 
+            // Update in-memory caches AND clear from pending notifications
+            try {
+                const { addLidMappingFromApi } = require('./whatsapp');
+                addLidMappingFromApi(cleanLid, cleanPhone);
+            } catch (e) { /* whatsapp module may not be loaded in all contexts */ }
+
             // Also update lid_cache.json for the in-memory cache
             try {
                 const rootDir = __dirname.endsWith('src') || __dirname.endsWith('dist') ? path.join(__dirname, '..') : __dirname;
@@ -635,7 +641,7 @@ export function startServer() {
             } catch (e) { /* non-critical */ }
 
             console.log(`[API] LID mapped: ${cleanLid} → ${cleanPhone}`);
-            res.json({ success: true, message: `LID ${cleanLid} mapped to phone ${cleanPhone}. Restart gateway to apply.` });
+            res.json({ success: true, message: `LID ${cleanLid} mapped to phone ${cleanPhone}.` });
         } catch (e: any) {
             res.status(500).json({ error: e.message });
         }
