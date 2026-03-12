@@ -346,7 +346,8 @@ Example output:
                         instruction: step.instruction
                     }));
 
-                    const worker = new WorkerAgent(this.llm, step.role, () => this.cancelRequested);
+                    const resolvedRole = this.resolveRole(step.role, existingRoles);
+                    const worker = new WorkerAgent(this.llm, resolvedRole, () => this.cancelRequested);
                     const result = await worker.executeTask(step.instruction, globalContext);
 
                     console.log(`[Manager] Task ${taskId} completed. Result:\n${result}\n`);
@@ -378,7 +379,8 @@ Example output:
 
                         // Parallel tasks get a copy of the CURRENT global context!
                         const workerContext = [...globalContext];
-                        const worker = new WorkerAgent(this.llm, subtask.role, () => this.cancelRequested);
+                        const resolvedRole = this.resolveRole(subtask.role, existingRoles);
+                        const worker = new WorkerAgent(this.llm, resolvedRole, () => this.cancelRequested);
                         const result = await worker.executeTask(subtask.instruction, workerContext);
 
                         console.log(`[Manager] Parallel Task ${taskId} completed.`);
@@ -406,5 +408,54 @@ Example output:
             console.error("[Manager] Error generating/executing plan:", e);
             return `Failed to execute request: ${e.message}`;
         }
+    }
+
+    /**
+     * Resolve an LLM-generated role name to an existing agent.
+     * Prevents GPT-4o from creating phantom agents with suffixed names
+     * like "browser-specialist-hx82l" instead of "Browser Specialist".
+     */
+    private resolveRole(generatedRole: string, existingRoles: string[]): string {
+        if (!existingRoles.length) return generatedRole;
+
+        const gen = generatedRole.toLowerCase().replace(/[-_]/g, ' ');
+
+        // Exact match (case-insensitive)
+        const exact = existingRoles.find(r => r.toLowerCase() === gen);
+        if (exact) return exact;
+
+        // Bidirectional substring match
+        const substringMatch = existingRoles.find(r => {
+            const existing = r.toLowerCase().replace(/[-_]/g, ' ');
+            return existing.includes(gen) || gen.includes(existing);
+        });
+        if (substringMatch) return substringMatch;
+
+        // Word overlap scoring: pick the role with the most shared words
+        const genWords = gen.split(/\s+/).filter(w => w.length > 2);
+        let bestMatch = '';
+        let bestScore = 0;
+
+        for (const role of existingRoles) {
+            const roleWords = role.toLowerCase().replace(/[-_]/g, ' ').split(/\s+/).filter(w => w.length > 2);
+            const overlap = genWords.filter(w => roleWords.some(rw => rw.includes(w) || w.includes(rw))).length;
+            const score = overlap / Math.max(genWords.length, 1);
+            if (score > bestScore) {
+                bestScore = score;
+                bestMatch = role;
+            }
+        }
+
+        // Require at least 50% word overlap to accept a match
+        if (bestScore >= 0.5 && bestMatch) {
+            if (bestMatch.toLowerCase() !== generatedRole.toLowerCase()) {
+                console.log(`[Manager] Role resolved: "${generatedRole}" → "${bestMatch}"`);
+            }
+            return bestMatch;
+        }
+
+        // Fallback: use the generated role as-is (will create a generic worker)
+        console.warn(`[Manager] ⚠️ No matching agent for role "${generatedRole}". Using as generic worker.`);
+        return generatedRole;
     }
 }
