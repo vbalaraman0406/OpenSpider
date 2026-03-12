@@ -123,6 +123,18 @@ program
             process.exit(1);
         }
 
+        // Step 2: Rebuild Dashboard (if it exists)
+        const dashboardDir = path.join(process.cwd(), 'dashboard');
+        if (fs.existsSync(path.join(dashboardDir, 'package.json'))) {
+            console.log('🎨 Rebuilding Dashboard...');
+            try {
+                execSync('npm run build', { cwd: dashboardDir, stdio: 'inherit' });
+                console.log('✅ Dashboard built.\n');
+            } catch {
+                console.warn('⚠️ Dashboard build failed. Continuing with restart...\n');
+            }
+        }
+
         // Step 2: Restart PM2 process
         pm2.connect((err) => {
             if (err) {
