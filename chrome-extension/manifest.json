@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "OpenSpider Browser Relay",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "description": "Relays Chrome Developer Protocol (CDP) commands from the OpenSpider agent to the active tab.",
     "permissions": [
         "debugger",
@@ -15,6 +15,9 @@
         "http://localhost:*/*",
         "*://*/*"
     ],
+    "content_security_policy": {
+        "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' http://* https://* ws://* wss://*"
+    },
     "background": {
         "service_worker": "background.js",
         "type": "module"
