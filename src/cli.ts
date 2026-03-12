@@ -6,7 +6,7 @@ import { bootstrap } from './index';
 import { startTUI } from './cli-tui';
 import pm2 from 'pm2';
 import path from 'path';
-import { spawn } from 'child_process';
+import { spawn, execSync } from 'child_process';
 import { onboardWhatsApp } from './whatsapp';
 import fs from 'node:fs';
 
@@ -103,6 +103,69 @@ program
                     return;
                 }
                 console.log('⛔ OpenSpider has been stopped.');
+            });
+        });
+    });
+
+program
+    .command('restart')
+    .description('Rebuild and restart the OpenSpider gateway daemon')
+    .action(async () => {
+        console.log('\n🕷️ Restarting OpenSpider Gateway...\n');
+
+        // Step 1: Rebuild TypeScript
+        console.log('🔨 Rebuilding TypeScript...');
+        try {
+            execSync('npx tsc', { cwd: process.cwd(), stdio: 'inherit' });
+            console.log('✅ Build successful.\n');
+        } catch {
+            console.error('❌ Build failed. Fix errors before restarting.');
+            process.exit(1);
+        }
+
+        // Step 2: Restart PM2 process
+        pm2.connect((err) => {
+            if (err) {
+                console.error('Error connecting to PM2:', err);
+                process.exit(2);
+            }
+
+            pm2.restart('openspider-gateway', (err) => {
+                if (err) {
+                    // If process doesn't exist, start it fresh
+                    console.log('Process not running. Starting fresh...');
+
+                    let scriptPath = path.join(__dirname, 'index.js');
+                    if (__dirname.endsWith('src')) {
+                        scriptPath = path.join(__dirname, '..', 'dist', 'index.js');
+                    }
+                    const rootDir = __dirname.endsWith('src') ? path.join(__dirname, '..') : path.join(__dirname, '..');
+
+                    pm2.start({
+                        script: scriptPath,
+                        name: 'openspider-gateway',
+                        cwd: rootDir
+                    }, (err) => {
+                        pm2.disconnect();
+                        if (err) {
+                            console.error('Failed to start:', err);
+                            process.exit(2);
+                        }
+                        console.log('✅ OpenSpider started successfully!');
+                        console.log('\n🧭 Dashboard:   http://localhost:4001');
+                        console.log('📜 View Logs:   openspider logs\n');
+                        process.exit(0);
+                    });
+                    return;
+                }
+
+                pm2.disconnect();
+                console.log('==================================================');
+                console.log('✅ OpenSpider has been restarted!');
+                console.log('==================================================');
+                console.log('\n🧭 Dashboard:   http://localhost:4001');
+                console.log('📜 View Logs:   openspider logs\n');
+                process.exit(0);
             });
         });
     });
