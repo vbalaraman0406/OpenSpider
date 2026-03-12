@@ -523,7 +523,7 @@ export function startServer() {
             let currentText: string[] = [];
 
             for (const line of logLines) {
-                const match = line.match(/^\[(.*?)\] \*\*(.*?)\*\*: (.*)/);
+                const match = line.match(/^\[(.*?)\] \*\*(.*?)\*\*.*?: (.*)/);
 
                 if (match) {
                     // Save previous block if exists

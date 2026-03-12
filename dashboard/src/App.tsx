@@ -1744,6 +1744,15 @@ export default function App() {
                     setLogs(prev => [...prev.slice(-49999), { type: 'chat', data: `[Agent] ${msg.data}`, timestamp: msg.timestamp }]);
                     setIsTyping(false);
                     chatDoneRef.current = true; // Authoritative: task is done, prevent re-lock
+                } else if (msg.type === 'chat') {
+                    // Replayed chat buffer messages (user + agent conversation history)
+                    // Deduplicate against existing logs to avoid double-display
+                    setLogs(prev => {
+                        const key = msg.timestamp + msg.data;
+                        const alreadyExists = prev.some(p => (p.timestamp + p.data) === key);
+                        if (alreadyExists) return prev;
+                        return [...prev.slice(-49999), msg];
+                    });
                 } else if (msg.type === 'usage') {
                     const u = msg.data.usage;
                     setLogs(prev => [...prev.slice(-49999), { type: 'usage', data: `[API Token Usage] Model: ${msg.data.model} | In: ${u.promptTokens} | Out: ${u.completionTokens} | Total: ${u.totalTokens}`, timestamp: msg.timestamp }]);
