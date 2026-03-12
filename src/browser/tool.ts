@@ -563,6 +563,24 @@ export class BrowserTool {
     }
 
     private async doWaitForUser(message: string): Promise<string> {
+        // ─── RELAY-FIRST: Skip headless, the user acts in their Chrome ───
+        if (relayBridge.isRelayConnected()) {
+            console.log(`\n🔴 [BrowserTool] WAITING FOR USER ACTION (via relay): ${message}`);
+            console.log(`   The user's Chrome relay is connected. Waiting 30 seconds for user to complete the action.\n`);
+
+            // Wait for user to complete action in their Chrome browser
+            await new Promise(r => setTimeout(r, 30000));
+
+            // Read the relay page state after waiting
+            try {
+                const result = await relayBridge.readContent();
+                return `User interaction completed. Page is now: "${result.title}" (${result.url}). You can now proceed with reading content or navigating further.`;
+            } catch {
+                return `User interaction period completed. You can now proceed with reading content or navigating.`;
+            }
+        }
+
+        // ─── HEADLESS FALLBACK ───
         const page = await this.ensurePage();
         const url = page.url();
 
