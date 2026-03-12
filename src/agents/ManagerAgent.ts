@@ -291,10 +291,20 @@ Example output:
                 // Detect this and force delegation to a Worker agent.
                 const lowerPrompt = prompt.toLowerCase();
                 const requiresDelegation = [
-                    'browse', 'search', 'look up', 'check', 'find', 'research', 'open a browser', 'open browser',
+                    // Action verbs
+                    'browse', 'search', 'look up', 'check', 'find', 'research',
+                    'open a browser', 'open browser', 'go to', 'visit', 'navigate',
+                    'get me', 'get the', 'fetch', 'pull up', 'show me', 'grab',
+                    // Real-time data
                     'weather', 'news', 'price', 'score', 'stock', 'current', 'latest', 'today',
-                    'what is happening', 'what happened', 'send ', 'post ', 'create ', 'generate ',
-                    'schedule', 'email', 'whatsapp', 'voice'
+                    'what is happening', 'what happened',
+                    // Communication actions
+                    'send ', 'post ', 'create ', 'generate ', 'schedule', 'email', 'whatsapp', 'voice',
+                    // Domain/website indicators
+                    '.com', '.org', '.net', 'yahoo', 'google', 'website', 'site', 'page', 'url',
+                    // Data requests
+                    'stats', 'statistics', 'lineup', 'roster', 'schedule', 'standings',
+                    'fantasy', 'analyze', 'analysis', 'report', 'data', 'list'
                 ].some(keyword => lowerPrompt.includes(keyword));
 
                 if (requiresDelegation) {
