@@ -154,17 +154,23 @@ function connectWebSocket(tabId, token, port, host) {
 
     ws.onclose = () => {
         console.log("WebSocket closed");
-        chrome.action.setBadgeText({ text: "!" });
-        chrome.action.setBadgeBackgroundColor({ color: "#FF0000" });
-        // Don't detach debugger on WS close — keep the debugger alive
-        // The user can manually detach via the popup
         ws = null;
+
+        // AUTO-RECONNECT: Try to reconnect every 5s (up to 60 attempts = 5 min)
+        // The debugger stays attached — only the WebSocket needs to reconnect
+        if (attachedTabId && lastToken && lastPort && lastHost) {
+            chrome.action.setBadgeText({ text: "RE" });
+            chrome.action.setBadgeBackgroundColor({ color: "#FFAA00" });
+            scheduleWsReconnect();
+        } else {
+            chrome.action.setBadgeText({ text: "!" });
+            chrome.action.setBadgeBackgroundColor({ color: "#FF0000" });
+        }
     };
 
     ws.onerror = (err) => {
         console.error("WebSocket error", err);
-        chrome.action.setBadgeText({ text: "!" });
-        chrome.action.setBadgeBackgroundColor({ color: "#FF0000" });
+        // Don't update badge here — onclose will fire right after
     };
 
     // Relay CDP events from Chrome -> server
@@ -312,4 +318,111 @@ function sendError(id, message) {
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ id, result: {}, error: { message } }));
     }
+}
+
+/**
+ * Auto-reconnect WebSocket to the OpenSpider server.
+ * Retries every 5s for up to 5 minutes (60 attempts).
+ * The debugger stays attached to the tab during reconnection.
+ */
+let wsReconnectTimer = null;
+let wsReconnectCount = 0;
+const MAX_WS_RECONNECTS = 60;
+
+function scheduleWsReconnect() {
+    if (wsReconnectTimer) return; // Already scheduled
+    wsReconnectCount = 0;
+    attemptWsReconnect();
+}
+
+function attemptWsReconnect() {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        // Already connected
+        wsReconnectTimer = null;
+        wsReconnectCount = 0;
+        return;
+    }
+
+    if (wsReconnectCount >= MAX_WS_RECONNECTS) {
+        console.error("[Relay] Max WebSocket reconnect attempts reached. Giving up.");
+        chrome.action.setBadgeText({ text: "!" });
+        chrome.action.setBadgeBackgroundColor({ color: "#FF0000" });
+        wsReconnectTimer = null;
+        return;
+    }
+
+    if (!lastToken || !lastPort || !lastHost) {
+        wsReconnectTimer = null;
+        return;
+    }
+
+    wsReconnectCount++;
+    console.log(`[Relay] WebSocket reconnect attempt ${wsReconnectCount}/${MAX_WS_RECONNECTS}...`);
+
+    const wsUrl = `ws://${lastHost}:${lastPort}/?apiKey=${lastToken}`;
+    const reconnectWs = new WebSocket(wsUrl);
+
+    reconnectWs.onopen = () => {
+        console.log("[Relay] WebSocket reconnected successfully!");
+        ws = reconnectWs;
+        wsReconnectTimer = null;
+        wsReconnectCount = 0;
+
+        // Re-register as relay
+        ws.send(JSON.stringify({ type: 'relay_register' }));
+        chrome.action.setBadgeText({ text: "ON" });
+        chrome.action.setBadgeBackgroundColor({ color: "#00AA00" });
+
+        // Re-attach message handler
+        ws.onmessage = async (event) => {
+            try {
+                const msg = JSON.parse(event.data);
+                if (msg.id && msg.method) {
+                    if (!ALLOWED_CDP_METHODS.has(msg.method)) {
+                        sendError(msg.id, `Method '${msg.method}' is not allowed.`);
+                        return;
+                    }
+                    if (msg.method === 'Page.navigate' && msg.params && msg.params.url) {
+                        await handleNavigation(msg);
+                        return;
+                    }
+                    const targetTabId = agentTabId || attachedTabId;
+                    if (!targetTabId) { sendError(msg.id, 'No tab attached'); return; }
+                    chrome.debugger.sendCommand({ tabId: targetTabId }, msg.method, msg.params, (result) => {
+                        const response = {
+                            id: msg.id,
+                            result: result || {},
+                            error: chrome.runtime.lastError ? { message: chrome.runtime.lastError.message } : undefined
+                        };
+                        if (ws && ws.readyState === WebSocket.OPEN) {
+                            ws.send(JSON.stringify(response));
+                        }
+                    });
+                }
+            } catch (e) { console.error("Parse error", e); }
+        };
+
+        // Re-attach close handler for future disconnects
+        ws.onclose = () => {
+            console.log("WebSocket closed (reconnected session)");
+            ws = null;
+            if (attachedTabId && lastToken) {
+                chrome.action.setBadgeText({ text: "RE" });
+                chrome.action.setBadgeBackgroundColor({ color: "#FFAA00" });
+                scheduleWsReconnect();
+            }
+        };
+    };
+
+    reconnectWs.onerror = () => {
+        // Will trigger onclose
+    };
+
+    reconnectWs.onclose = () => {
+        // Retry in 5 seconds
+        wsReconnectTimer = setTimeout(() => {
+            wsReconnectTimer = null;
+            attemptWsReconnect();
+        }, 5000);
+    };
 }
