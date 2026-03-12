@@ -16,7 +16,7 @@
         "*://*/*"
     ],
     "content_security_policy": {
-        "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' http://* https://* ws://* wss://*"
+        "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' http://*:* https://*:* ws://*:* wss://*:*"
     },
     "background": {
         "service_worker": "background.js"
