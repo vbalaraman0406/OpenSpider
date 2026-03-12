@@ -110,32 +110,31 @@ async function handleExportCookies({ tabUrl, host, port, token }) {
         expires: c.expirationDate || -1
     }));
 
-    // 4. Send to server — try HTTPS first for remote, HTTP-only for localhost
-    const protocols = (host === '127.0.0.1' || host === 'localhost')
-        ? ['http']
-        : ['https', 'http'];
+    // 4. Send to server — ALWAYS use 127.0.0.1 for cookie export.
+    // The extension and server are always on the same machine. The user-specified
+    // host (e.g. Tailscale IP) is only needed for the WebSocket relay connection.
+    // Chrome's Private Network Access policy blocks fetch() to CGNAT IPs (100.x.x.x)
+    // but exempts WebSocket, which is why Attach works but fetch would fail.
+    const cookieHost = '127.0.0.1';
 
     let response = null;
     let lastError = null;
 
-    for (const protocol of protocols) {
-        try {
-            const url = `${protocol}://${host}:${port}/api/v1/browser/cookies`;
-            console.log(`[CookieExport] Trying ${protocol}...`);
-            response = await fetch(url, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-api-key': token
-                },
-                body: JSON.stringify({ cookies: playwrightCookies })
-            });
-            console.log(`[CookieExport] ${protocol} response: ${response.status}`);
-            break; // Success — stop trying protocols
-        } catch (e) {
-            lastError = e;
-            console.warn(`[CookieExport] ${protocol} failed:`, e.message);
-        }
+    try {
+        const url = `http://${cookieHost}:${port}/api/v1/browser/cookies`;
+        console.log(`[CookieExport] Sending to ${url}...`);
+        response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': token
+            },
+            body: JSON.stringify({ cookies: playwrightCookies })
+        });
+        console.log(`[CookieExport] Response: ${response.status}`);
+    } catch (e) {
+        lastError = e;
+        console.warn(`[CookieExport] fetch failed:`, e.message);
     }
 
     if (!response) {
