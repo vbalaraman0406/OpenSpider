@@ -148,7 +148,23 @@ program
             console.log('\n📦 2. Installing dependencies...');
             execSync('npm install', { stdio: 'inherit', cwd: rootDir });
 
-            console.log('\n🔐 3. Preparing Dashboard Authentication...');
+            console.log('\n🌐 3. Installing Playwright browser (Chromium)...');
+            try {
+                execSync('npx playwright install chromium', { stdio: 'inherit', cwd: rootDir });
+                // Install system deps on Linux (required for headless Chrome)
+                if (process.platform === 'linux') {
+                    try {
+                        execSync('npx playwright install-deps chromium', { stdio: 'inherit', cwd: rootDir });
+                    } catch (_) {
+                        console.log('   ⚠️  Could not install system deps (may need sudo). Run manually: sudo npx playwright install-deps chromium');
+                    }
+                }
+                console.log('   ✅ Playwright Chromium ready.');
+            } catch (_) {
+                console.log('   ⚠️  Playwright install skipped (non-fatal). Browser tasks may not work.');
+            }
+
+            console.log('\n🔐 4. Preparing Dashboard Authentication...');
             const envPath = require('path').join(rootDir, '.env');
             const dashEnvPath = require('path').join(rootDir, 'dashboard', '.env');
             if (require('fs').existsSync(envPath)) {

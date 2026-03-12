@@ -64,6 +64,18 @@ npm run build
 
 echo ""
 
+# 3b. Install Playwright browser (Chromium) for agent browsing
+echo -e "${GREEN}Installing Playwright browser (Chromium)...${NC}"
+npx playwright install chromium || echo -e "${YELLOW}⚠️  Playwright browser install failed (non-fatal)${NC}"
+
+# Install system dependencies on Linux
+if [ "$(uname)" = "Linux" ]; then
+    echo -e "${GREEN}Installing Playwright system dependencies...${NC}"
+    npx playwright install-deps chromium 2>/dev/null || sudo npx playwright install-deps chromium 2>/dev/null || echo -e "${YELLOW}⚠️  Could not install system deps. Run manually: sudo npx playwright install-deps chromium${NC}"
+fi
+
+echo ""
+
 # 4. Install PM2 process manager
 echo -e "${GREEN}Installing PM2 (process manager)...${NC}"
 npm install -g pm2 --unsafe-perm || sudo npm install -g pm2 --unsafe-perm
