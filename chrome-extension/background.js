@@ -110,19 +110,16 @@ async function handleExportCookies({ tabUrl, host, port, token }) {
         expires: c.expirationDate || -1
     }));
 
-    // 4. Send to server — ALWAYS use 127.0.0.1 for cookie export.
-    // The extension and server are always on the same machine. The user-specified
-    // host (e.g. Tailscale IP) is only needed for the WebSocket relay connection.
-    // Chrome's Private Network Access policy blocks fetch() to CGNAT IPs (100.x.x.x)
-    // but exempts WebSocket, which is why Attach works but fetch would fail.
-    const cookieHost = '127.0.0.1';
-
+    // 4. Send to server via HTTP.
+    // The VPS does not have SSL, so always use HTTP. The previous HTTPS-first
+    // fallback logic broke cookie export because the HTTPS connection attempt
+    // to a non-SSL server doesn't fail cleanly in all Chrome contexts.
     let response = null;
     let lastError = null;
 
     try {
-        const url = `http://${cookieHost}:${port}/api/v1/browser/cookies`;
-        console.log(`[CookieExport] Sending to ${url}...`);
+        const url = `http://${host}:${port}/api/v1/browser/cookies`;
+        console.log(`[CookieExport] Sending ${playwrightCookies.length} cookies to ${url}...`);
         response = await fetch(url, {
             method: 'POST',
             headers: {
