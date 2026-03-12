@@ -20,10 +20,13 @@ export interface BrowserConfig {
     profiles: Record<string, ProfileConfig>;
 }
 
+// Auto-detect headless: Linux without DISPLAY (VPS/server) → headless, Mac/Windows → headed
+const isHeadlessDefault = os.platform() === 'linux' && !process.env.DISPLAY;
+
 const DEFAULT_CONFIG: BrowserConfig = {
     enabled: true,
     defaultProfile: 'openspider',
-    headless: false,
+    headless: isHeadlessDefault,
     remoteCdpTimeoutMs: 3000,
     ssrfPolicy: {
         dangerouslyAllowPrivateNetwork: true
@@ -95,12 +98,25 @@ export class BrowserConfigManager {
             const found = paths.find(p => fs.existsSync(p));
             if (found) return found;
         } else {
-            // Linux
+            // Linux — also check Playwright's bundled Chromium
             const paths = [
                 '/usr/bin/google-chrome',
+                '/usr/bin/google-chrome-stable',
                 '/usr/bin/brave-browser',
-                '/usr/bin/chromium'
+                '/usr/bin/chromium',
+                '/usr/bin/chromium-browser',
             ];
+            // Check Playwright's cache for bundled Chromium
+            const playwrightCache = path.join(os.homedir(), '.cache', 'ms-playwright');
+            if (fs.existsSync(playwrightCache)) {
+                try {
+                    const dirs = fs.readdirSync(playwrightCache).filter(d => d.startsWith('chromium-'));
+                    for (const dir of dirs.sort().reverse()) {
+                        const chromePath = path.join(playwrightCache, dir, 'chrome-linux64', 'chrome');
+                        if (fs.existsSync(chromePath)) paths.unshift(chromePath);
+                    }
+                } catch (_) { }
+            }
             const found = paths.find(p => fs.existsSync(p));
             if (found) return found;
         }
