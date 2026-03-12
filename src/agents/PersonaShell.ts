@@ -10,10 +10,12 @@ export class PersonaShell {
         this.agentId = PersonaShell.resolveAgentId(agentId);
         this.workspacePath = path.join(process.cwd(), 'workspace', 'agents', this.agentId);
 
-        // Only create the directory if it doesn't exist — do NOT create blindly
-        // This was previously auto-creating empty folders for every unknown role name
+        // Only use existing directories — NEVER create new agent folders automatically.
+        // This prevents phantom agent creation from GPT-4o's hallucinated role names.
         if (!fs.existsSync(this.workspacePath)) {
-            fs.mkdirSync(this.workspacePath, { recursive: true });
+            console.warn(`[PersonaShell] ⚠️ No agent directory found for "${this.agentId}". Falling back to "coder".`);
+            this.agentId = 'coder';
+            this.workspacePath = path.join(process.cwd(), 'workspace', 'agents', 'coder');
         }
     }
 
@@ -39,7 +41,9 @@ export class PersonaShell {
             }
             console.log(`[PersonaShell] Initialized agent "${agentId}" from workspace-defaults`);
         } else {
-            fs.mkdirSync(targetDir, { recursive: true });
+            // Do NOT create empty agent folders — fall back to existing agent
+            console.warn(`[PersonaShell] ⚠️ No defaults found for agent "${agentId}". Blocked directory creation.`);
+            return existingFolders.includes('coder') ? 'coder' : existingFolders[0] || agentId;
         }
         return agentId;
     }
@@ -140,9 +144,9 @@ export class PersonaShell {
             return 'coder';
         }
 
-        // Absolute fallback: use the sanitized name (this will still create a folder)
-        console.log(`[PersonaShell] No agent matched role "${roleOrId}" — using sanitized folder name "${normalized}"`);
-        return normalized;
+        // Absolute fallback: return 'coder'. NEVER create new directories.
+        console.warn(`[PersonaShell] ⚠️ BLOCKED: No agent matched role "${roleOrId}". Refusing to create phantom directory. Falling back to "coder".`);
+        return coderExists ? 'coder' : (folders[0] || 'coder');
     }
 
     /**
