@@ -190,10 +190,6 @@ export class BrowserTool {
     private page: Page | null = null;
     private context: BrowserContext | null = null;
     private cursor: Cursor | null = null;
-    /** When true, all actions use the remote Chrome relay instead of headless Playwright */
-    private usingRelay = false;
-    private relayPage: Page | null = null;
-    private relayContext: BrowserContext | null = null;
 
     /**
      * Execute a browser action. Returns a text description of the result.
@@ -228,10 +224,6 @@ export class BrowserTool {
     }
 
     private async ensurePage(): Promise<Page> {
-        // If we've switched to relay mode, use the relay page
-        if (this.usingRelay && this.relayPage && !this.relayPage.isClosed()) {
-            return this.relayPage;
-        }
 
         if (this.page && !this.page.isClosed()) {
             return this.page;
@@ -285,20 +277,20 @@ export class BrowserTool {
             return `SECURITY BLOCK: Cannot navigate to "${url}". Reason: ${safety.reason}`;
         }
 
-        console.log(`[BrowserTool] Navigating to: ${url}`);
-
-        // RELAY MODE: If already using relay, route ALL navigations through the relay bridge
-        if (this.usingRelay && relayBridge.isRelayConnected()) {
+        // ─── RELAY-FIRST: If relay is connected, use it for EVERYTHING ───
+        if (relayBridge.isRelayConnected()) {
             try {
-                console.log(`[BrowserTool] [Relay] Navigating via relay: ${url}`);
+                console.log(`[BrowserTool] [Relay] Navigating via Chrome relay: ${url}`);
                 const result = await relayBridge.navigateAndRead(url);
-                return `🔄 [Relay] Navigated to "${result.title}" (${result.url})\n\n${sanitizePageContent(result.content.substring(0, 1500))}`;
+                const content = sanitizePageContent(result.content.substring(0, 1500));
+                return `Navigated to "${result.title}" (${result.url}) [via Chrome relay]\n\n${content}`;
             } catch (e: any) {
-                console.warn(`[BrowserTool] Relay navigation failed, falling back to headless: ${e.message}`);
-                this.usingRelay = false;
+                console.warn(`[BrowserTool] Relay navigation failed: ${e.message}. Falling back to headless.`);
             }
         }
 
+        // ─── HEADLESS FALLBACK: Only when relay is NOT connected ───
+        console.log(`[BrowserTool] Navigating to: ${url}`);
         const page = await this.ensurePage();
         const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 });
 
@@ -309,7 +301,6 @@ export class BrowserTool {
         // Make some initial meandering movements using ghost-cursor
         if (this.cursor) {
             try {
-                // Initialize the cursor at a random top starting position
                 await this.cursor.actions.randomMove(3);
                 await humanDelay(1000, 2000);
             } catch (e) {
@@ -317,17 +308,11 @@ export class BrowserTool {
             }
         }
 
-        // BOT DETECTION: Check if the page is a challenge/block page
-        if (!this.usingRelay) {
-            const botCheck = await detectBotProtection(page, response, url);
-            if (botCheck.blocked) {
-                console.warn(`[BrowserTool] ⚠️ Bot protection detected: ${botCheck.reason}. Attempting relay fallback...`);
-                const relayResult = await this.fallbackToRelay(url);
-                if (relayResult) return relayResult;
-                // If relay not available, let the agent know
-                const relayStatus = relayBridge.isRelayConnected() ? 'Relay is connected but failed.' : 'The remote Chrome relay is not connected. Connect the Browser Relay extension from a real Chrome browser to bypass.';
-                return `⚠️ Navigation blocked by ${botCheck.reason}. ${relayStatus}`;
-            }
+        // BOT DETECTION: Only relevant for headless — if blocked, tell agent relay is needed
+        const botCheck = await detectBotProtection(page, response, url);
+        if (botCheck.blocked) {
+            console.warn(`[BrowserTool] ⚠️ Bot protection detected: ${botCheck.reason}.`);
+            return `⚠️ Navigation blocked by ${botCheck.reason}. The remote Chrome relay is not connected. To bypass, connect the Browser Relay extension from a real Chrome browser.`;
         }
 
         const title = await page.title();
@@ -338,6 +323,16 @@ export class BrowserTool {
 
     private async doClick(selector: string): Promise<string> {
         if (!selector) return 'Error: No selector provided for click action.';
+
+        // ─── RELAY-FIRST ───
+        if (relayBridge.isRelayConnected()) {
+            try {
+                const result = await relayBridge.clickElement(selector);
+                return result;
+            } catch (e: any) {
+                console.warn(`[BrowserTool] Relay click failed: ${e.message}. Falling back to headless.`);
+            }
+        }
 
         const page = await this.ensurePage();
 
@@ -414,6 +409,16 @@ export class BrowserTool {
         if (!selector) return 'Error: No selector provided for type action.';
         if (!text) return 'Error: No text provided for type action.';
 
+        // ─── RELAY-FIRST ───
+        if (relayBridge.isRelayConnected()) {
+            try {
+                const result = await relayBridge.typeText(selector, text);
+                return result;
+            } catch (e: any) {
+                console.warn(`[BrowserTool] Relay type failed: ${e.message}. Falling back to headless.`);
+            }
+        }
+
         const page = await this.ensurePage();
 
         try {
@@ -449,8 +454,8 @@ export class BrowserTool {
     }
 
     private async doReadContent(selector?: string): Promise<string> {
-        // RELAY MODE: If using relay, read content from the relay browser
-        if (this.usingRelay && relayBridge.isRelayConnected()) {
+        // ─── RELAY-FIRST ───
+        if (relayBridge.isRelayConnected()) {
             try {
                 const result = await relayBridge.readContent();
                 let content = result.content;
@@ -463,7 +468,7 @@ export class BrowserTool {
                 content = sanitizePageContent(content);
                 return `Page: "${result.title}" (${result.url})\n\n${content}`;
             } catch (e: any) {
-                console.warn(`[BrowserTool] Relay read failed, falling back to headless: ${e.message}`);
+                console.warn(`[BrowserTool] Relay read failed: ${e.message}. Falling back to headless.`);
             }
         }
 
@@ -601,6 +606,15 @@ export class BrowserTool {
     }
 
     private async doScroll(direction: 'up' | 'down'): Promise<string> {
+        // ─── RELAY-FIRST ───
+        if (relayBridge.isRelayConnected()) {
+            try {
+                return await relayBridge.scrollPage(direction);
+            } catch (e: any) {
+                console.warn(`[BrowserTool] Relay scroll failed: ${e.message}. Falling back to headless.`);
+            }
+        }
+
         const page = await this.ensurePage();
         const totalScroll = 500 + Math.floor(Math.random() * 300);
         const steps = 4 + Math.floor(Math.random() * 4); // 4–7 incremental steps
@@ -615,29 +629,6 @@ export class BrowserTool {
         return `Scrolled ${direction} ~${totalScroll}px in ${steps} steps.`;
     }
 
-    /**
-     * Fallback to the remote Chrome relay via the relay bridge.
-     * Sends CDP commands through the extension's WebSocket instead of Playwright CDP.
-     * Returns navigation result if successful, or null if relay unavailable.
-     */
-    private async fallbackToRelay(url: string): Promise<string | null> {
-        if (!relayBridge.isRelayConnected()) {
-            console.warn('[BrowserTool] No relay extension connected — cannot fallback.');
-            return null;
-        }
-
-        try {
-            console.log(`[BrowserTool] 🔄 Switching to remote Chrome relay. Navigating to: ${url}`);
-            const result = await relayBridge.navigateAndRead(url);
-            this.usingRelay = true;
-
-            console.log(`[BrowserTool] ✅ Relay navigation successful: "${result.title}" (${result.url})`);
-            return `🔄 Switched to remote Chrome relay (bot protection bypassed). Page: "${result.title}" (${result.url})\n\n${result.content}`;
-        } catch (e: any) {
-            console.warn(`[BrowserTool] Remote relay fallback failed: ${e.message}`);
-            return null;
-        }
-    }
 
     private async doClose(): Promise<string> {
         if (this.page && !this.page.isClosed()) {

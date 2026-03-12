@@ -1,12 +1,13 @@
 /**
  * RelayBridge: Bridge between BrowserTool and the Chrome Browser Relay extension.
  * 
- * When the extension connects via WebSocket and sends a 'relay_register' message,
- * this bridge enables the BrowserTool to send CDP commands to the extension and
- * receive responses — without needing a direct CDP connection.
+ * RELAY-FIRST ARCHITECTURE:
+ * When the relay extension is connected, ALL browser actions go through
+ * this bridge to the user's real Chrome browser. Headless Playwright is
+ * only used when the relay is NOT connected.
  * 
  * Architecture:
- *   BrowserTool → RelayBridge.sendCommand() → WebSocket → Extension → chrome.debugger → Chrome
+ *   BrowserTool → RelayBridge → WebSocket → Extension → chrome.debugger → Chrome
  */
 
 import { WebSocket } from 'ws';
@@ -26,7 +27,6 @@ export function registerRelay(ws: WebSocket): void {
     ws.on('message', (data) => {
         try {
             const msg = JSON.parse(data.toString());
-            // CDP responses have an 'id' field matching the command we sent
             if (msg.id && pendingCommands.has(msg.id)) {
                 const pending = pendingCommands.get(msg.id)!;
                 pendingCommands.delete(msg.id);
@@ -42,7 +42,6 @@ export function registerRelay(ws: WebSocket): void {
     ws.on('close', () => {
         console.log('[RelayBridge] 🔌 Browser relay extension disconnected.');
         relayClient = null;
-        // Reject all pending commands
         for (const [id, pending] of pendingCommands) {
             pending.reject(new Error('Relay disconnected'));
             pendingCommands.delete(id);
@@ -81,48 +80,23 @@ export async function sendCommand(method: string, params: Record<string, any> = 
     });
 }
 
+// ─── HIGH-LEVEL BROWSER ACTIONS ──────────────────────────────────────────────
+
 /**
  * Navigate to a URL in the relay browser and return page content.
- * This is a convenience method that combines multiple CDP commands.
  */
 export async function navigateAndRead(url: string): Promise<{ title: string; url: string; content: string }> {
-    // Navigate
     await sendCommand('Page.enable');
     await sendCommand('Page.navigate', { url });
 
     // Wait for page to load
     await new Promise(r => setTimeout(r, 4000));
 
-    // Get page info
-    const evalResult = await sendCommand('Runtime.evaluate', {
-        expression: `JSON.stringify({
-            title: document.title,
-            url: window.location.href,
-            content: (() => {
-                const clone = document.body.cloneNode(true);
-                clone.querySelectorAll('script, style, nav, footer, header, noscript, iframe, svg').forEach(el => el.remove());
-                let text = clone.innerText || clone.textContent || '';
-                text = text.replace(/\\n{3,}/g, '\\n\\n').replace(/[ \\t]+/g, ' ').trim();
-                return text.substring(0, 3000);
-            })()
-        })`,
-        returnByValue: true
-    });
-
-    try {
-        const data = JSON.parse(evalResult.result?.value || '{}');
-        return {
-            title: data.title || 'Unknown',
-            url: data.url || url,
-            content: data.content || ''
-        };
-    } catch {
-        return { title: 'Unknown', url, content: 'Failed to read page content from relay browser' };
-    }
+    return readContent();
 }
 
 /**
- * Read the current page content from the relay browser without navigating.
+ * Read the current page content from the relay browser.
  */
 export async function readContent(): Promise<{ title: string; url: string; content: string }> {
     const evalResult = await sendCommand('Runtime.evaluate', {
@@ -150,4 +124,73 @@ export async function readContent(): Promise<{ title: string; url: string; conte
     } catch {
         return { title: 'Unknown', url: '', content: 'Failed to read page content from relay browser' };
     }
+}
+
+/**
+ * Click an element in the relay browser using a CSS selector.
+ */
+export async function clickElement(selector: string): Promise<string> {
+    const evalResult = await sendCommand('Runtime.evaluate', {
+        expression: `(() => {
+            const el = document.querySelector('${selector.replace(/'/g, "\\'")}');
+            if (!el) return JSON.stringify({ success: false, error: 'Element not found: ${selector.replace(/'/g, "\\'")}' });
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.click();
+            return JSON.stringify({ success: true, tag: el.tagName, text: (el.textContent || '').substring(0, 100) });
+        })()`,
+        returnByValue: true
+    });
+
+    try {
+        const data = JSON.parse(evalResult.result?.value || '{}');
+        if (!data.success) return `Error: ${data.error}`;
+        // Wait for any navigation/page update
+        await new Promise(r => setTimeout(r, 1500));
+        return `Clicked ${data.tag}: "${data.text}"`;
+    } catch {
+        return 'Click action completed';
+    }
+}
+
+/**
+ * Type text into an element in the relay browser.
+ */
+export async function typeText(selector: string, text: string): Promise<string> {
+    const escapedText = text.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n');
+    const escapedSelector = selector.replace(/'/g, "\\'");
+
+    const evalResult = await sendCommand('Runtime.evaluate', {
+        expression: `(() => {
+            const el = document.querySelector('${escapedSelector}');
+            if (!el) return JSON.stringify({ success: false, error: 'Element not found: ${escapedSelector}' });
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.focus();
+            el.value = '${escapedText}';
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+            return JSON.stringify({ success: true, tag: el.tagName });
+        })()`,
+        returnByValue: true
+    });
+
+    try {
+        const data = JSON.parse(evalResult.result?.value || '{}');
+        if (!data.success) return `Error: ${data.error}`;
+        return `Typed "${text}" into ${data.tag}`;
+    } catch {
+        return 'Type action completed';
+    }
+}
+
+/**
+ * Scroll the page in the relay browser.
+ */
+export async function scrollPage(direction: string): Promise<string> {
+    const amount = direction === 'up' ? -500 : 500;
+    await sendCommand('Runtime.evaluate', {
+        expression: `window.scrollBy(0, ${amount})`,
+        returnByValue: true
+    });
+    await new Promise(r => setTimeout(r, 500));
+    return `Scrolled ${direction}`;
 }
