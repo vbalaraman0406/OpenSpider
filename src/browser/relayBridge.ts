@@ -105,7 +105,7 @@ export async function readContent(): Promise<{ title: string; url: string; conte
             url: window.location.href,
             content: (() => {
                 const clone = document.body.cloneNode(true);
-                clone.querySelectorAll('script, style, nav, footer, header, noscript, iframe, svg').forEach(el => el.remove());
+                clone.querySelectorAll('script, style, nav, footer, header, noscript, iframe, svg, [class*="ad-"], [class*="Ad"], [id*="ad-"], [id*="Ad"], [class*="advertisement"], [class*="sponsored"], aside').forEach(el => el.remove());
                 let text = clone.innerText || clone.textContent || '';
                 text = text.replace(/\\n{3,}/g, '\\n\\n').replace(/[ \\t]+/g, ' ').trim();
                 return text.substring(0, 3000);

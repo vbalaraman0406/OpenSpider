@@ -272,6 +272,13 @@ export class BrowserTool {
             url = 'https://' + url;
         }
 
+        // SANITIZE: Strip garbage characters GPT-4o hallucinates into URLs
+        // e.g., }]}]}, trailing braces, encoded JSON artifacts
+        url = url.replace(/[\{\}\[\]`"'<>\\|]/g, '');  // strip invalid URL chars
+        url = url.replace(/%7[BbDd]/g, '');             // strip encoded { } [ ]
+        url = url.replace(/\)+$/, '');                   // strip trailing parens
+        url = url.replace(/[.,;:!?]+$/, '');             // strip trailing punctuation
+
         // SECURITY: Check URL safety before navigating (SSRF, local file, internal network)
         const safety = checkUrlSafety(url);
         if (!safety.allowed) {
