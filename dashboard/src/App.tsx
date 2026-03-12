@@ -1722,9 +1722,9 @@ export default function App() {
                     // Ignore cron-originated logs for typing state management
                     const isCronLog = typeof msg.data === 'string' && msg.data.startsWith('[CRON]');
 
-                    if (msg.data.includes('Emulating human typing delay') || msg.data.includes('Sending structured request')) {
+                    if (msg.data.includes('Emulating human typing delay') || msg.data.includes('Sending structured request') || msg.data.includes('Sending structured generation')) {
                         // Only trigger typing if we haven't already received the chat_response
-                        if (!isCronLog && msg.data.includes('Sending structured request') && !chatDoneRef.current) {
+                        if (!isCronLog && (msg.data.includes('Sending structured request') || msg.data.includes('Sending structured generation')) && !chatDoneRef.current) {
                             setIsTyping(true);
                         }
                         return;
