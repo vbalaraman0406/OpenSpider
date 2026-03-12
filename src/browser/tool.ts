@@ -105,10 +105,10 @@ export interface BrowseAction {
 }
 
 /**
- * Detect bot protection / anti-bot challenge pages after navigation.
- * Returns { blocked: true, reason } if the page appears to be a challenge.
+ * Detect bot protection / anti-bot challenge pages AND login walls after navigation.
+ * Returns { blocked: true, reason } if the page appears to be a challenge or requires auth.
  */
-async function detectBotProtection(page: Page, response: Response | null): Promise<{ blocked: boolean; reason: string }> {
+async function detectBotProtection(page: Page, response: Response | null, originalUrl: string): Promise<{ blocked: boolean; reason: string }> {
     // Check HTTP status
     const status = response?.status() || 200;
     if (status === 403 || status === 503) {
@@ -131,7 +131,7 @@ async function detectBotProtection(page: Page, response: Response | null): Promi
     }
 
     // Check for challenge page indicators (even on 200 status)
-    const hasCaptcha = await page.evaluate(() => {
+    const pageCheck = await page.evaluate(() => {
         const iframes = Array.from(document.querySelectorAll('iframe'));
         for (const iframe of iframes) {
             const src = (iframe as HTMLIFrameElement).src?.toLowerCase() || '';
@@ -140,11 +140,35 @@ async function detectBotProtection(page: Page, response: Response | null): Promi
         const body = document.body?.innerText?.toLowerCase() || '';
         if (body.includes('verify you are human') || body.includes('please verify') || body.includes('are you a robot')) return 'verification';
         if (body.includes('just a moment') && body.includes('checking your browser')) return 'cloudflare';
+
+        // LOGIN/AUTH WALL DETECTION
+        // Check for password input fields (strong signal of a login page)
+        const hasPasswordField = document.querySelector('input[type="password"]') !== null;
+        const title = document.title?.toLowerCase() || '';
+        const loginSignals = ['sign in', 'log in', 'login', 'signin', 'sign-in', 'log-in', 'authenticate'];
+        const titleHasLogin = loginSignals.some(s => title.includes(s));
+        const bodyHasLogin = loginSignals.some(s => body.includes(s)) && (hasPasswordField || body.includes('username') || body.includes('email address'));
+
+        if (hasPasswordField && (titleHasLogin || bodyHasLogin)) return 'login_wall';
+
         return null;
     }).catch(() => null);
 
-    if (hasCaptcha) {
-        return { blocked: true, reason: `${hasCaptcha} challenge detected` };
+    if (pageCheck) {
+        return { blocked: true, reason: `${pageCheck} detected` };
+    }
+
+    // URL REDIRECT DETECTION: If we ended up on a completely different domain (SSO/login redirect)
+    const currentUrl = page.url().toLowerCase();
+    const loginUrlPatterns = ['/login', '/signin', '/sign-in', '/auth', '/sso', '/oauth', '/account/login', '/users/sign_in'];
+    const redirectedToLogin = loginUrlPatterns.some(p => currentUrl.includes(p));
+    if (redirectedToLogin) {
+        // Only trigger if the original URL didn't already contain login patterns
+        const origLower = originalUrl.toLowerCase();
+        const wasAlreadyLogin = loginUrlPatterns.some(p => origLower.includes(p));
+        if (!wasAlreadyLogin) {
+            return { blocked: true, reason: `Login redirect detected (redirected to ${new URL(currentUrl).hostname})` };
+        }
     }
 
     return { blocked: false, reason: '' };
@@ -270,7 +294,7 @@ export class BrowserTool {
 
         // BOT DETECTION: Check if the page is a challenge/block page
         if (!this.usingRelay) {
-            const botCheck = await detectBotProtection(page, response);
+            const botCheck = await detectBotProtection(page, response, url);
             if (botCheck.blocked) {
                 console.warn(`[BrowserTool] ⚠️ Bot protection detected: ${botCheck.reason}. Attempting relay fallback...`);
                 const relayResult = await this.fallbackToRelay(url);
