@@ -983,6 +983,8 @@ Return ONLY the raw Python code.`;
         res.status(204).end();
     });
     app.post('/api/v1/browser/cookies', (req, res, next) => {
+        // Diagnostic log: confirm cookie export request reached the server
+        console.log(`[Server] Cookie export request received from ${req.ip} (${req.headers.origin || 'no origin'})`);
         // Override CORS for this specific endpoint
         res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
         res.setHeader('Access-Control-Allow-Credentials', 'true');

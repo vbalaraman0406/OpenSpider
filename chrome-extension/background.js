@@ -43,9 +43,114 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         sendResponse({ success: true });
     } else if (request.action === 'status') {
         sendResponse({ tabId: attachedTabId, agentTabId: agentTabId });
+    } else if (request.action === 'exportCookies') {
+        // Handle cookie export in background to avoid mixed-content blocking
+        handleExportCookies(request).then(sendResponse).catch(err => {
+            sendResponse({ success: false, error: err.message });
+        });
+        return true; // Keep message channel open for async response
     }
     return true;
 });
+
+/**
+ * Export cookies from the current tab to the OpenSpider server.
+ * Runs in the service worker context to avoid mixed-content blocking
+ * that occurs when the popup (inheriting HTTPS page context) tries
+ * to fetch from HTTP localhost.
+ */
+async function handleExportCookies({ tabUrl, host, port, token }) {
+    console.log(`[CookieExport] Starting export for URL: ${tabUrl} → ${host}:${port}`);
+
+    // 1. Get cookies matching the exact tab URL
+    let cookies = await chrome.cookies.getAll({ url: tabUrl });
+    console.log(`[CookieExport] Cookies from URL match: ${cookies.length}`);
+
+    // 2. Also get cookies from the root domain (e.g., .yahoo.com)
+    //    chrome.cookies.getAll({url}) misses parent-domain cookies
+    try {
+        const urlObj = new URL(tabUrl);
+        const hostParts = urlObj.hostname.split('.');
+        // Get root domain: e.g., "sports.yahoo.com" → ".yahoo.com"
+        if (hostParts.length >= 2) {
+            const rootDomain = '.' + hostParts.slice(-2).join('.');
+            const domainCookies = await chrome.cookies.getAll({ domain: rootDomain });
+            console.log(`[CookieExport] Cookies from domain '${rootDomain}': ${domainCookies.length}`);
+
+            // Merge and deduplicate by domain+name+path
+            const seen = new Set(cookies.map(c => `${c.domain}|${c.name}|${c.path}`));
+            for (const dc of domainCookies) {
+                const key = `${dc.domain}|${dc.name}|${dc.path}`;
+                if (!seen.has(key)) {
+                    cookies.push(dc);
+                    seen.add(key);
+                }
+            }
+            console.log(`[CookieExport] Total after merge: ${cookies.length}`);
+        }
+    } catch (e) {
+        console.warn(`[CookieExport] Domain broadening failed:`, e.message);
+    }
+
+    if (cookies.length === 0) {
+        return { success: false, error: 'No cookies found for this site.' };
+    }
+
+    // 3. Remap Chrome cookies to Playwright-compatible format
+    const playwrightCookies = cookies.map(c => ({
+        name: c.name,
+        value: c.value,
+        domain: c.domain,
+        path: c.path,
+        secure: c.secure,
+        httpOnly: c.httpOnly,
+        sameSite: ['unspecified', 'no_restriction'].includes(c.sameSite)
+            ? 'None'
+            : (c.sameSite === 'lax' ? 'Lax' : 'Strict'),
+        expires: c.expirationDate || -1
+    }));
+
+    // 4. Send to server — try HTTPS first for remote, HTTP-only for localhost
+    const protocols = (host === '127.0.0.1' || host === 'localhost')
+        ? ['http']
+        : ['https', 'http'];
+
+    let response = null;
+    let lastError = null;
+
+    for (const protocol of protocols) {
+        try {
+            const url = `${protocol}://${host}:${port}/api/v1/browser/cookies`;
+            console.log(`[CookieExport] Trying ${protocol}...`);
+            response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': token
+                },
+                body: JSON.stringify({ cookies: playwrightCookies })
+            });
+            console.log(`[CookieExport] ${protocol} response: ${response.status}`);
+            break; // Success — stop trying protocols
+        } catch (e) {
+            lastError = e;
+            console.warn(`[CookieExport] ${protocol} failed:`, e.message);
+        }
+    }
+
+    if (!response) {
+        return { success: false, error: `Cannot reach server at ${host}:${port}. ${lastError?.message || 'Check host, port, and firewall.'}` };
+    }
+
+    if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        return { success: false, error: `Server returned ${response.status}: ${errorText}` };
+    }
+
+    const data = await response.json();
+    console.log(`[CookieExport] ✅ Success: ${data.count} cookies exported, ${data.persisted} total`);
+    return { success: true, count: data.count, persisted: data.persisted };
+}
 
 async function attachDebugger(tabId, token, port, host) {
     if (attachedTabId) {

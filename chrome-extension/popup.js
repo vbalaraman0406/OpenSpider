@@ -65,70 +65,33 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Save settings
         chrome.storage.local.set({ gatewayHost: host, gatewayToken: token, relayPort: port });
 
-        try {
-            statusText.innerText = `Exporting cookies to ${host}:${port}...`;
+        statusText.innerText = `Exporting cookies to ${host}:${port}...`;
+        statusText.style.color = "#666";
 
-            // Extract all cookies corresponding to the current tab's URL
-            const cookies = await chrome.cookies.getAll({ url: currentTab.url });
-
-            if (cookies.length === 0) {
-                statusText.innerText = "No cookies found for this site.";
+        // Delegate cookie export to background service worker to avoid mixed-content blocking.
+        // The popup runs in the page's security context (HTTPS), so fetch to HTTP is blocked.
+        // The service worker has its own context and can freely make HTTP requests.
+        chrome.runtime.sendMessage({
+            action: 'exportCookies',
+            tabUrl: currentTab.url,
+            host,
+            port,
+            token
+        }, (response) => {
+            if (chrome.runtime.lastError) {
+                statusText.innerText = `Export failed: ${chrome.runtime.lastError.message}`;
+                statusText.style.color = "#ef4444";
                 return;
             }
-
-            // Remap Chrome cookies to Playwright compatible format
-            const playwrightCookies = cookies.map(c => ({
-                name: c.name,
-                value: c.value,
-                domain: c.domain,
-                path: c.path,
-                secure: c.secure,
-                httpOnly: c.httpOnly,
-                sameSite: ['unspecified', 'no_restriction'].includes(c.sameSite)
-                    ? 'None'
-                    : (c.sameSite === 'lax' ? 'Lax' : 'Strict'),
-                expires: c.expirationDate || -1
-            }));
-
-            // Try HTTPS first, then HTTP (VPS may be behind reverse proxy)
-            let response = null;
-            const protocols = host === '127.0.0.1' || host === 'localhost'
-                ? ['http']
-                : ['https', 'http'];
-
-            for (const protocol of protocols) {
-                try {
-                    response = await fetch(`${protocol}://${host}:${port}/api/v1/browser/cookies`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'x-api-key': token
-                        },
-                        body: JSON.stringify({ cookies: playwrightCookies })
-                    });
-                    break; // Success — stop trying protocols
-                } catch (e) {
-                    console.log(`${protocol} failed, trying next...`, e.message);
-                }
-            }
-
-            if (!response) {
-                throw new Error(`Cannot reach server at ${host}:${port}. Check host, port, and firewall.`);
-            }
-
-            if (response.ok) {
-                const data = await response.json();
-                statusText.innerText = `✅ ${data.count} cookies exported! (${data.persisted} total saved)`;
+            if (response && response.success) {
+                statusText.innerText = `✅ ${response.count} cookies exported! (${response.persisted} total saved)`;
                 statusText.style.color = "#22c55e";
                 setTimeout(() => window.close(), 2000);
             } else {
-                throw new Error(`Server returned ${response.status}`);
+                statusText.innerText = `Export failed: ${response?.error || 'Unknown error'}`;
+                statusText.style.color = "#ef4444";
             }
-        } catch (error) {
-            console.error(error);
-            statusText.innerText = `Export failed: ${error.message}`;
-            statusText.style.color = "#ef4444";
-        }
+        });
     });
 
     function setAttachedState() {
