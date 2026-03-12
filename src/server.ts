@@ -974,7 +974,20 @@ Return ONLY the raw Python code.`;
     });
 
     // API Route to inject cookies into the OpenSpider browser
-    app.post('/api/v1/browser/cookies', apiKeyAuth, async (req, res) => {
+    // CORS preflight: Allow cookie export from ANY origin (endpoint is API-key protected)
+    app.options('/api/v1/browser/cookies', (req, res) => {
+        res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+        res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-api-key');
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+        res.status(204).end();
+    });
+    app.post('/api/v1/browser/cookies', (req, res, next) => {
+        // Override CORS for this specific endpoint
+        res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+        next();
+    }, apiKeyAuth, async (req, res) => {
         try {
             const { cookies } = req.body;
             if (!cookies || !Array.isArray(cookies)) {
