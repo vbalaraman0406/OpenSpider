@@ -18,6 +18,7 @@ import { LinkedInService } from './services/LinkedInService';
 import gmailWebhookRouter from './webhooks/gmail';
 import { apiKeyAuth, validateWsConnection } from './middleware/auth';
 import { getManager } from './browser/manager';
+import { registerRelay } from './browser/relayBridge';
 
 export function startServer() {
     const app = express();
@@ -227,6 +228,13 @@ export function startServer() {
         ws.on('message', async (messageData) => {
             try {
                 const parsed = JSON.parse(messageData.toString());
+
+                // Browser Relay extension registration
+                if (parsed.type === 'relay_register') {
+                    registerRelay(ws);
+                    return;
+                }
+
                 if (parsed.type === 'chat') {
                     console.log(`\n\n[Web Chat] Received message: ${parsed.text}`);
 

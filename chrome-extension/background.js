@@ -100,6 +100,8 @@ function connectWebSocket(tabId, token, port, host) {
 
     ws.onopen = () => {
         console.log("WebSocket connected to OpenSpider Relay");
+        // Register as a browser relay extension (not just a dashboard client)
+        ws.send(JSON.stringify({ type: 'relay_register' }));
         chrome.action.setBadgeText({ text: "ON", tabId: tabId });
         chrome.action.setBadgeBackgroundColor({ color: "#00AA00", tabId: tabId });
     };

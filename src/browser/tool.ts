@@ -1,6 +1,7 @@
 import { BrowserManager, getManager } from './manager';
 import { Page, BrowserContext, Response } from 'playwright-core';
 import { createCursor, Cursor } from 'ghost-cursor-playwright';
+import * as relayBridge from './relayBridge';
 
 /**
  * BrowserTool: Agent-friendly wrapper around BrowserManager.
@@ -299,8 +300,9 @@ export class BrowserTool {
                 console.warn(`[BrowserTool] ⚠️ Bot protection detected: ${botCheck.reason}. Attempting relay fallback...`);
                 const relayResult = await this.fallbackToRelay(url);
                 if (relayResult) return relayResult;
-                // If relay not available, continue with blocked page and let the agent know
-                return `⚠️ Navigation blocked by ${botCheck.reason}. The remote Chrome relay is not connected. To bypass, connect the Browser Relay extension from a real Chrome browser.`;
+                // If relay not available, let the agent know
+                const relayStatus = relayBridge.isRelayConnected() ? 'Relay is connected but failed.' : 'The remote Chrome relay is not connected. Connect the Browser Relay extension from a real Chrome browser to bypass.';
+                return `⚠️ Navigation blocked by ${botCheck.reason}. ${relayStatus}`;
             }
         }
 
@@ -572,29 +574,23 @@ export class BrowserTool {
     }
 
     /**
-     * Fallback to the remote Chrome relay profile.
+     * Fallback to the remote Chrome relay via the relay bridge.
+     * Sends CDP commands through the extension's WebSocket instead of Playwright CDP.
      * Returns navigation result if successful, or null if relay unavailable.
      */
     private async fallbackToRelay(url: string): Promise<string | null> {
+        if (!relayBridge.isRelayConnected()) {
+            console.warn('[BrowserTool] No relay extension connected — cannot fallback.');
+            return null;
+        }
+
         try {
-            const manager = getManager();
-            this.relayContext = await manager.getProfileContext('chrome');
-            const pages = this.relayContext.pages();
-            const lastPage = pages.length > 0 ? pages[pages.length - 1] : null;
-            this.relayPage = lastPage || await this.relayContext.newPage();
-
-            console.log(`[BrowserTool] 🔄 Switched to remote Chrome relay. Navigating to: ${url}`);
-            await this.relayPage.goto(url, { waitUntil: 'domcontentloaded', timeout: 25000 });
-            try { await this.relayPage.waitForLoadState('networkidle', { timeout: 8000 }); } catch { }
-            await humanDelay(500, 1500);
-
+            console.log(`[BrowserTool] 🔄 Switching to remote Chrome relay. Navigating to: ${url}`);
+            const result = await relayBridge.navigateAndRead(url);
             this.usingRelay = true;
-            // Update cursor for relay page
-            this.cursor = await createCursor(this.relayPage);
 
-            const title = await this.relayPage.title();
-            const currentUrl = this.relayPage.url();
-            return `🔄 Switched to remote Chrome relay (bot protection bypassed). Navigated to "${title}" (${currentUrl}).`;
+            console.log(`[BrowserTool] ✅ Relay navigation successful: "${result.title}" (${result.url})`);
+            return `🔄 Switched to remote Chrome relay (bot protection bypassed). Page: "${result.title}" (${result.url})\n\n${result.content}`;
         } catch (e: any) {
             console.warn(`[BrowserTool] Remote relay fallback failed: ${e.message}`);
             return null;
