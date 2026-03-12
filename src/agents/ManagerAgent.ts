@@ -286,8 +286,30 @@ Example output:
             }
 
             if (planResult.direct_response) {
-                console.log(`[Manager] Direct Response generated.`);
-                return planResult.direct_response;
+                // CODE-LEVEL SAFEGUARD: Some models (e.g. GPT-4o) ignore prompt-level delegation rules
+                // and use direct_response for tasks that require real-time data or browsing.
+                // Detect this and force delegation to a Worker agent.
+                const lowerPrompt = prompt.toLowerCase();
+                const requiresDelegation = [
+                    'browse', 'search', 'look up', 'check', 'find', 'research', 'open a browser', 'open browser',
+                    'weather', 'news', 'price', 'score', 'stock', 'current', 'latest', 'today',
+                    'what is happening', 'what happened', 'send ', 'post ', 'create ', 'generate ',
+                    'schedule', 'email', 'whatsapp', 'voice'
+                ].some(keyword => lowerPrompt.includes(keyword));
+
+                if (requiresDelegation) {
+                    console.log(`[Manager] ⚠️ LLM used direct_response for a task requiring delegation. Overriding to Worker plan.`);
+                    // Override: create a simple plan delegating to the default coder agent
+                    delete planResult.direct_response;
+                    planResult.plan = [{
+                        type: 'task' as const,
+                        role: 'coder',
+                        instruction: prompt
+                    }];
+                } else {
+                    console.log(`[Manager] Direct Response generated.`);
+                    return planResult.direct_response;
+                }
             }
 
             if (!planResult.plan) {
