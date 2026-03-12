@@ -190,6 +190,8 @@ export class BrowserTool {
     private page: Page | null = null;
     private context: BrowserContext | null = null;
     private cursor: Cursor | null = null;
+    /** Track the last URL we navigated to (used to sync relay if it connects mid-session) */
+    private lastNavigatedUrl: string = '';
 
     /**
      * Execute a browser action. Returns a text description of the result.
@@ -282,6 +284,7 @@ export class BrowserTool {
             try {
                 console.log(`[BrowserTool] [Relay] Navigating via Chrome relay: ${url}`);
                 const result = await relayBridge.navigateAndRead(url);
+                this.lastNavigatedUrl = result.url;
                 const content = sanitizePageContent(result.content.substring(0, 1500));
                 return `Navigated to "${result.title}" (${result.url}) [via Chrome relay]\n\n${content}`;
             } catch (e: any) {
@@ -317,6 +320,7 @@ export class BrowserTool {
 
         const title = await page.title();
         const currentUrl = page.url();
+        this.lastNavigatedUrl = currentUrl;
 
         return `Navigated to "${title}" (${currentUrl}). The browser window is now open and visible.`;
     }
@@ -457,6 +461,8 @@ export class BrowserTool {
         // ─── RELAY-FIRST ───
         if (relayBridge.isRelayConnected()) {
             try {
+                // Auto-sync: if relay's page doesn't match last navigation, navigate relay first
+                await this.syncRelayIfNeeded();
                 const result = await relayBridge.readContent();
                 let content = result.content;
                 const MAX = 1500;
@@ -627,6 +633,31 @@ export class BrowserTool {
         }
         await humanDelay(300, 600);
         return `Scrolled ${direction} ~${totalScroll}px in ${steps} steps.`;
+    }
+
+    /**
+     * Auto-sync the relay browser to the last navigated URL.
+     * Handles the case where navigate went through headless but the relay
+     * connected later — ensures relay is on the right page before reading/clicking.
+     */
+    private async syncRelayIfNeeded(): Promise<void> {
+        if (!this.lastNavigatedUrl || !relayBridge.isRelayConnected()) return;
+
+        try {
+            const relayState = await relayBridge.readContent();
+            // Compare domains + paths (ignore query params for flexibility)
+            const relayHost = new URL(relayState.url).hostname;
+            const lastHost = new URL(this.lastNavigatedUrl).hostname;
+            const relayPath = new URL(relayState.url).pathname;
+            const lastPath = new URL(this.lastNavigatedUrl).pathname;
+
+            if (relayHost !== lastHost || relayPath !== lastPath) {
+                console.log(`[BrowserTool] [Relay] Auto-syncing: relay is on ${relayState.url} but last navigation was to ${this.lastNavigatedUrl}`);
+                await relayBridge.navigateAndRead(this.lastNavigatedUrl);
+            }
+        } catch (e: any) {
+            console.warn(`[BrowserTool] Relay sync check failed: ${e.message}`);
+        }
     }
 
 
