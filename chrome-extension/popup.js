@@ -66,7 +66,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         chrome.storage.local.set({ gatewayHost: host, gatewayToken: token, relayPort: port });
 
         try {
-            statusText.innerText = "Exporting cookies...";
+            statusText.innerText = `Exporting cookies to ${host}:${port}...`;
 
             // Extract all cookies corresponding to the current tab's URL
             const cookies = await chrome.cookies.getAll({ url: currentTab.url });
@@ -90,15 +90,31 @@ document.addEventListener('DOMContentLoaded', async () => {
                 expires: c.expirationDate || -1
             }));
 
-            // Send to OpenSpider Gateway API (uses configured host + port)
-            const response = await fetch(`http://${host}:${port}/api/v1/browser/cookies`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-api-key': token
-                },
-                body: JSON.stringify({ cookies: playwrightCookies })
-            });
+            // Try HTTPS first, then HTTP (VPS may be behind reverse proxy)
+            let response = null;
+            const protocols = host === '127.0.0.1' || host === 'localhost'
+                ? ['http']
+                : ['https', 'http'];
+
+            for (const protocol of protocols) {
+                try {
+                    response = await fetch(`${protocol}://${host}:${port}/api/v1/browser/cookies`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'x-api-key': token
+                        },
+                        body: JSON.stringify({ cookies: playwrightCookies })
+                    });
+                    break; // Success — stop trying protocols
+                } catch (e) {
+                    console.log(`${protocol} failed, trying next...`, e.message);
+                }
+            }
+
+            if (!response) {
+                throw new Error(`Cannot reach server at ${host}:${port}. Check host, port, and firewall.`);
+            }
 
             if (response.ok) {
                 const data = await response.json();
