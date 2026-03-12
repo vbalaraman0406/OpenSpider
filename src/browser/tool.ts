@@ -154,13 +154,17 @@ async function detectBotProtection(page: Page, response: Response | null, origin
         if (body.length < 1500 && (title.includes('error') || title.includes('page not found') || title.includes('403') || title.includes('forbidden'))) return 'error_page';
 
         // LOGIN/AUTH WALL DETECTION
-        // Check for password input fields (strong signal of a login page)
         const hasPasswordField = document.querySelector('input[type="password"]') !== null;
+        const hasEmailField = document.querySelector('input[type="email"]') !== null;
         const loginSignals = ['sign in', 'log in', 'login', 'signin', 'sign-in', 'log-in', 'authenticate'];
         const titleHasLogin = loginSignals.some(s => title.includes(s));
-        const bodyHasLogin = loginSignals.some(s => body.includes(s)) && (hasPasswordField || body.includes('username') || body.includes('email address'));
+        const bodyHasLogin = loginSignals.some(s => body.includes(s));
 
+        // Trigger if: (1) password field + login signals, OR (2) title clearly says login/sign-in
         if (hasPasswordField && (titleHasLogin || bodyHasLogin)) return 'login_wall';
+        if (titleHasLogin && (hasEmailField || body.includes('username') || body.includes('email'))) return 'login_wall';
+        // Title alone is a strong signal for dedicated login pages
+        if (titleHasLogin && body.length < 3000) return 'login_wall';
 
         return null;
     }).catch(() => null);
@@ -169,18 +173,15 @@ async function detectBotProtection(page: Page, response: Response | null, origin
         return { blocked: true, reason: `${pageCheck} detected` };
     }
 
-    // URL REDIRECT DETECTION: If we ended up on a completely different domain (SSO/login redirect)
-    const currentUrl = page.url().toLowerCase();
-    const loginUrlPatterns = ['/login', '/signin', '/sign-in', '/auth', '/sso', '/oauth', '/account/login', '/users/sign_in'];
-    const redirectedToLogin = loginUrlPatterns.some(p => currentUrl.includes(p));
-    if (redirectedToLogin) {
-        // Only trigger if the original URL didn't already contain login patterns
-        const origLower = originalUrl.toLowerCase();
-        const wasAlreadyLogin = loginUrlPatterns.some(p => origLower.includes(p));
-        if (!wasAlreadyLogin) {
-            return { blocked: true, reason: `Login redirect detected (redirected to ${new URL(currentUrl).hostname})` };
+    // HOSTNAME-BASED LOGIN DETECTION: catch known login domains
+    try {
+        const currentHostname = new URL(page.url()).hostname.toLowerCase();
+        const loginHostPrefixes = ['login.', 'signin.', 'sso.', 'accounts.', 'auth.', 'id.', 'passport.'];
+        const isLoginDomain = loginHostPrefixes.some(p => currentHostname.startsWith(p));
+        if (isLoginDomain) {
+            return { blocked: true, reason: `Login domain detected (${currentHostname})` };
         }
-    }
+    } catch { }
 
     return { blocked: false, reason: '' };
 }
