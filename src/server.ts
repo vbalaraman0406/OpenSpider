@@ -973,11 +973,7 @@ Return ONLY the raw Python code.`;
                 return res.status(400).json({ error: "Invalid cookies array provided." });
             }
 
-            // Get the browser manager and inject into the default profile
-            const manager = getManager();
-            await manager.injectCookies('default', cookies);
-
-            // Persist cookies to disk so they survive gateway restarts
+            // 1. ALWAYS persist cookies to disk first (works even without browser)
             const cookieFile = path.join(process.cwd(), 'workspace', 'browser_cookies.json');
             let existing: any[] = [];
             try {
@@ -997,9 +993,19 @@ Return ONLY the raw Python code.`;
             fs.writeFileSync(cookieFile, JSON.stringify(existing, null, 2));
             console.log(`[Server] Persisted ${cookies.length} cookies to disk (total: ${existing.length})`);
 
-            res.json({ success: true, count: cookies.length, persisted: existing.length });
+            // 2. Optionally inject into browser if one is already running
+            let injected = false;
+            try {
+                const manager = getManager();
+                await manager.injectCookies('default', cookies);
+                injected = true;
+            } catch (browserErr: any) {
+                console.log(`[Server] Browser not running — cookies saved to disk only (will auto-inject on next launch)`);
+            }
+
+            res.json({ success: true, count: cookies.length, persisted: existing.length, injected });
         } catch (e: any) {
-            console.error('[Server] Failed to inject cookies:', e);
+            console.error('[Server] Failed to persist cookies:', e);
             res.status(500).json({ error: e.message });
         }
     });
