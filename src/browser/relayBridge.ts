@@ -89,8 +89,9 @@ export async function navigateAndRead(url: string): Promise<{ title: string; url
     await sendCommand('Page.enable');
     await sendCommand('Page.navigate', { url });
 
-    // Wait for page to load
-    await new Promise(r => setTimeout(r, 4000));
+    // The Chrome extension now handles page load waiting (via chrome.tabs.onUpdated).
+    // This buffer is for any additional JS-rendered content after the load event.
+    await new Promise(r => setTimeout(r, 6000));
 
     return readContent();
 }
@@ -108,7 +109,7 @@ export async function readContent(): Promise<{ title: string; url: string; conte
                 clone.querySelectorAll('script, style, nav, footer, header, noscript, iframe, svg, [class*="ad-"], [class*="Ad"], [id*="ad-"], [id*="Ad"], [class*="advertisement"], [class*="sponsored"], aside').forEach(el => el.remove());
                 let text = clone.innerText || clone.textContent || '';
                 text = text.replace(/\\n{3,}/g, '\\n\\n').replace(/[ \\t]+/g, ' ').trim();
-                return text.substring(0, 3000);
+                return text.substring(0, 5000);
             })()
         })`,
         returnByValue: true
