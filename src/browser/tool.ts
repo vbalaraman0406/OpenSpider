@@ -285,6 +285,19 @@ export class BrowserTool {
         }
 
         console.log(`[BrowserTool] Navigating to: ${url}`);
+
+        // RELAY MODE: If already using relay, route ALL navigations through the relay bridge
+        if (this.usingRelay && relayBridge.isRelayConnected()) {
+            try {
+                console.log(`[BrowserTool] [Relay] Navigating via relay: ${url}`);
+                const result = await relayBridge.navigateAndRead(url);
+                return `🔄 [Relay] Navigated to "${result.title}" (${result.url})\n\n${sanitizePageContent(result.content.substring(0, 1500))}`;
+            } catch (e: any) {
+                console.warn(`[BrowserTool] Relay navigation failed, falling back to headless: ${e.message}`);
+                this.usingRelay = false;
+            }
+        }
+
         const page = await this.ensurePage();
         const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 });
 
@@ -435,6 +448,24 @@ export class BrowserTool {
     }
 
     private async doReadContent(selector?: string): Promise<string> {
+        // RELAY MODE: If using relay, read content from the relay browser
+        if (this.usingRelay && relayBridge.isRelayConnected()) {
+            try {
+                const result = await relayBridge.readContent();
+                let content = result.content;
+                const MAX = 1500;
+                if (content.length > MAX) {
+                    const head = content.substring(0, 1000);
+                    const tail = content.substring(content.length - 500);
+                    content = `${head}\n\n... [CONTENT TRUNCATED] ...\n\n${tail}`;
+                }
+                content = sanitizePageContent(content);
+                return `Page: "${result.title}" (${result.url})\n\n${content}`;
+            } catch (e: any) {
+                console.warn(`[BrowserTool] Relay read failed, falling back to headless: ${e.message}`);
+            }
+        }
+
         const page = await this.ensurePage();
         const title = await page.title();
         const currentUrl = page.url();

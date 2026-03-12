@@ -120,3 +120,34 @@ export async function navigateAndRead(url: string): Promise<{ title: string; url
         return { title: 'Unknown', url, content: 'Failed to read page content from relay browser' };
     }
 }
+
+/**
+ * Read the current page content from the relay browser without navigating.
+ */
+export async function readContent(): Promise<{ title: string; url: string; content: string }> {
+    const evalResult = await sendCommand('Runtime.evaluate', {
+        expression: `JSON.stringify({
+            title: document.title,
+            url: window.location.href,
+            content: (() => {
+                const clone = document.body.cloneNode(true);
+                clone.querySelectorAll('script, style, nav, footer, header, noscript, iframe, svg').forEach(el => el.remove());
+                let text = clone.innerText || clone.textContent || '';
+                text = text.replace(/\\n{3,}/g, '\\n\\n').replace(/[ \\t]+/g, ' ').trim();
+                return text.substring(0, 3000);
+            })()
+        })`,
+        returnByValue: true
+    });
+
+    try {
+        const data = JSON.parse(evalResult.result?.value || '{}');
+        return {
+            title: data.title || 'Unknown',
+            url: data.url || '',
+            content: data.content || ''
+        };
+    } catch {
+        return { title: 'Unknown', url: '', content: 'Failed to read page content from relay browser' };
+    }
+}
