@@ -89,9 +89,8 @@ export async function navigateAndRead(url: string): Promise<{ title: string; url
     await sendCommand('Page.enable');
     await sendCommand('Page.navigate', { url });
 
-    // The Chrome extension now handles page load waiting (via chrome.tabs.onUpdated).
-    // This buffer is for any additional JS-rendered content after the load event.
-    await new Promise(r => setTimeout(r, 6000));
+    // Wait for SPA content to render. Yahoo Fantasy, Gmail etc. need more time.
+    await new Promise(r => setTimeout(r, 8000));
 
     return readContent();
 }
@@ -130,13 +129,35 @@ export async function readContent(): Promise<{ title: string; url: string; conte
 }
 
 /**
- * Click an element in the relay browser using a CSS selector.
+ * Click an element in the relay browser using a CSS selector OR text content.
+ * Falls back to text-based search if CSS selector fails.
  */
 export async function clickElement(selector: string): Promise<string> {
+    const escapedSelector = selector.replace(/'/g, "\\'").replace(/\\/g, '\\\\');
     const evalResult = await sendCommand('Runtime.evaluate', {
         expression: `(() => {
-            const el = document.querySelector('${selector.replace(/'/g, "\\'")}');
-            if (!el) return JSON.stringify({ success: false, error: 'Element not found: ${selector.replace(/'/g, "\\'")}' });
+            // Try 1: CSS selector
+            let el = document.querySelector('${escapedSelector}');
+            
+            // Try 2: If CSS fails, search by link text (case-insensitive partial match)
+            if (!el) {
+                const searchText = '${escapedSelector}'.toLowerCase();
+                const candidates = [...document.querySelectorAll('a, button, [role="button"], [role="link"], [role="tab"], [role="menuitem"], li, span, div, h1, h2, h3, h4, h5, label, input[type="submit"]')];
+                el = candidates.find(c => {
+                    const t = (c.textContent || '').trim().toLowerCase();
+                    return t === searchText || t.includes(searchText);
+                }) || null;
+            }
+            
+            // Try 3: Search by aria-label
+            if (!el) {
+                const searchText = '${escapedSelector}'.toLowerCase();
+                el = [...document.querySelectorAll('[aria-label]')].find(c => 
+                    (c.getAttribute('aria-label') || '').toLowerCase().includes(searchText)
+                ) || null;
+            }
+            
+            if (!el) return JSON.stringify({ success: false, error: 'Element not found by selector or text: ${escapedSelector}' });
             el.scrollIntoView({ behavior: 'smooth', block: 'center' });
             el.click();
             return JSON.stringify({ success: true, tag: el.tagName, text: (el.textContent || '').substring(0, 100) });
@@ -146,9 +167,9 @@ export async function clickElement(selector: string): Promise<string> {
 
     try {
         const data = JSON.parse(evalResult.result?.value || '{}');
-        if (!data.success) return `Error: ${data.error}`;
+        if (!data.success) return `Error: ${data.error}. TIP: Try using the exact visible text of the element, or a more specific CSS selector.`;
         // Wait for any navigation/page update
-        await new Promise(r => setTimeout(r, 1500));
+        await new Promise(r => setTimeout(r, 2000));
         return `Clicked ${data.tag}: "${data.text}"`;
     } catch {
         return 'Click action completed';

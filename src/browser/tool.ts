@@ -292,7 +292,7 @@ export class BrowserTool {
                 console.log(`[BrowserTool] [Relay] Navigating via Chrome relay: ${url}`);
                 const result = await relayBridge.navigateAndRead(url);
                 this.lastNavigatedUrl = result.url;
-                const content = sanitizePageContent(result.content.substring(0, 1500));
+                const content = sanitizePageContent(result.content.substring(0, 3000));
                 return `Navigated to "${result.title}" (${result.url}) [via Chrome relay]\n\n${content}`;
             } catch (e: any) {
                 console.warn(`[BrowserTool] Relay navigation failed: ${e.message}`);
@@ -344,17 +344,17 @@ export class BrowserTool {
                 await this.syncRelayIfNeeded();
                 const result = await relayBridge.readContent();
                 let content = result.content;
-                const MAX = 1500;
+                const MAX = 3000;
                 if (content.length > MAX) {
-                    const head = content.substring(0, 1000);
-                    const tail = content.substring(content.length - 500);
+                    const head = content.substring(0, 2000);
+                    const tail = content.substring(content.length - 1000);
                     content = `${head}\n\n... [CONTENT TRUNCATED] ...\n\n${tail}`;
                 }
                 content = sanitizePageContent(content);
                 return `Page: "${result.title}" (${result.url})\n\n${content}`;
             } catch (e: any) {
                 console.warn(`[BrowserTool] Relay read failed: ${e.message}`);
-                return `⚠️ Relay read failed: ${e.message}. Ensure the Browser Relay is attached.`;
+                return `⚠️ Relay read failed: ${e.message}. Try again — the page may still be loading.`;
             }
         }
         return `⚠️ No browser available. The Browser Relay extension is not connected.`;

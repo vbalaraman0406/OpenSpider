@@ -716,10 +716,10 @@ ${context.join('\n')}
             // [Token Optimization] Tighter output cap: browser page content is already
             // capped at 1,500 chars in tool.ts, so most outputs are small. For any
             // unexpected large output (e.g. script stdout), enforce a hard 1,500 char cap.
-            const MAX_LENGTH = 1500;
+            const MAX_LENGTH = 3000;
             if (toolOutput.length > MAX_LENGTH) {
-                const head = toolOutput.substring(0, 800);
-                const tail = toolOutput.substring(toolOutput.length - 700);
+                const head = toolOutput.substring(0, 2000);
+                const tail = toolOutput.substring(toolOutput.length - 1000);
                 toolOutput = `${head}\n\n... [TRUNCATED ${toolOutput.length - MAX_LENGTH} characters. Write a script to parse/summarize if you need the full data] ...\n\n${tail}`;
             }
 
