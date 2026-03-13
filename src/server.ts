@@ -133,8 +133,14 @@ export function startServer() {
             const raw = fs.readFileSync(CHAT_MESSAGES_PATH, 'utf-8');
             const parsed = JSON.parse(raw);
             if (Array.isArray(parsed)) {
-                chatBuffer = parsed.slice(-MAX_CHAT_MESSAGES);
-                console.log(`[Server] Restored ${chatBuffer.length} conversation messages from disk.`);
+                // Evict messages older than 2 days
+                const twoDaysAgo = Date.now() - 2 * 24 * 60 * 60 * 1000;
+                const fresh = parsed.filter((m: any) => {
+                    if (!m.timestamp) return true; // Keep messages without timestamps
+                    return new Date(m.timestamp).getTime() > twoDaysAgo;
+                });
+                chatBuffer = fresh.slice(-MAX_CHAT_MESSAGES);
+                console.log(`[Server] Restored ${chatBuffer.length} conversation messages from disk (evicted ${parsed.length - fresh.length} older than 2 days).`);
             }
         }
     } catch (e) {
@@ -419,6 +425,9 @@ export function startServer() {
                 // Buffer chat-relevant events for page refresh persistence
                 if (message.includes('[You]') || message.includes('[Agent]') || message.includes('[Web Chat]')) {
                     bufferEvent(logEvent);
+                    // Also persist to chatBuffer so messages survive dashboard refresh
+                    // This captures WhatsApp and all channel messages, not just dashboard chat
+                    bufferChatMessage(logEvent);
                 }
 
                 clients.forEach(client => {
