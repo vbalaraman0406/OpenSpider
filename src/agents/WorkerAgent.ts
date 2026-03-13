@@ -140,7 +140,7 @@ ${context.join('\n')}
         // Instead of a fixed limit, the agent gets a base budget with
         // auto-extensions at checkpoints if it's making real progress.
         // ═══════════════════════════════════════════════════════════════
-        const BASE_BUDGET = 30;           // Every task starts with 30 steps
+        const BASE_BUDGET = 50;           // Every task starts with 50 steps (browser tasks need more)
         const EXTENSION_GRANT = 30;       // Each extension adds 30 more steps
         const CHECKPOINT_WINDOW = 5;      // Warn 5 steps before current limit
         const HARD_CEILING = 300;         // Absolute max — never exceeded
@@ -203,8 +203,8 @@ ${context.join('\n')}
                 if (postCheckpointActions === 3) {
                     if (postCheckpointHasWork && extensionsGranted < maxExtensions) {
                         // Check stall indicators before granting
-                        const isStalled = consecutiveErrors >= 3 || staleSummaryCount >= 5;
-                        const isLooping = [...visitedUrls.values()].some(count => count >= 3);
+                        const isStalled = consecutiveErrors >= 6 || staleSummaryCount >= 8;
+                        const isLooping = [...visitedUrls.values()].some(count => count >= 5);
 
                         if (isStalled || isLooping) {
                             console.warn(`[Worker - ${this.role}] 🔄 Extension DENIED — stall detected (errors: ${consecutiveErrors}, stale: ${staleSummaryCount}, looping: ${isLooping})`);
@@ -733,10 +733,12 @@ ${context.join('\n')}
                 visitedUrls.set(url, (visitedUrls.get(url) || 0) + 1);
             }
 
-            // Track consecutive errors
-            const isError = toolOutput.includes('error:') && !toolOutput.includes('error: none') 
-                         || toolOutput.startsWith('Tool execution failed')
-                         || toolOutput.startsWith('Invalid action');
+            // Track consecutive errors (but NOT relay click/read failures — those are normal browser exploration)
+            const isError = (toolOutput.startsWith('Tool execution failed')
+                         || toolOutput.startsWith('Invalid action'))
+                         && !toolOutput.includes('Element not found')  // Normal during click exploration
+                         && !toolOutput.includes('Relay')              // Relay retries are expected
+                         && !toolOutput.includes('TIP:');              // Helpful error, not a real failure
             if (isError) {
                 consecutiveErrors++;
             } else {
