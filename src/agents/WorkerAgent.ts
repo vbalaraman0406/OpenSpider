@@ -68,7 +68,7 @@ Your goal is to complete the task autonomously and return the final result.
 CRITICAL TOKEN RULE: Do not print massive HTML dumps. Use Python to parse, summarize, and extract ONLY the exact data you need. Your tool output context is truncated to 3000 characters.
 CRITICAL JSON TRUNCATION RULE: The backend API has a hard limit of 1500 output tokens. If your response exceeds this length, it will be forcefully clipped, causing a fatal JSON parse crash. You MUST keep your 'thought' string under 500 words and be concise in your intermediate steps to prevent array string truncation!
 CRITICAL MACOS PRIVACY RULE: NEVER run commands to search, list, or read files in \`~/Desktop\`, \`~/Documents\`, or \`~/Downloads\` as this will trigger a strict macOS GUI permission dialog that blocks the backend. You must ONLY work within the current project directory \`${process.cwd()}\`.
-CRITICAL COMPLETION RULE: You have a maximum of 150 steps. ALWAYS output final_answer as soon as you have enough information. For research tasks (finding businesses, data, lists), write final_answer after 3-5 sources — do NOT keep browsing trying to be exhaustive. Partial results delivered are ALWAYS better than a perfect answer never delivered. If a website fails to load after 2 attempts, move on immediately.
+CRITICAL COMPLETION RULE: You start with 30 steps. Your budget auto-extends if you are making progress (up to 300 max). ALWAYS output final_answer as soon as you have enough information. For research tasks (finding businesses, data, lists), write final_answer after 3-5 sources — do NOT keep browsing trying to be exhaustive. Partial results delivered are ALWAYS better than a perfect answer never delivered. If a website fails to load after 2 attempts, move on immediately.
 ${assignedSkillsContext}
 
 Available tools you can request in your JSON response:
@@ -122,14 +122,31 @@ ${context.join('\n')}
             { role: 'user', content: instruction }
         ];
 
-        // Coding tasks (write→run→fix→repeat) need far more iterations than browsing tasks.
-        // Detect coding-related roles and give them a much higher budget.
-        const isCodingRole = /coder|developer|engineer|programmer|backend|frontend|fullstack|software|code/i.test(this.role);
-        const maxLoops = isCodingRole ? 200 : 150; // Browsing/research tasks need ~150 steps (3-4 steps per page)
-        const warnAtIteration = isCodingRole ? 175 : 135; // Warn when ~15 steps remain
+        // ═══════════════════════════════════════════════════════════════
+        // DYNAMIC STEP BUDGET SYSTEM
+        // Instead of a fixed limit, the agent gets a base budget with
+        // auto-extensions at checkpoints if it's making real progress.
+        // ═══════════════════════════════════════════════════════════════
+        const BASE_BUDGET = 30;           // Every task starts with 30 steps
+        const EXTENSION_GRANT = 30;       // Each extension adds 30 more steps
+        const CHECKPOINT_WINDOW = 5;      // Warn 5 steps before current limit
+        const HARD_CEILING = 300;         // Absolute max — never exceeded
+
+        let currentBudget = BASE_BUDGET;
+        let extensionsGranted = 0;
+        const maxExtensions = Math.floor((HARD_CEILING - BASE_BUDGET) / EXTENSION_GRANT);
+
+        // Stall detection state
+        const visitedUrls = new Map<string, number>();  // URL → visit count
+        let consecutiveErrors = 0;
+        let lastSummary = '';
+        let staleSummaryCount = 0;
+        let checkpointInjected = false;
+        let postCheckpointActions = 0;
+        let postCheckpointHasWork = false;
 
         // Autonomy Loop
-        for (let i = 0; i < maxLoops; i++) {
+        for (let i = 0; i < HARD_CEILING; i++) {
 
             // Check for cancel at the top of every iteration
             if (this.cancelChecker && this.cancelChecker()) {
@@ -137,15 +154,61 @@ ${context.join('\n')}
                 return '⛔ Task cancelled by user.';
             }
 
-            // --- Iteration budget warning ---
-            // When approaching the limit, push a system message forcing the agent
-            // to compile what it has gathered and issue a final_answer immediately.
-            if (i === warnAtIteration) {
-                console.warn(`[Worker - ${this.role}] ⚠️ Iteration budget warning at step ${i}/${maxLoops}. Forcing wrap-up.`);
-                messages.push({
-                    role: 'user',
-                    content: `⚠️ SYSTEM: CRITICAL ITERATION BUDGET WARNING — You are on step ${i} of a maximum ${maxLoops}. You have approximately ${maxLoops - i} steps remaining before the task is forcibly terminated. You MUST wrap up NOW. Compile everything you have gathered into a final_answer IMMEDIATELY. Do NOT navigate to any more pages, do NOT run any more commands. Use your summary_of_findings to reconstruct the data and issue a final_answer with whatever results you have, even if incomplete. Partial results are INFINITELY better than no result.`
-                });
+            // --- Budget exceeded check ---
+            if (i >= currentBudget) {
+                console.warn(`[Worker - ${this.role}] Budget exhausted (${currentBudget} steps). Returning best-effort.`);
+                break;
+            }
+
+            // --- Checkpoint: inject warning when approaching current budget ---
+            if (!checkpointInjected && i >= currentBudget - CHECKPOINT_WINDOW) {
+                checkpointInjected = true;
+                postCheckpointActions = 0;
+                postCheckpointHasWork = false;
+
+                const canExtend = extensionsGranted < maxExtensions;
+                if (canExtend) {
+                    // Soft checkpoint — tell agent it can keep going if it has more to do
+                    console.log(`[Worker - ${this.role}] 📋 Checkpoint at step ${i}/${currentBudget} (${extensionsGranted} extensions used)`);
+                    messages.push({
+                        role: 'user',
+                        content: `⚠️ CHECKPOINT: You've used ${i} of your current ${currentBudget} step budget. If you have enough data, issue final_answer NOW. If you need more steps to complete the task properly, continue working — your budget will be extended automatically. Do NOT rush to a poor answer if more browsing would substantially improve the result.`
+                    });
+                } else {
+                    // Hard limit — force wrap-up
+                    console.warn(`[Worker - ${this.role}] ⚠️ Final budget warning at step ${i}/${currentBudget}. No more extensions available.`);
+                    messages.push({
+                        role: 'user',
+                        content: `⚠️ SYSTEM: FINAL BUDGET WARNING — You are on step ${i} of ${currentBudget} (maximum reached, no more extensions). You MUST issue final_answer NOW with whatever results you have. Partial results are INFINITELY better than no result.`
+                    });
+                }
+            }
+
+            // --- Post-checkpoint: monitor next actions to decide extension ---
+            if (checkpointInjected && postCheckpointActions > 0 && postCheckpointActions <= 3) {
+                // After 3 post-checkpoint actions, decide whether to extend
+                if (postCheckpointActions === 3) {
+                    if (postCheckpointHasWork && extensionsGranted < maxExtensions) {
+                        // Check stall indicators before granting
+                        const isStalled = consecutiveErrors >= 3 || staleSummaryCount >= 5;
+                        const isLooping = [...visitedUrls.values()].some(count => count >= 3);
+
+                        if (isStalled || isLooping) {
+                            console.warn(`[Worker - ${this.role}] 🔄 Extension DENIED — stall detected (errors: ${consecutiveErrors}, stale: ${staleSummaryCount}, looping: ${isLooping})`);
+                            messages.push({
+                                role: 'user',
+                                content: `⚠️ SYSTEM: Your budget will NOT be extended — the system detected you may be stuck (${isLooping ? 'revisiting same URLs' : isStalled ? 'consecutive errors or no new findings' : 'unknown'}). Issue final_answer NOW with your current findings.`
+                            });
+                        } else {
+                            // GRANT EXTENSION
+                            extensionsGranted++;
+                            currentBudget += EXTENSION_GRANT;
+                            checkpointInjected = false; // Reset for next checkpoint
+                            console.log(`[Worker - ${this.role}] ✅ Budget extended: +${EXTENSION_GRANT} → ${currentBudget} steps (extension ${extensionsGranted}/${maxExtensions})`);
+                        }
+                    }
+                    // If no real work detected, budget stays — agent will hit the limit naturally
+                }
             }
             let response;
             try {
@@ -650,6 +713,41 @@ ${context.join('\n')}
             console.log(`[Worker - ${this.role}] Tool Output: ${toolOutput.substring(0, 200)}...`);
             messages.push({ role: 'user', content: `Tool Result:\n${toolOutput}` });
 
+            // ── Dynamic Budget: Stall Detection Instrumentation ──
+            // Track URLs visited
+            if (response.action === 'browse_web' && response.command === 'navigate' && response.filename) {
+                const url = response.filename;
+                visitedUrls.set(url, (visitedUrls.get(url) || 0) + 1);
+            }
+
+            // Track consecutive errors
+            const isError = toolOutput.includes('error:') && !toolOutput.includes('error: none') 
+                         || toolOutput.startsWith('Tool execution failed')
+                         || toolOutput.startsWith('Invalid action');
+            if (isError) {
+                consecutiveErrors++;
+            } else {
+                consecutiveErrors = 0;
+            }
+
+            // Track summary stagnation
+            const currentSummary = response.summary_of_findings || '';
+            if (currentSummary === lastSummary || currentSummary.length < 5) {
+                staleSummaryCount++;
+            } else {
+                staleSummaryCount = 0;
+            }
+            lastSummary = currentSummary;
+
+            // Track post-checkpoint real work
+            if (checkpointInjected) {
+                postCheckpointActions++;
+                const isRealWork = ['browse_web', 'run_command', 'execute_script', 'write_script'].includes(response.action);
+                if (isRealWork && !isError) {
+                    postCheckpointHasWork = true;
+                }
+            }
+
             // --- OpenClaw Context Pruning Implementation (V2 Hard Pruning) ---
             // Retain System prompt, User prompt, and the CURRENT logic chain. 
             // Aggressively prune HISTORIC Tool Results AND Assistant payload bodies to preserve token bandwidth while retaining reasoning.
@@ -709,7 +807,7 @@ ${context.join('\n')}
             .filter(Boolean)
             .join('\n');
 
-        console.warn(`[Worker - ${this.role}] Hit max iteration limit (${maxLoops}). Returning best-effort summary.`);
+        console.warn(`[Worker - ${this.role}] Hit budget limit (${currentBudget} steps, ${extensionsGranted} extensions). Returning best-effort summary.`);
         return gatheredSummaries
             ? `**Note: Task reached maximum step limit. Partial findings collected:**\n\n${gatheredSummaries}`
             : "Worker Agent hit max iteration limit without finding a final answer.";
