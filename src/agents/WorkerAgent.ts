@@ -68,7 +68,7 @@ Your goal is to complete the task autonomously and return the final result.
 CRITICAL TOKEN RULE: Do not print massive HTML dumps. Use Python to parse, summarize, and extract ONLY the exact data you need. Your tool output context is truncated to 3000 characters.
 CRITICAL JSON TRUNCATION RULE: The backend API has a hard limit of 1500 output tokens. If your response exceeds this length, it will be forcefully clipped, causing a fatal JSON parse crash. You MUST keep your 'thought' string under 500 words and be concise in your intermediate steps to prevent array string truncation!
 CRITICAL MACOS PRIVACY RULE: NEVER run commands to search, list, or read files in \`~/Desktop\`, \`~/Documents\`, or \`~/Downloads\` as this will trigger a strict macOS GUI permission dialog that blocks the backend. You must ONLY work within the current project directory \`${process.cwd()}\`.
-CRITICAL COMPLETION RULE: You have a maximum of 40 steps. ALWAYS output final_answer as soon as you have enough information. For research tasks (finding businesses, data, lists), write final_answer after 3-5 sources — do NOT keep browsing trying to be exhaustive. Partial results delivered are ALWAYS better than a perfect answer never delivered. If a website fails to load after 2 attempts, move on immediately.
+CRITICAL COMPLETION RULE: You have a maximum of 150 steps. ALWAYS output final_answer as soon as you have enough information. For research tasks (finding businesses, data, lists), write final_answer after 3-5 sources — do NOT keep browsing trying to be exhaustive. Partial results delivered are ALWAYS better than a perfect answer never delivered. If a website fails to load after 2 attempts, move on immediately.
 ${assignedSkillsContext}
 
 Available tools you can request in your JSON response:
@@ -125,8 +125,8 @@ ${context.join('\n')}
         // Coding tasks (write→run→fix→repeat) need far more iterations than browsing tasks.
         // Detect coding-related roles and give them a much higher budget.
         const isCodingRole = /coder|developer|engineer|programmer|backend|frontend|fullstack|software|code/i.test(this.role);
-        const maxLoops = isCodingRole ? 200 : 80;
-        const warnAtIteration = isCodingRole ? 175 : 70; // Warn when ~25 steps remain
+        const maxLoops = isCodingRole ? 200 : 150; // Browsing/research tasks need ~150 steps (3-4 steps per page)
+        const warnAtIteration = isCodingRole ? 175 : 135; // Warn when ~15 steps remain
 
         // Autonomy Loop
         for (let i = 0; i < maxLoops; i++) {
