@@ -331,6 +331,37 @@ Example output:
 
             console.log(`[Manager] Generated Plan with ${planResult.plan.length} top-level steps.`);
 
+            // CODE-LEVEL ROUTING OVERRIDES: Force correct agent for specialized domains
+            // The LLM frequently ignores prompt-level routing rules, so we enforce at code level.
+            const lowerPrompt = prompt.toLowerCase();
+            const isBaseballQuery = [
+                'baseball', 'fantasy baseball', 'mlb', 'batter', 'pitcher', 'lineup',
+                'roster', 'waiver', 'draft', 'yahoo fantasy', 'fantasy league',
+                'home run', 'rbi', 'era', 'batting', 'pitching', 'spring training',
+                'market makers' // User's team name
+            ].some(kw => lowerPrompt.includes(kw));
+
+            if (isBaseballQuery && planResult.plan) {
+                for (const step of planResult.plan) {
+                    if (step.type === 'task' && step.role) {
+                        const roleLower = step.role.toLowerCase();
+                        if (roleLower.includes('browser') || roleLower.includes('coder') || roleLower.includes('scraper') || roleLower.includes('research')) {
+                            console.log(`[Manager] ⚾ Baseball routing override: "${step.role}" → "Fantasy Baseball Strategist"`);
+                            step.role = 'Fantasy Baseball Strategist';
+                        }
+                    }
+                    if (step.type === 'parallel' && step.subtasks) {
+                        for (const sub of step.subtasks) {
+                            const subLower = sub.role.toLowerCase();
+                            if (subLower.includes('browser') || subLower.includes('coder') || subLower.includes('scraper') || subLower.includes('research')) {
+                                console.log(`[Manager] ⚾ Baseball routing override: "${sub.role}" → "Fantasy Baseball Strategist"`);
+                                sub.role = 'Fantasy Baseball Strategist';
+                            }
+                        }
+                    }
+                }
+            }
+
             console.log(JSON.stringify({ type: 'agent_flow', event: 'plan_generated', plan: planResult }));
 
             // Execute passing context along
