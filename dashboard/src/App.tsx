@@ -2210,7 +2210,16 @@ export default function App() {
 
                                     // Hide absolutely everything else (raw JSON, [Server], [Web Chat], [Manager], [Worker])
                                     return false;
-                                }).map((log, i) => {
+                                })
+                                // Sort by timestamp to fix out-of-order display from multiple async sources
+                                .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+                                // Deduplicate by content+timestamp key to prevent double rendering
+                                .filter((log, idx, arr) => {
+                                    if (idx === 0) return true;
+                                    const key = log.timestamp + log.data;
+                                    return !arr.slice(0, idx).some(prev => (prev.timestamp + prev.data) === key);
+                                })
+                                .map((log, i) => {
                                     const text = log.data.trim();
                                     const isUser = text.includes('[You]');
                                     const isAgent = text.includes('[Agent]');
