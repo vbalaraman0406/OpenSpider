@@ -130,34 +130,72 @@ export async function readContent(): Promise<{ title: string; url: string; conte
 
 /**
  * Click an element in the relay browser using a CSS selector OR text content.
- * Falls back to text-based search if CSS selector fails.
+ * Handles: CSS selectors, comma-separated selectors, jQuery-style :contains(),
+ * and plain text matching as progressive fallbacks.
  */
 export async function clickElement(selector: string): Promise<string> {
-    const escapedSelector = selector.replace(/'/g, "\\'").replace(/\\/g, '\\\\');
+    // Pre-process on server side: extract text hints from :contains() patterns
+    // and split comma-separated selectors for individual attempts
+    const containsMatches = selector.match(/:contains\(['"]([^'"]+)['"]\)/gi) || [];
+    const textHints = containsMatches.map(m => {
+        const match = m.match(/:contains\(['"]([^'"]+)['"]\)/i);
+        return match ? match[1] : '';
+    }).filter((t): t is string => t !== undefined && t.length > 0);
+
+    // Split comma-separated selectors and clean each one
+    const rawSelectors = selector.split(',').map(s => s.trim()).filter(s => s.length > 0);
+    // Filter out selectors with :contains() as they're not valid CSS
+    const cssSelectors = rawSelectors
+        .filter(s => !s.includes(':contains'))
+        .map(s => s.replace(/'/g, "\\'"));
+
+    // Combine text hints with the raw selector as fallback text
+    const allTextSearches = [...new Set([...textHints, selector])];
+
+    const escapedTexts = allTextSearches.map(t => (t || '').replace(/'/g, "\\'").replace(/\\/g, '\\\\')).join('|||');
+    const escapedCss = cssSelectors.join('|||');
+
     const evalResult = await sendCommand('Runtime.evaluate', {
         expression: `(() => {
-            // Try 1: CSS selector
-            let el = document.querySelector('${escapedSelector}');
+            let el = null;
             
-            // Try 2: If CSS fails, search by link text (case-insensitive partial match)
-            if (!el) {
-                const searchText = '${escapedSelector}'.toLowerCase();
-                const candidates = [...document.querySelectorAll('a, button, [role="button"], [role="link"], [role="tab"], [role="menuitem"], li, span, div, h1, h2, h3, h4, h5, label, input[type="submit"]')];
-                el = candidates.find(c => {
-                    const t = (c.textContent || '').trim().toLowerCase();
-                    return t === searchText || t.includes(searchText);
-                }) || null;
+            // Try 1: Each valid CSS selector individually
+            const cssSelectors = '${escapedCss}'.split('|||').filter(s => s.length > 0);
+            for (const sel of cssSelectors) {
+                try { el = document.querySelector(sel); } catch(e) {}
+                if (el) break;
             }
             
-            // Try 3: Search by aria-label
+            // Try 2: Text-based search using extracted text hints
             if (!el) {
-                const searchText = '${escapedSelector}'.toLowerCase();
-                el = [...document.querySelectorAll('[aria-label]')].find(c => 
-                    (c.getAttribute('aria-label') || '').toLowerCase().includes(searchText)
-                ) || null;
+                const textSearches = '${escapedTexts}'.split('|||').filter(s => s.length > 0);
+                const candidates = [...document.querySelectorAll('a, button, [role="button"], [role="link"], [role="tab"], [role="menuitem"], li, span, h1, h2, h3, h4, h5, label, input[type="submit"]')];
+                for (const searchText of textSearches) {
+                    const st = searchText.toLowerCase().trim();
+                    // Skip CSS-like strings in text search
+                    if (st.includes(':') || st.includes('[') || st.includes('.') || st.includes('#')) continue;
+                    el = candidates.find(c => {
+                        const t = (c.textContent || '').trim().toLowerCase();
+                        return t === st || (st.length > 2 && t.includes(st));
+                    }) || null;
+                    if (el) break;
+                }
             }
             
-            if (!el) return JSON.stringify({ success: false, error: 'Element not found by selector or text: ${escapedSelector}' });
+            // Try 3: Search by aria-label using text hints
+            if (!el) {
+                const textSearches = '${escapedTexts}'.split('|||').filter(s => s.length > 0);
+                for (const searchText of textSearches) {
+                    const st = searchText.toLowerCase().trim();
+                    if (st.includes(':') || st.includes('[')) continue;
+                    el = [...document.querySelectorAll('[aria-label]')].find(c => 
+                        (c.getAttribute('aria-label') || '').toLowerCase().includes(st)
+                    ) || null;
+                    if (el) break;
+                }
+            }
+            
+            if (!el) return JSON.stringify({ success: false, error: 'Not found. Tried CSS: [${escapedCss}] and text: [${escapedTexts}]' });
             el.scrollIntoView({ behavior: 'smooth', block: 'center' });
             el.click();
             return JSON.stringify({ success: true, tag: el.tagName, text: (el.textContent || '').substring(0, 100) });
@@ -167,7 +205,7 @@ export async function clickElement(selector: string): Promise<string> {
 
     try {
         const data = JSON.parse(evalResult.result?.value || '{}');
-        if (!data.success) return `Error: ${data.error}. TIP: Try using the exact visible text of the element, or a more specific CSS selector.`;
+        if (!data.success) return `Error: ${data.error}. TIP: Use the EXACT visible text only, e.g. click "Players" not a:contains('Players').`;
         // Wait for any navigation/page update
         await new Promise(r => setTimeout(r, 2000));
         return `Clicked ${data.tag}: "${data.text}"`;

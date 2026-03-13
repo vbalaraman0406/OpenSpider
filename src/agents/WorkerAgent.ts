@@ -772,7 +772,7 @@ ${context.join('\n')}
             // We only trigger skeletal compaction if the envelope gets dangerous (e.g. > 12,000 chars roughly 3.5k tokens).
 
             const totalLength = messages.reduce((acc, m) => acc + (typeof m.content === 'string' ? m.content.length : 0), 0);
-            const DANGER_THRESHOLD = 6000; // Lowered from 12000 — prune earlier to keep each LLM call under ~2k tokens
+            const DANGER_THRESHOLD = 15000; // Allow more context for browser-heavy tasks before pruning
 
             if (totalLength > DANGER_THRESHOLD) {
                 console.log(`[Token Optimization] Context window dangerously large (${totalLength} chars). Triggering OpenSpider V3 Adaptive Pruning...`);
