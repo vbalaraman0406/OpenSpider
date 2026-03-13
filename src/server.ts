@@ -505,7 +505,6 @@ export function startServer() {
     // API Route to fetch chat persistence history
     app.get('/api/chat/history', (req, res) => {
         try {
-            const now = new Date();
             // Uses the same MEMORY_DIR logic as src/memory.ts
             const memoryDir = path.join(process.cwd(), 'workspace', 'memory');
 
@@ -513,93 +512,75 @@ export function startServer() {
                 return res.json([]);
             }
 
-            // Aggregate all chronologically sorted daily logs to prevent timezone midnight amnesia
+            // Only load files from the last 2 days to avoid flooding chat with old history
+            const twoDaysAgo = new Date();
+            twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+            const cutoffDate = twoDaysAgo.toISOString().split('T')[0] || '1970-01-01'; // e.g. "2026-03-11"
+
             const files = fs.readdirSync(memoryDir)
                 .filter(f => /^\d{4}-\d{2}-\d{2}\.md$/.test(f))
-                .sort();
+                .sort()
+                .filter(f => f.replace('.md', '') >= cutoffDate); // Only last 2 days
 
-            let logContent = "";
-            for (const file of files) {
-                logContent += fs.readFileSync(path.join(memoryDir, file), 'utf-8') + "\n\n";
-            }
-
-            // Split strictly by the exact prefix, capturing timestamp and sender reliably
-            const logLines = logContent.split('\n');
             const history: any[] = [];
 
-            let currentTimestamp = "";
-            let currentSender = "";
-            let currentText: string[] = [];
+            // Process each file with its own date context
+            for (const file of files) {
+                // Extract date from filename (e.g. "2026-03-12.md" → "2026-03-12")
+                const fileDate = file.replace('.md', '');
+                const logContent = fs.readFileSync(path.join(memoryDir, file), 'utf-8');
+                // Skip [COMPACTED] summary blocks — they're internal agent bookkeeping
+                const logLines = logContent.split('\n').filter(line => !line.includes('[COMPACTED]'));
 
-            for (const line of logLines) {
-                const match = line.match(/^\[(.*?)\] \*\*(.*?)\*\*.*?: (.*)/);
+                let currentTimestamp = "";
+                let currentSender = "";
+                let currentText: string[] = [];
 
-                if (match) {
-                    // Save previous block if exists
-                    if (currentTimestamp) {
-                        let validIsoDate = "";
-                        try {
-                            const [timePart, modifier] = currentTimestamp.split(' ');
-                            let [hoursStr, minutesStr, secondsStr] = (timePart || "").split(':');
+                const pushBlock = () => {
+                    if (!currentTimestamp) return;
+                    let validIsoDate = "";
+                    try {
+                        const [timePart, modifier] = currentTimestamp.split(' ');
+                        let [hoursStr, minutesStr, secondsStr] = (timePart || "").split(':');
 
-                            let hours = parseInt(hoursStr || "0", 10);
-                            const minutes = parseInt(minutesStr || "0", 10);
-                            const seconds = parseInt(secondsStr || "0", 10);
+                        let hours = parseInt(hoursStr || "0", 10);
+                        const minutes = parseInt(minutesStr || "0", 10);
+                        const seconds = parseInt(secondsStr || "0", 10);
 
-                            if (modifier === 'PM' && hours < 12) hours += 12;
-                            if (modifier === 'AM' && hours === 12) hours = 0;
+                        if (modifier === 'PM' && hours < 12) hours += 12;
+                        if (modifier === 'AM' && hours === 12) hours = 0;
 
-                            const d = new Date(now);
-                            d.setHours(hours, minutes, seconds, 0);
-                            validIsoDate = d.toISOString();
-                        } catch {
-                            validIsoDate = new Date().toISOString();
-                        }
-
-                        history.push({
-                            type: 'chat',
-                            data: `[${currentSender === 'User' ? 'You' : 'Agent'}] ${currentText.join('\n').trim()}`,
-                            timestamp: validIsoDate
-                        });
+                        // Use the DATE from the filename, not today's date
+                        const d = new Date(`${fileDate}T00:00:00`);
+                        d.setHours(hours, minutes, seconds, 0);
+                        validIsoDate = d.toISOString();
+                    } catch {
+                        validIsoDate = new Date().toISOString();
                     }
 
-                    // Start new block
-                    currentTimestamp = match[1] || "";
-                    currentSender = match[2] || "";
-                    currentText = [match[3] || ""];
-                } else if (currentTimestamp) {
-                    // Continuation of previous block (e.g. multi-line tables)
-                    currentText.push(line);
+                    history.push({
+                        type: 'chat',
+                        data: `[${currentSender === 'User' ? 'You' : 'Agent'}] ${currentText.join('\n').trim()}`,
+                        timestamp: validIsoDate
+                    });
+                };
+
+                for (const line of logLines) {
+                    const match = line.match(/^\[(.*?)\] \*\*(.*?)\*\*.*?: (.*)/);
+
+                    if (match) {
+                        pushBlock();
+                        currentTimestamp = match[1] || "";
+                        currentSender = match[2] || "";
+                        currentText = [match[3] || ""];
+                    } else if (currentTimestamp) {
+                        currentText.push(line);
+                    }
                 }
+                // Push the final dangling block for this file
+                pushBlock();
             }
 
-            // Push the final dangling block
-            if (currentTimestamp) {
-                let validIsoDate = "";
-                try {
-                    const [timePart, modifier] = currentTimestamp.split(' ');
-                    let [hoursStr, minutesStr, secondsStr] = (timePart || "").split(':');
-
-                    let hours = parseInt(hoursStr || "0", 10);
-                    const minutes = parseInt(minutesStr || "0", 10);
-                    const seconds = parseInt(secondsStr || "0", 10);
-
-                    if (modifier === 'PM' && hours < 12) hours += 12;
-                    if (modifier === 'AM' && hours === 12) hours = 0;
-
-                    const d = new Date(now);
-                    d.setHours(hours, minutes, seconds, 0);
-                    validIsoDate = d.toISOString();
-                } catch {
-                    validIsoDate = new Date().toISOString();
-                }
-
-                history.push({
-                    type: 'chat',
-                    data: `[${currentSender === 'User' ? 'You' : 'Agent'}] ${currentText.join('\n').trim()}`,
-                    timestamp: validIsoDate
-                });
-            }
             res.json(history);
         } catch (e: any) {
             console.error("Chat History Error:", e);

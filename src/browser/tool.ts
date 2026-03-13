@@ -286,7 +286,7 @@ export class BrowserTool {
             return `SECURITY BLOCK: Cannot navigate to "${url}". Reason: ${safety.reason}`;
         }
 
-        // ─── RELAY-FIRST: If relay is connected, use it for EVERYTHING ───
+        // ─── RELAY-ONLY: Headless browser is disabled. Use the attached relay browser. ───
         if (relayBridge.isRelayConnected()) {
             try {
                 console.log(`[BrowserTool] [Relay] Navigating via Chrome relay: ${url}`);
@@ -295,177 +295,49 @@ export class BrowserTool {
                 const content = sanitizePageContent(result.content.substring(0, 1500));
                 return `Navigated to "${result.title}" (${result.url}) [via Chrome relay]\n\n${content}`;
             } catch (e: any) {
-                console.warn(`[BrowserTool] Relay navigation failed: ${e.message}. Falling back to headless.`);
+                console.warn(`[BrowserTool] Relay navigation failed: ${e.message}`);
+                return `⚠️ Browser relay navigation failed: ${e.message}. The Browser Relay extension must be attached in Chrome. No headless fallback is available.`;
             }
         }
 
-        // ─── HEADLESS FALLBACK: Only when relay is NOT connected ───
-        console.log(`[BrowserTool] Navigating to: ${url}`);
-        const page = await this.ensurePage();
-        const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 });
-
-        // Human-like: wait for page activity to settle + random pause
-        try { await page.waitForLoadState('networkidle', { timeout: 5000 }); } catch { }
-        await humanDelay(800, 1800);
-
-        // Make some initial meandering movements using ghost-cursor
-        if (this.cursor) {
-            try {
-                await this.cursor.actions.randomMove(3);
-                await humanDelay(1000, 2000);
-            } catch (e) {
-                console.warn("[BrowserTool] Initial ghost cursor movement error:", e);
-            }
-        }
-
-        // BOT DETECTION: Only relevant for headless — if blocked, tell agent relay is needed
-        const botCheck = await detectBotProtection(page, response, url);
-        if (botCheck.blocked) {
-            console.warn(`[BrowserTool] ⚠️ Bot protection detected: ${botCheck.reason}.`);
-            return `⚠️ Navigation blocked by ${botCheck.reason}. The remote Chrome relay is not connected. To bypass, connect the Browser Relay extension from a real Chrome browser.`;
-        }
-
-        const title = await page.title();
-        const currentUrl = page.url();
-        this.lastNavigatedUrl = currentUrl;
-
-        return `Navigated to "${title}" (${currentUrl}). The browser window is now open and visible.`;
+        return `⚠️ No browser available. The Browser Relay extension is not connected. Please attach the OpenSpider Browser Relay in Chrome before using browser actions.`;
     }
 
     private async doClick(selector: string): Promise<string> {
         if (!selector) return 'Error: No selector provided for click action.';
 
-        // ─── RELAY-FIRST ───
+        // ─── RELAY-ONLY ───
         if (relayBridge.isRelayConnected()) {
             try {
                 const result = await relayBridge.clickElement(selector);
                 return result;
             } catch (e: any) {
-                console.warn(`[BrowserTool] Relay click failed: ${e.message}. Falling back to headless.`);
+                console.warn(`[BrowserTool] Relay click failed: ${e.message}`);
+                return `⚠️ Relay click failed: ${e.message}. Try a different selector or ensure the Browser Relay is attached.`;
             }
         }
-
-        const page = await this.ensurePage();
-
-        try {
-            // Wait for element to be visible before clicking (vital for SPAs)
-            await page.waitForSelector(selector, { state: 'visible', timeout: 8000 });
-
-            // Use ghost-cursor to execute a human-like point and click
-            if (this.cursor) {
-                await this.cursor.actions.click({ target: selector }, { waitForSelector: 5000 });
-            } else {
-                // Fallback to robotic click
-                await page.hover(selector, { timeout: 5000 });
-                await humanDelay(150, 400);
-                await page.click(selector, { timeout: 5000, delay: 50 + Math.floor(Math.random() * 80) });
-            }
-            await humanDelay(400, 1000);
-            return `Clicked on element matching "${selector}". Page may have updated.`;
-        } catch (e1: any) {
-            // Try text-based selector as fallback if it's not a complex CSS selector
-            const isComplex = selector.includes('.') || selector.includes('[') || selector.includes('#') || selector.includes('>');
-            const fallbackSelector = isComplex ? selector : `text="${selector}"`;
-
-            try {
-                await page.waitForSelector(fallbackSelector, { state: 'visible', timeout: 5000 });
-
-                if (this.cursor) {
-                    await this.cursor.actions.click({ target: fallbackSelector }, { waitForSelector: 5000 });
-                } else {
-                    await page.hover(fallbackSelector, { timeout: 3000 }).catch(() => { });
-                    await humanDelay(100, 300);
-                    await page.click(fallbackSelector, { timeout: 5000 });
-                }
-                await humanDelay(400, 1000);
-                return `Clicked on element "${fallbackSelector}". Page may have updated.`;
-            } catch (e2: any) {
-                // One final try with force Playwright click in case ghost-cursor can't calculate element bounds (e.g. elements with 0 height but visual overflow)
-                try {
-                    await page.click(selector, { timeout: 3000, force: true });
-                    await humanDelay(400, 1000);
-                    return `Force clicked on element "${selector}". Page may have updated.`;
-                } catch {
-                    // Final absolute fallback: try injecting raw JS to dispatch synthetic pointer and mouse events directly on the DOM node.
-                    // This bypasses Playwright's actionability checks entirely and forcefully resolves issues with React synthetic event listeners on complex SPAs.
-                    try {
-                        const success = await page.evaluate((sel) => {
-                            const el = document.querySelector(sel);
-                            if (el) {
-                                // Simulate full interaction sequence for React 18+
-                                el.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, cancelable: true }));
-                                el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
-                                el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
-                                el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
-                                el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
-                                (el as HTMLElement).click();
-                                return true;
-                            }
-                            return false;
-                        }, selector);
-
-                        if (success) {
-                            await humanDelay(400, 1000);
-                            return `DOM script synthetically clicked element "${selector}". Page may have updated.`;
-                        }
-                    } catch (jsError) { }
-
-                    return `Could not find element to click: "${selector}". Error: ${e1.message}. Try using a different selector or reading the page content first.`;
-                }
-            }
-        }
+        return `⚠️ No browser available. The Browser Relay extension is not connected.`;
     }
 
     private async doType(selector: string, text: string): Promise<string> {
         if (!selector) return 'Error: No selector provided for type action.';
         if (!text) return 'Error: No text provided for type action.';
 
-        // ─── RELAY-FIRST ───
+        // ─── RELAY-ONLY ───
         if (relayBridge.isRelayConnected()) {
             try {
                 const result = await relayBridge.typeText(selector, text);
                 return result;
             } catch (e: any) {
-                console.warn(`[BrowserTool] Relay type failed: ${e.message}. Falling back to headless.`);
+                console.warn(`[BrowserTool] Relay type failed: ${e.message}`);
+                return `⚠️ Relay type failed: ${e.message}. Try a different selector or ensure the Browser Relay is attached.`;
             }
         }
-
-        const page = await this.ensurePage();
-
-        try {
-            await page.waitForSelector(selector, { state: 'visible', timeout: 8000 });
-
-            // Use ghost-cursor to click the input field first
-            if (this.cursor) {
-                await this.cursor.actions.click({ target: selector }, { waitForSelector: 5000 });
-            } else {
-                await page.click(selector, { timeout: 5000 });
-            }
-            await humanDelay(200, 500);
-            // Clear existing value then type with per-character delay (50–120ms ≈ 80–120 WPM)
-            await page.fill(selector, '', { timeout: 3000 });
-            await page.type(selector, text, { delay: 50 + Math.floor(Math.random() * 70) });
-            return `Typed "${text.substring(0, 80)}${text.length > 80 ? '...' : ''}" into element "${selector}".`;
-        } catch (e1: any) {
-            try {
-                const input = page.locator(selector).first();
-                await input.click({ timeout: 3000, force: true });
-                await humanDelay(150, 400);
-                await input.type(text, { delay: 60 + Math.floor(Math.random() * 60) });
-                return `Typed "${text.substring(0, 80)}" into element "${selector}".`;
-            } catch {
-                try {
-                    await page.keyboard.type(text, { delay: 70 });
-                    return `Typed "${text.substring(0, 80)}" using keyboard input (no specific element targeted).`;
-                } catch (e2: any) {
-                    return `Failed to type into "${selector}": ${e1.message}`;
-                }
-            }
-        }
+        return `⚠️ No browser available. The Browser Relay extension is not connected.`;
     }
 
     private async doReadContent(selector?: string): Promise<string> {
-        // ─── RELAY-FIRST ───
+        // ─── RELAY-ONLY ───
         if (relayBridge.isRelayConnected()) {
             try {
                 // Auto-sync: if relay's page doesn't match last navigation, navigate relay first
@@ -481,52 +353,11 @@ export class BrowserTool {
                 content = sanitizePageContent(content);
                 return `Page: "${result.title}" (${result.url})\n\n${content}`;
             } catch (e: any) {
-                console.warn(`[BrowserTool] Relay read failed: ${e.message}. Falling back to headless.`);
+                console.warn(`[BrowserTool] Relay read failed: ${e.message}`);
+                return `⚠️ Relay read failed: ${e.message}. Ensure the Browser Relay is attached.`;
             }
         }
-
-        const page = await this.ensurePage();
-        const title = await page.title();
-        const currentUrl = page.url();
-
-        let content: string;
-
-        if (selector) {
-            try {
-                content = await page.locator(selector).first().innerText({ timeout: 5000 });
-            } catch {
-                content = await page.locator('body').innerText({ timeout: 5000 });
-            }
-        } else {
-            // Extract meaningful text content, not raw HTML
-            content = await page.evaluate(() => {
-                // Remove script, style, nav, footer to focus on main content
-                const clone = document.body.cloneNode(true) as HTMLElement;
-                clone.querySelectorAll('script, style, nav, footer, header, noscript, iframe, svg').forEach(el => el.remove());
-
-                // Get text content, clean up whitespace
-                let text = clone.innerText || clone.textContent || '';
-                // Collapse multiple newlines/spaces
-                text = text.replace(/\n{3,}/g, '\n\n').replace(/[ \t]+/g, ' ').trim();
-                return text;
-            });
-        }
-
-        // Truncate to prevent token explosion.
-        // 1,500 chars is enough to extract business names, addresses, phone numbers.
-        // The agent can navigate to specific pages if it needs deeper detail.
-        const MAX = 1500;
-        if (content.length > MAX) {
-            const head = content.substring(0, 1000);
-            const tail = content.substring(content.length - 500);
-            content = `${head}\n\n... [CONTENT TRUNCATED — use a targeted selector or navigate to a specific page for more detail] ...\n\n${tail}`;
-        }
-
-        // SECURITY: Sanitize page content before passing to the LLM.
-        // Malicious pages can inject prompt injection patterns to try to hijack agent behavior.
-        content = sanitizePageContent(content);
-
-        return `Page: "${title}" (${currentUrl})\n\n${content}`;
+        return `⚠️ No browser available. The Browser Relay extension is not connected.`;
     }
 
     private async doScreenshot(): Promise<string> {
@@ -570,7 +401,7 @@ export class BrowserTool {
     }
 
     private async doWaitForUser(message: string): Promise<string> {
-        // ─── RELAY-FIRST: Skip headless, the user acts in their Chrome ───
+        // ─── RELAY-ONLY ───
         if (relayBridge.isRelayConnected()) {
             console.log(`\n🔴 [BrowserTool] WAITING FOR USER ACTION (via relay): ${message}`);
             console.log(`   The user's Chrome relay is connected. Waiting 30 seconds for user to complete the action.\n`);
@@ -587,77 +418,20 @@ export class BrowserTool {
             }
         }
 
-        // ─── HEADLESS FALLBACK ───
-        const page = await this.ensurePage();
-        const url = page.url();
-
-        console.log(`\n🔴 [BrowserTool] WAITING FOR USER ACTION: ${message}`);
-        console.log(`   Browser is open at: ${url}`);
-        console.log(`   The agent will wait up to 120 seconds for you to complete the action.\n`);
-
-        // Inject a visible overlay in the browser to prompt the user
-        await page.evaluate((msg: string) => {
-            const overlay = document.createElement('div');
-            overlay.id = '__openspider_auth_overlay';
-            overlay.innerHTML = `
-                <div style="position:fixed;top:0;left:0;right:0;z-index:999999;background:linear-gradient(135deg,#1e40af,#7c3aed);padding:16px 24px;display:flex;align-items:center;justify-content:between;gap:16px;font-family:system-ui,-apple-system,sans-serif;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
-                    <div style="background:rgba(255,255,255,0.15);border-radius:12px;padding:8px 12px;">
-                        <span style="font-size:24px;">🕷️</span>
-                    </div>
-                    <div style="flex:1;">
-                        <div style="color:white;font-weight:700;font-size:14px;">OpenSpider Agent is waiting for you</div>
-                        <div style="color:rgba(255,255,255,0.8);font-size:13px;margin-top:2px;">${msg}</div>
-                    </div>
-                    <button onclick="document.getElementById('__openspider_auth_overlay').remove()" style="background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.3);color:white;padding:8px 20px;border-radius:8px;cursor:pointer;font-weight:600;font-size:13px;">
-                        ✓ Done
-                    </button>
-                </div>
-            `;
-            document.body.appendChild(overlay);
-        }, message);
-
-        // Wait for the overlay to be removed (user clicked "Done") or timeout
-        try {
-            await page.waitForSelector('#__openspider_auth_overlay', { state: 'detached', timeout: 120000 });
-            console.log(`[BrowserTool] User confirmed action completed.`);
-        } catch {
-            // Timeout — remove overlay and continue anyway
-            console.log(`[BrowserTool] Wait timed out after 120s. Continuing...`);
-            await page.evaluate(() => {
-                const overlay = document.getElementById('__openspider_auth_overlay');
-                if (overlay) overlay.remove();
-            }).catch(() => { });
-        }
-
-        // Re-read the page state after user interaction
-        const newTitle = await page.title();
-        const newUrl = page.url();
-
-        return `User interaction completed. Page is now: "${newTitle}" (${newUrl}). You can now proceed with reading content or navigating further.`;
+        return `⚠️ No browser available. The Browser Relay extension is not connected.`;
     }
 
     private async doScroll(direction: 'up' | 'down'): Promise<string> {
-        // ─── RELAY-FIRST ───
+        // ─── RELAY-ONLY ───
         if (relayBridge.isRelayConnected()) {
             try {
                 return await relayBridge.scrollPage(direction);
             } catch (e: any) {
-                console.warn(`[BrowserTool] Relay scroll failed: ${e.message}. Falling back to headless.`);
+                console.warn(`[BrowserTool] Relay scroll failed: ${e.message}`);
+                return `⚠️ Relay scroll failed: ${e.message}. Ensure the Browser Relay is attached.`;
             }
         }
-
-        const page = await this.ensurePage();
-        const totalScroll = 500 + Math.floor(Math.random() * 300);
-        const steps = 4 + Math.floor(Math.random() * 4); // 4–7 incremental steps
-        const stepSize = Math.floor(totalScroll / steps) * (direction === 'down' ? 1 : -1);
-
-        // Incremental scrolling mimics a human using a mouse wheel
-        for (let i = 0; i < steps; i++) {
-            await page.evaluate((amount: number) => { window.scrollBy(0, amount); }, stepSize);
-            await humanDelay(80, 200);
-        }
-        await humanDelay(300, 600);
-        return `Scrolled ${direction} ~${totalScroll}px in ${steps} steps.`;
+        return `⚠️ No browser available. The Browser Relay extension is not connected.`;
     }
 
     /**
