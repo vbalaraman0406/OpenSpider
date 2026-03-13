@@ -3,7 +3,181 @@ let ws = null;
 let attachedTabId = null;
 let agentTabId = null; // Separate tab created for agent navigation
 let reconnectAttempts = 0;
-const MAX_RECONNECT_ATTEMPTS = 3;
+const MAX_RECONNECT_ATTEMPTS = 30; // 30 attempts × 2s = 60 seconds of retries
+
+// ═══════════════════════════════════════════════════════════
+// SERVICE WORKER KEEPALIVE
+// Chrome MV3 kills service workers after ~30s of inactivity.
+// Use chrome.alarms to ping every 25s, keeping it alive.
+// ═══════════════════════════════════════════════════════════
+const KEEPALIVE_ALARM = 'openspider-keepalive';
+
+function startKeepalive() {
+    chrome.alarms.create(KEEPALIVE_ALARM, { periodInMinutes: 0.4 }); // ~24s
+    console.log('[Relay] Keepalive alarm started');
+}
+
+function stopKeepalive() {
+    chrome.alarms.clear(KEEPALIVE_ALARM);
+    console.log('[Relay] Keepalive alarm stopped');
+}
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === KEEPALIVE_ALARM) {
+        // Just touching the service worker keeps it alive
+        // Also check if we should auto-restore a lost connection
+        if (!ws && !attachedTabId) {
+            restoreConnectionFromStorage();
+        }
+    }
+});
+
+// ═══════════════════════════════════════════════════════════
+// PERSISTENT STATE
+// Save connection params to chrome.storage.local so they
+// survive service worker restarts.
+// ═══════════════════════════════════════════════════════════
+function saveConnectionState() {
+    chrome.storage.local.set({
+        relay_state: {
+            attachedTabId,
+            agentTabId,
+            lastToken,
+            lastPort,
+            lastHost,
+            timestamp: Date.now()
+        }
+    });
+}
+
+function clearConnectionState() {
+    chrome.storage.local.remove('relay_state');
+}
+
+async function restoreConnectionFromStorage() {
+    try {
+        const data = await chrome.storage.local.get('relay_state');
+        const state = data?.relay_state;
+        if (!state || !state.lastToken || !state.lastHost) return;
+
+        // Don't restore stale sessions (older than 12 hours)
+        if (Date.now() - state.timestamp > 12 * 60 * 60 * 1000) {
+            clearConnectionState();
+            return;
+        }
+
+        console.log('[Relay] Restoring connection from persistent state...');
+        lastToken = state.lastToken;
+        lastPort = state.lastPort;
+        lastHost = state.lastHost;
+
+        // Check if the tab still exists
+        const tabToRestore = state.agentTabId || state.attachedTabId;
+        if (tabToRestore) {
+            try {
+                const tab = await chrome.tabs.get(tabToRestore);
+                if (tab) {
+                    attachedTabId = state.attachedTabId;
+                    agentTabId = state.agentTabId;
+
+                    // Try to re-attach debugger
+                    try {
+                        await chrome.debugger.attach({ tabId: tabToRestore }, "1.3");
+                        console.log('[Relay] Re-attached debugger to tab', tabToRestore);
+                    } catch (e) {
+                        // Debugger might already be attached — that's fine
+                        console.log('[Relay] Debugger attach skipped (may already be attached):', e.message);
+                    }
+
+                    // Reconnect WebSocket
+                    connectWebSocket(tabToRestore, lastToken, lastPort, lastHost);
+                    startKeepalive();
+                    return;
+                }
+            } catch (e) {
+                // Tab no longer exists
+                console.log('[Relay] Saved tab no longer exists. Clearing state.');
+                clearConnectionState();
+            }
+        }
+    } catch (e) {
+        console.warn('[Relay] Failed to restore connection:', e);
+    }
+}
+
+// Auto-restore on service worker startup
+chrome.runtime.onStartup.addListener(() => {
+    console.log('[Relay] Service worker started (browser launch)');
+    restoreConnectionFromStorage();
+});
+
+// Also try to restore when extension is installed/updated
+chrome.runtime.onInstalled.addListener(() => {
+    console.log('[Relay] Extension installed/updated');
+    restoreConnectionFromStorage();
+});
+
+// ═══════════════════════════════════════════════════════════
+// TOP-LEVEL DETACH HANDLER
+// Registered ONCE at top level to prevent listener stacking
+// ═══════════════════════════════════════════════════════════
+chrome.debugger.onDetach.addListener((source, reason) => {
+    const targetTab = agentTabId || attachedTabId;
+    if (source.tabId === targetTab) {
+        console.log('[Relay] Debugger detached:', reason);
+
+        // If user manually cancelled, fully disconnect
+        if (reason === 'canceled_by_user') {
+            console.log('[Relay] User cancelled debugging. Fully disconnecting.');
+            attachedTabId = null;
+            agentTabId = null;
+            if (ws) { ws.close(); ws = null; }
+            chrome.action.setBadgeText({ text: '' });
+            stopKeepalive();
+            clearConnectionState();
+            return;
+        }
+
+        // Otherwise, try to re-attach (cross-domain nav, target crashed, etc.)
+        if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+            reconnectAttempts++;
+            console.log(`[Relay] Auto-reconnect attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}...`);
+            chrome.action.setBadgeText({ text: 'RE' });
+            chrome.action.setBadgeBackgroundColor({ color: '#FFAA00' });
+
+            setTimeout(async () => {
+                const tabToReattach = agentTabId || attachedTabId;
+                if (!tabToReattach) return;
+                try {
+                    await chrome.debugger.attach({ tabId: tabToReattach }, '1.3');
+                    console.log('[Relay] Re-attached successfully to tab', tabToReattach);
+                    chrome.action.setBadgeText({ text: 'ON' });
+                    chrome.action.setBadgeBackgroundColor({ color: '#00AA00' });
+                    reconnectAttempts = 0;
+                } catch (err) {
+                    console.warn('[Relay] Re-attach failed:', err);
+                    if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+                        console.error('[Relay] Max reconnect attempts reached. Disconnecting.');
+                        attachedTabId = null;
+                        agentTabId = null;
+                        chrome.action.setBadgeText({ text: '!' });
+                        stopKeepalive();
+                        clearConnectionState();
+                    }
+                }
+            }, 2000);
+        }
+    }
+});
+
+// Top-level CDP event relay (Chrome -> server)
+// Registered ONCE to prevent stacking on reconnects
+chrome.debugger.onEvent.addListener((source, method, params) => {
+    const targetTab = agentTabId || attachedTabId;
+    if (source.tabId === targetTab && ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ method, params }));
+    }
+});
 
 // SECURITY: CDP Method Allowlist
 const ALLOWED_CDP_METHODS = new Set([
@@ -159,6 +333,7 @@ async function attachDebugger(tabId, token, port, host) {
         attachedTabId = tabId;
         reconnectAttempts = 0;
         chrome.action.setBadgeText({ text: "..." });
+        startKeepalive(); // Keep service worker alive while relay is active
         connectWebSocket(tabId, token, port, host);
     } catch (err) {
        console.error("Failed to attach:", err);
@@ -182,6 +357,8 @@ async function detachDebugger(tabId) {
     agentTabId = null;
     reconnectAttempts = 0;
     chrome.action.setBadgeText({ text: "" });
+    stopKeepalive();
+    clearConnectionState();
 }
 
 // Store connection params for reconnection
@@ -204,6 +381,8 @@ function connectWebSocket(tabId, token, port, host) {
         ws.send(JSON.stringify({ type: 'relay_register' }));
         chrome.action.setBadgeText({ text: "ON" });
         chrome.action.setBadgeBackgroundColor({ color: "#00AA00" });
+        // Persist connection state for service worker restarts (works for both local Mac and VPS)
+        saveConnectionState();
     };
 
     ws.onmessage = async (event) => {
@@ -283,59 +462,8 @@ function connectWebSocket(tabId, token, port, host) {
         // Don't update badge here — onclose will fire right after
     };
 
-    // Relay CDP events from Chrome -> server
-    chrome.debugger.onEvent.addListener((source, method, params) => {
-        const targetTab = agentTabId || attachedTabId;
-        if (source.tabId === targetTab && ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ method, params }));
-        }
-    });
-
-    // AUTO-RECONNECT on detach instead of killing everything
-    chrome.debugger.onDetach.addListener((source, reason) => {
-        const targetTab = agentTabId || attachedTabId;
-        if (source.tabId === targetTab) {
-            console.log("Debugger detached:", reason);
-
-            // If user manually cancelled, fully disconnect
-            if (reason === 'canceled_by_user') {
-                console.log("User cancelled debugging. Fully disconnecting.");
-                attachedTabId = null;
-                agentTabId = null;
-                if (ws) { ws.close(); ws = null; }
-                chrome.action.setBadgeText({ text: "" });
-                return;
-            }
-
-            // Otherwise, try to re-attach (cross-domain nav, target crashed, etc.)
-            if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-                reconnectAttempts++;
-                console.log(`Auto-reconnect attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}...`);
-                chrome.action.setBadgeText({ text: "RE" });
-                chrome.action.setBadgeBackgroundColor({ color: "#FFAA00" });
-
-                setTimeout(async () => {
-                    const tabToReattach = agentTabId || attachedTabId;
-                    if (!tabToReattach) return;
-                    try {
-                        await chrome.debugger.attach({ tabId: tabToReattach }, "1.3");
-                        console.log("Re-attached successfully to tab", tabToReattach);
-                        chrome.action.setBadgeText({ text: "ON" });
-                        chrome.action.setBadgeBackgroundColor({ color: "#00AA00" });
-                        reconnectAttempts = 0;
-                    } catch (err) {
-                        console.warn("Re-attach failed:", err);
-                        if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-                            console.error("Max reconnect attempts reached. Disconnecting.");
-                            attachedTabId = null;
-                            agentTabId = null;
-                            chrome.action.setBadgeText({ text: "!" });
-                        }
-                    }
-                }, 2000);
-            }
-        }
-    });
+    // NOTE: onEvent and onDetach listeners are registered ONCE at top level
+    // to prevent listener stacking on reconnects. See top of file.
 }
 
 /**
@@ -590,54 +718,15 @@ function attemptWsReconnect() {
 
     reconnectWs.onopen = () => {
         console.log("[Relay] WebSocket reconnected successfully!");
-        ws = reconnectWs;
+        // Close the probe socket — connectWebSocket will create the real one
+        reconnectWs.onclose = null; // Prevent retry loop from triggering
+        reconnectWs.close();
         wsReconnectTimer = null;
         wsReconnectCount = 0;
 
-        // Re-register as relay
-        ws.send(JSON.stringify({ type: 'relay_register' }));
-        chrome.action.setBadgeText({ text: "ON" });
-        chrome.action.setBadgeBackgroundColor({ color: "#00AA00" });
-
-        // Re-attach message handler
-        ws.onmessage = async (event) => {
-            try {
-                const msg = JSON.parse(event.data);
-                if (msg.id && msg.method) {
-                    if (!ALLOWED_CDP_METHODS.has(msg.method)) {
-                        sendError(msg.id, `Method '${msg.method}' is not allowed.`);
-                        return;
-                    }
-                    if (msg.method === 'Page.navigate' && msg.params && msg.params.url) {
-                        await handleNavigation(msg);
-                        return;
-                    }
-                    const targetTabId = agentTabId || attachedTabId;
-                    if (!targetTabId) { sendError(msg.id, 'No tab attached'); return; }
-                    chrome.debugger.sendCommand({ tabId: targetTabId }, msg.method, msg.params, (result) => {
-                        const response = {
-                            id: msg.id,
-                            result: result || {},
-                            error: chrome.runtime.lastError ? { message: chrome.runtime.lastError.message } : undefined
-                        };
-                        if (ws && ws.readyState === WebSocket.OPEN) {
-                            ws.send(JSON.stringify(response));
-                        }
-                    });
-                }
-            } catch (e) { console.error("Parse error", e); }
-        };
-
-        // Re-attach close handler for future disconnects
-        ws.onclose = () => {
-            console.log("WebSocket closed (reconnected session)");
-            ws = null;
-            if (attachedTabId && lastToken) {
-                chrome.action.setBadgeText({ text: "RE" });
-                chrome.action.setBadgeBackgroundColor({ color: "#FFAA00" });
-                scheduleWsReconnect();
-            }
-        };
+        // Reuse the full connectWebSocket flow (handlers, state save, etc.)
+        const tabId = agentTabId || attachedTabId;
+        connectWebSocket(tabId, lastToken, lastPort, lastHost);
     };
 
     reconnectWs.onerror = () => {
