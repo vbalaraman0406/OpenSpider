@@ -237,6 +237,15 @@ function connectWebSocket(tabId, token, port, host) {
                     return;
                 }
 
+                // Show click highlight for Runtime.evaluate calls that contain querySelector + click
+                if (msg.method === 'Runtime.evaluate' && msg.params?.expression) {
+                    const expr = msg.params.expression;
+                    const selectorMatch = expr.match(/querySelector\(['"]([^'"]+)['"]\)/);
+                    if (selectorMatch && (expr.includes('.click') || expr.includes('focus'))) {
+                        showClickHighlight(targetTabId, selectorMatch[1]);
+                    }
+                }
+
                 chrome.debugger.sendCommand({ tabId: targetTabId }, msg.method, msg.params, (result) => {
                     const response = {
                         id: msg.id,
@@ -330,6 +339,120 @@ function connectWebSocket(tabId, token, port, host) {
 }
 
 /**
+ * Inject the OpenSpider visual overlay into the current page.
+ * Shows a floating control badge + animated cursor dot so the user
+ * can see the agent is controlling the browser.
+ */
+async function injectOpenSpiderOverlay(tabId) {
+    try {
+        chrome.debugger.sendCommand({ tabId }, 'Runtime.evaluate', {
+            expression: `(() => {
+                // Don't inject twice
+                if (document.getElementById('__openspider_overlay')) return 'already_injected';
+
+                // === FLOATING BADGE ===
+                const badge = document.createElement('div');
+                badge.id = '__openspider_overlay';
+                badge.innerHTML = '<span style="font-size:16px;margin-right:6px">🕷️</span> OpenSpider';
+                Object.assign(badge.style, {
+                    position: 'fixed', top: '12px', right: '12px', zIndex: '2147483647',
+                    background: 'linear-gradient(135deg, #7c3aed, #ec4899)',
+                    color: 'white', padding: '8px 16px', borderRadius: '24px',
+                    fontFamily: 'system-ui, -apple-system, sans-serif',
+                    fontSize: '13px', fontWeight: '600',
+                    boxShadow: '0 4px 20px rgba(124,58,237,0.4), 0 0 0 1px rgba(255,255,255,0.1)',
+                    display: 'flex', alignItems: 'center',
+                    animation: 'openspider_pulse 3s ease-in-out infinite',
+                    backdropFilter: 'blur(8px)', pointerEvents: 'none',
+                    transition: 'opacity 0.3s'
+                });
+                document.body.appendChild(badge);
+
+                // === CURSOR DOT ===
+                const cursor = document.createElement('div');
+                cursor.id = '__openspider_cursor';
+                Object.assign(cursor.style, {
+                    position: 'fixed', width: '20px', height: '20px',
+                    borderRadius: '50%', zIndex: '2147483646',
+                    background: 'radial-gradient(circle, rgba(124,58,237,0.8) 0%, rgba(236,72,153,0.4) 70%, transparent 100%)',
+                    boxShadow: '0 0 12px rgba(124,58,237,0.6), 0 0 4px rgba(236,72,153,0.8)',
+                    pointerEvents: 'none', transform: 'translate(-50%, -50%)',
+                    top: '50%', left: '50%',
+                    transition: 'top 0.4s cubic-bezier(0.22, 1, 0.36, 1), left 0.4s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.3s',
+                    opacity: '0'
+                });
+                document.body.appendChild(cursor);
+
+                // === ANIMATIONS ===
+                const style = document.createElement('style');
+                style.id = '__openspider_styles';
+                style.textContent = \`
+                    @keyframes openspider_pulse {
+                        0%, 100% { box-shadow: 0 4px 20px rgba(124,58,237,0.4), 0 0 0 1px rgba(255,255,255,0.1); }
+                        50% { box-shadow: 0 4px 30px rgba(124,58,237,0.6), 0 0 0 2px rgba(236,72,153,0.3); }
+                    }
+                    @keyframes openspider_click_ring {
+                        0% { transform: translate(-50%, -50%) scale(0.5); opacity: 1; }
+                        100% { transform: translate(-50%, -50%) scale(2.5); opacity: 0; }
+                    }
+                    @keyframes openspider_highlight {
+                        0% { outline: 3px solid rgba(124,58,237,0.8); outline-offset: 2px; }
+                        100% { outline: 3px solid rgba(124,58,237,0); outline-offset: 6px; }
+                    }
+                \`;
+                document.head.appendChild(style);
+
+                return 'injected';
+            })()`,
+            returnByValue: true
+        });
+        console.log('[Relay] Injected OpenSpider visual overlay');
+    } catch (e) {
+        console.warn('[Relay] Overlay injection failed:', e.message);
+    }
+}
+
+/**
+ * Show a click highlight effect at a specific element or coordinates.
+ */
+async function showClickHighlight(tabId, selector) {
+    try {
+        const escapedSelector = selector ? selector.replace(/'/g, "\\'") : '';
+        chrome.debugger.sendCommand({ tabId }, 'Runtime.evaluate', {
+            expression: `(() => {
+                const cursor = document.getElementById('__openspider_cursor');
+                ${escapedSelector ? `const el = document.querySelector('${escapedSelector}');` : 'const el = null;'}
+                if (el && cursor) {
+                    const rect = el.getBoundingClientRect();
+                    const cx = rect.left + rect.width / 2;
+                    const cy = rect.top + rect.height / 2;
+                    cursor.style.opacity = '1';
+                    cursor.style.top = cy + 'px';
+                    cursor.style.left = cx + 'px';
+
+                    // Click ring animation
+                    const ring = document.createElement('div');
+                    Object.assign(ring.style, {
+                        position: 'fixed', width: '20px', height: '20px',
+                        borderRadius: '50%', border: '2px solid rgba(124,58,237,0.8)',
+                        top: cy + 'px', left: cx + 'px', zIndex: '2147483645',
+                        transform: 'translate(-50%, -50%)', pointerEvents: 'none',
+                        animation: 'openspider_click_ring 0.6s ease-out forwards'
+                    });
+                    document.body.appendChild(ring);
+                    setTimeout(() => ring.remove(), 700);
+
+                    // Element highlight
+                    el.style.animation = 'openspider_highlight 0.8s ease-out';
+                    setTimeout(() => { el.style.animation = ''; }, 900);
+                }
+            })()`,
+            returnByValue: true
+        });
+    } catch (e) { /* non-critical */ }
+}
+
+/**
  * Handle Page.navigate by creating a new tab for the agent.
  * This keeps the user's original tab untouched.
  */
@@ -353,6 +476,7 @@ async function handleNavigation(msg) {
 
                 // Wait for page to load
                 await waitForPageLoad(agentTabId);
+                await injectOpenSpiderOverlay(agentTabId);
 
                 sendSuccess(msg.id, { frameId: 'agent-tab' });
                 return;
@@ -379,6 +503,7 @@ async function handleNavigation(msg) {
 
         // Wait for page to fully load
         await waitForPageLoad(agentTabId);
+        await injectOpenSpiderOverlay(agentTabId);
 
         sendSuccess(msg.id, { frameId: 'agent-tab' });
     } catch (err) {
