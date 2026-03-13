@@ -118,7 +118,7 @@ export class ManagerAgent {
             }
         } catch (e) { }
 
-        const systemPrompt = `${compiledPersonaPrompt}\n\n[SYSTEM CONTEXT]\nCurrent Local Time: ${new Date().toLocaleString()}\nTimezone Name: ${Intl.DateTimeFormat().resolvedOptions().timeZone}${memorySection}${cronJobsSection}\n\n[TASK INSTRUCTIONS]
+        const systemPrompt = `${compiledPersonaPrompt}\n\n[SYSTEM CONTEXT]\nCurrent Date & Time: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })} at ${new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZoneName: 'short' })}\nTimezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}\nCRITICAL: This date/time comes from the host server's real-time clock. It is CORRECT. Do NOT doubt, question, or "correct" this date under any circumstances. Do NOT suggest the year might be wrong. Your training data cutoff is irrelevant — the system clock is the single source of truth for the current date.${memorySection}${cronJobsSection}\n\n[TASK INSTRUCTIONS]
 Your job is to break down the user's complex request into a sequential plan of sub-tasks.
 Each sub-task MUST be assigned to one of the EXISTING Worker Agents listed above. Use their exact Role name (e.g. "${existingRoles[0] || 'Researcher'}", "${existingRoles[1] || 'Coder'}").
 CRITICAL: DO NOT invent new agent roles! If a task doesn't perfectly match any agent, assign it to the closest matching existing agent. The Coder agent is your general-purpose workhorse for any file/script/implementation work.
