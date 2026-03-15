@@ -67,18 +67,28 @@ program
                 name: 'openspider-gateway',
                 cwd: rootDir
             }, (err, apps) => {
-                pm2.disconnect();
                 if (err) {
+                    pm2.disconnect();
                     console.error('Failed to start background process:', err);
                     process.exit(2);
                 }
-                console.log('\n==================================================');
-                console.log('✅ OpenSpider is now running in the background!');
-                console.log('==================================================');
-                console.log('\n🧭 Dashboard:   http://localhost:4001');
-                console.log('📜 View Logs:   openspider logs');
-                console.log('🛑 Stop Engine: openspider stop\n');
-                process.exit(0);
+
+                // Persist the process list so PM2 can resurrect it on reboot
+                (pm2 as any).dump((dumpErr: any) => {
+                    pm2.disconnect();
+                    if (dumpErr) {
+                        console.warn('⚠️  Could not save PM2 process list:', dumpErr.message);
+                    }
+                    console.log('\n==================================================');
+                    console.log('✅ OpenSpider is now running in the background!');
+                    console.log('==================================================');
+                    console.log('\n🧭 Dashboard:   http://localhost:4001');
+                    console.log('📜 View Logs:   openspider logs');
+                    console.log('🛑 Stop Engine: openspider stop');
+                    console.log('\n💡 To auto-start on reboot, run ONCE:');
+                    console.log('   pm2 startup && pm2 save\n');
+                    process.exit(0);
+                });
             });
         });
     });
@@ -213,12 +223,68 @@ program
 
             console.log('\n🕷️ Updating OpenSpider to the latest version...\n');
 
-            console.log('🔄 0. Resetting local file changes (e.g. package-lock conflicts)...');
+            // ── Protect user data from git reset ──
+            // workspace/, .env, and baileys_auth_info/ contain user configs,
+            // cron jobs, WhatsApp credentials, etc. that must survive updates.
+            const backupDir = require('path').join(require('os').tmpdir(), 'openspider-update-backup');
+            const fsBak = require('fs');
+            const pathBak = require('path');
+
+            console.log('💾 0. Backing up user data (workspace, .env, auth)...');
+            try {
+                if (fsBak.existsSync(backupDir)) fsBak.rmSync(backupDir, { recursive: true, force: true });
+                fsBak.mkdirSync(backupDir, { recursive: true });
+
+                // Back up workspace/
+                const wsDir = pathBak.join(rootDir, 'workspace');
+                if (fsBak.existsSync(wsDir)) {
+                    execSync(`cp -a "${wsDir}" "${pathBak.join(backupDir, 'workspace')}"`, { stdio: 'pipe' });
+                }
+                // Back up .env
+                const envFilePath = pathBak.join(rootDir, '.env');
+                if (fsBak.existsSync(envFilePath)) {
+                    fsBak.copyFileSync(envFilePath, pathBak.join(backupDir, '.env'));
+                }
+                // Back up baileys_auth_info/
+                const baileysDir = pathBak.join(rootDir, 'baileys_auth_info');
+                if (fsBak.existsSync(baileysDir)) {
+                    execSync(`cp -a "${baileysDir}" "${pathBak.join(backupDir, 'baileys_auth_info')}"`, { stdio: 'pipe' });
+                }
+                console.log('   ✅ User data backed up.');
+            } catch (bakErr: any) {
+                console.warn('   ⚠️  Backup warning:', bakErr.message);
+            }
+
+            console.log('\n🔄 1. Resetting local file changes (e.g. package-lock conflicts)...');
             execSync('git reset --hard HEAD', { stdio: 'inherit', cwd: rootDir });
 
-            console.log('\n⬇️  1. Pulling latest code from GitHub...');
+            console.log('\n⬇️  2. Pulling latest code from GitHub...');
             execSync('git fetch origin main', { stdio: 'inherit', cwd: rootDir });
             execSync('git reset --hard origin/main', { stdio: 'inherit', cwd: rootDir });
+
+            // ── Restore user data ──
+            console.log('\n♻️  Restoring user data...');
+            try {
+                const wsBackup = pathBak.join(backupDir, 'workspace');
+                if (fsBak.existsSync(wsBackup)) {
+                    // Merge: copy backup files over, preserving any new files from the repo
+                    execSync(`cp -a "${wsBackup}/." "${pathBak.join(rootDir, 'workspace')}/"`, { stdio: 'pipe' });
+                }
+                const envBackup = pathBak.join(backupDir, '.env');
+                if (fsBak.existsSync(envBackup)) {
+                    fsBak.copyFileSync(envBackup, pathBak.join(rootDir, '.env'));
+                }
+                const baileysBackup = pathBak.join(backupDir, 'baileys_auth_info');
+                if (fsBak.existsSync(baileysBackup)) {
+                    execSync(`cp -a "${baileysBackup}" "${pathBak.join(rootDir, 'baileys_auth_info')}"`, { stdio: 'pipe' });
+                }
+                // Clean up backup
+                fsBak.rmSync(backupDir, { recursive: true, force: true });
+                console.log('   ✅ User data restored successfully.');
+            } catch (restoreErr: any) {
+                console.error('   ❌ Restore failed! Backup still at:', backupDir);
+                console.error('      Error:', restoreErr.message);
+            }
 
             console.log('\n📦 2. Installing dependencies...');
             execSync('npm install', { stdio: 'inherit', cwd: rootDir });

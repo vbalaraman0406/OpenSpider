@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { PersonaShell } from './PersonaShell';
 import { sendWhatsAppMessage, sendWhatsAppAudio, getParticipatingGroups } from '../whatsapp';
-import { readJobsSync, writeJobsSync } from '../CronStore';
+import { readJobsSync, writeJobsSync, withJobs, CronJob } from '../CronStore';
 
 export class WorkerAgent {
     private llm: LLMProvider;
@@ -83,6 +83,8 @@ Available tools you can request in your JSON response:
     - Read:     { "action": "browse_web", "command": "read_content" }  ← reads full page (capped at 1500 chars)
     - Read targeted section: { "action": "browse_web", "command": "read_content", "args": "main" }  ← CSS selector for focused extraction. Use this when you need specific data (e.g. "args": ".results", "args": "article", "args": "#contact", "args": "table"). PREFER targeted selectors over full-page reads to save tokens.
     - Scroll:   { "action": "browse_web", "command": "scroll", "args": "down" }
+    - List:     { "action": "browse_web", "command": "list_elements" }  ← shows all clickable links/buttons with their text. Use this when you can't find what to click.
+    - Run JS:   { "action": "browse_web", "command": "execute_js", "content": "return document.querySelector('.score').innerText" }  ← run custom JS to extract specific data
     - Close:    { "action": "browse_web", "command": "close" }
 - wait_for_user: { "message": "Please log in to your account" } (Pause and ask the user to do something in the browser, like logging in. Waits up to 120 seconds.)
 - schedule_task: { "command": "24", "content": "Fetch Vancouver WA weather and send to user via WhatsApp", "filename": "Daily Weather Brief" } (Schedule OR UPDATE a recurring task. If a job with the same "filename" already exists it will be UPDATED in place — use this when the user asks to change/modify an existing job. To create or update an interval-based job: "command" = interval in hours (e.g. "24"). To create or update a time-of-day job (runs once daily at a fixed time): "command" = "preferredTime:HH:MM" (e.g. "preferredTime:07:00"). "content" = the prompt/task to execute, "filename" = short name for the job (must match exactly to update).)
@@ -111,6 +113,11 @@ SMART BROWSING STRATEGY (follow this pattern for ANY site):
 5. Read the resulting page
 6. If you found what you need, extract data and deliver final_answer
 7. If not, repeat steps 3-5 with a different link
+
+FALLBACK STRATEGY (use when clicks fail or you can't find links):
+- If a click fails, use list_elements to see all clickable items on the page, then click the right one by exact text.
+- If the page is too complex, use execute_js to extract specific data directly: e.g. "return document.querySelector('.player-name').innerText"
+- If you can't find the data after 3 click attempts, try a Google search to find it on a different website.
 
 KEY RULES:
 - After reading content, ALWAYS look for clickable items IN THE TEXT and click them by their exact visible text.
@@ -367,50 +374,53 @@ ${context.join('\n')}
                         toolOutput = 'Error: No task prompt provided for schedule_task. Provide the task description in the "content" field.';
                     } else {
                         try {
-                            let jobs = readJobsSync();
+                            // Use mutex-protected withJobs() to prevent race conditions
+                            // with the scheduler's 60s tick and dashboard edits
+                            let result = '';
+                            await withJobs((jobs: CronJob[]) => {
+                                // Upsert: check for existing job with the same name (case-insensitive)
+                                const existingIndex = jobs.findIndex(
+                                    (j: any) => j.description.toLowerCase() === jobName.toLowerCase()
+                                );
 
-                            // Upsert: check for existing job with the same name (case-insensitive)
-                            const existingIndex = jobs.findIndex(
-                                (j: any) => j.description.toLowerCase() === jobName.toLowerCase()
-                            );
-
-                            if (existingIndex !== -1) {
-                                // UPDATE existing job in-place
-                                const existing = jobs[existingIndex]!;
-                                existing.prompt = taskPrompt;
-                                existing.intervalHours = intervalHours;
-                                if (preferredTime) {
-                                    existing.preferredTime = preferredTime;
-                                } else {
-                                    delete existing.preferredTime; // Clear time-of-day if switching back to interval
-                                }
-                                writeJobsSync(jobs);
-                                const scheduleStr = preferredTime ? `daily at ${preferredTime}` : `every ${intervalHours}h`;
-                                console.log(`[Worker - ${this.role}] Updated existing cron job: "${jobName}" → ${scheduleStr}`);
-                                toolOutput = `✅ Successfully updated existing cron job!\n- Name: ${jobName}\n- Schedule: ${scheduleStr}\n- New Task: ${taskPrompt.substring(0, 100)}...\n- Status: ${existing.status || 'enabled'}\n- ID: ${existing.id}`;
-                            } else {
-                                // CREATE new job (only if under the cap)
-                                // SECURITY: Cap at 20 jobs max even from agent-scheduled tasks
-                                if (jobs.length >= 20) {
-                                    toolOutput = 'Error: Maximum of 20 cron jobs reached. Delete an existing job before scheduling a new one.';
-                                } else {
-                                    const newJob: any = {
-                                        id: 'cron-' + Math.random().toString(36).substr(2, 9),
-                                        description: jobName,
-                                        prompt: taskPrompt,
-                                        intervalHours,
-                                        lastRunTimestamp: 0, // Run on next heartbeat
-                                        agentId: 'manager',
-                                        status: 'enabled'
-                                    };
-                                    if (preferredTime) newJob.preferredTime = preferredTime;
-                                    jobs.push(newJob);
-                                    writeJobsSync(jobs);
+                                if (existingIndex !== -1) {
+                                    // UPDATE existing job in-place
+                                    const existing = jobs[existingIndex]!;
+                                    existing.prompt = taskPrompt;
+                                    existing.intervalHours = intervalHours;
+                                    if (preferredTime) {
+                                        existing.preferredTime = preferredTime;
+                                    } else {
+                                        delete existing.preferredTime; // Clear time-of-day if switching back to interval
+                                    }
                                     const scheduleStr = preferredTime ? `daily at ${preferredTime}` : `every ${intervalHours}h`;
-                                    console.log(`[Worker - ${this.role}] Scheduled new recurring task: "${jobName}" ${scheduleStr}`);
-                                    toolOutput = `✅ Successfully scheduled recurring task!\n- Name: ${jobName}\n- Schedule: ${scheduleStr}\n- Task: ${taskPrompt.substring(0, 100)}...\n- Status: Enabled\n- ID: ${newJob.id}`;
+                                    console.log(`[Worker - ${this.role}] Updated existing cron job: "${jobName}" → ${scheduleStr}`);
+                                    result = `✅ Successfully updated existing cron job!\n- Name: ${jobName}\n- Schedule: ${scheduleStr}\n- New Task: ${taskPrompt.substring(0, 100)}...\n- Status: ${existing.status || 'enabled'}\n- ID: ${existing.id}`;
+                                } else {
+                                    // CREATE new job (only if under the cap)
+                                    // SECURITY: Cap at 20 jobs max even from agent-scheduled tasks
+                                    if (jobs.length >= 20) {
+                                        result = 'Error: Maximum of 20 cron jobs reached. Delete an existing job before scheduling a new one.';
+                                    } else {
+                                        const newJob: any = {
+                                            id: 'cron-' + Math.random().toString(36).substr(2, 9),
+                                            description: jobName,
+                                            prompt: taskPrompt,
+                                            intervalHours,
+                                            lastRunTimestamp: 0, // Run on next heartbeat
+                                            agentId: 'manager',
+                                            status: 'enabled'
+                                        };
+                                        if (preferredTime) newJob.preferredTime = preferredTime;
+                                        jobs.push(newJob);
+                                        const scheduleStr = preferredTime ? `daily at ${preferredTime}` : `every ${intervalHours}h`;
+                                        console.log(`[Worker - ${this.role}] Scheduled new recurring task: "${jobName}" ${scheduleStr}`);
+                                        result = `✅ Successfully scheduled recurring task!\n- Name: ${jobName}\n- Schedule: ${scheduleStr}\n- Task: ${taskPrompt.substring(0, 100)}...\n- Status: Enabled\n- ID: ${newJob.id}`;
+                                    }
                                 }
-                            }
+                                return jobs;
+                            });
+                            toolOutput = result;
                         } catch (e: any) {
                             toolOutput = `Failed to schedule task: ${e.message}`;
                         }
@@ -721,13 +731,13 @@ ${context.join('\n')}
                 toolOutput = `Tool execution failed: ${e.message}`;
             }
 
-            // [Token Optimization] Tighter output cap: browser page content is already
-            // capped at 1,500 chars in tool.ts, so most outputs are small. For any
-            // unexpected large output (e.g. script stdout), enforce a hard 1,500 char cap.
-            const MAX_LENGTH = 3000;
+            // [Token Optimization] Tool output cap: increased for relay browser content
+            // which now prioritizes tables/data over nav chrome. The relay extracts up to
+            // 10K chars, tool.ts passes up to 5K, so we keep 5K to preserve the data.
+            const MAX_LENGTH = 5000;
             if (toolOutput.length > MAX_LENGTH) {
-                const head = toolOutput.substring(0, 2000);
-                const tail = toolOutput.substring(toolOutput.length - 1000);
+                const head = toolOutput.substring(0, 3500);
+                const tail = toolOutput.substring(toolOutput.length - 1500);
                 toolOutput = `${head}\n\n... [TRUNCATED ${toolOutput.length - MAX_LENGTH} characters. Write a script to parse/summarize if you need the full data] ...\n\n${tail}`;
             }
 

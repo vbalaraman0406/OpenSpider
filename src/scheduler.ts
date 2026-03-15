@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { ManagerAgent } from './agents/ManagerAgent';
-import { readJobsSync, writeJobsSync, CronJob } from './CronStore';
+import { readJobsSync, writeJobsSync, withJobs, CronJob } from './CronStore';
 
 const JOBS_FILE = path.join(process.cwd(), 'workspace', 'cron_jobs.json');
 
@@ -64,45 +64,45 @@ function shouldRunTimeOfDay(job: CronJob, now: Date): boolean {
 
 async function checkAndExecuteJobs() {
     try {
-        // Read jobs, decide which to run, then write back timestamps in one atomic block
-        const jobs = readJobsSync();
-        if (jobs.length === 0) return;
-
-        const now = Date.now();
-        const nowDate = new Date(now);
+        // Use the mutex-protected withJobs() to atomically read and update timestamps.
+        // This prevents race conditions with dashboard edits and agent schedule_task calls.
         const jobsToRun: CronJob[] = [];
 
-        for (const job of jobs) {
-            if (job.status === 'disabled') continue;
+        await withJobs((jobs: CronJob[]) => {
+            if (jobs.length === 0) return jobs;
 
-            let shouldRun = false;
+            const now = Date.now();
+            const nowDate = new Date(now);
 
-            if (job.preferredTime) {
-                shouldRun = shouldRunTimeOfDay(job, nowDate);
+            for (const job of jobs) {
+                if (job.status === 'disabled') continue;
+
+                let shouldRun = false;
+
+                if (job.preferredTime) {
+                    shouldRun = shouldRunTimeOfDay(job, nowDate);
+                    if (shouldRun) {
+                        console.log(`\n⏰ [Scheduler] Time-of-day trigger for: "${job.description}" (preferred: ${job.preferredTime})`);
+                    }
+                } else {
+                    const intervalMs = job.intervalHours * 60 * 60 * 1000;
+                    const timeSinceLastRun = now - job.lastRunTimestamp;
+
+                    if (timeSinceLastRun >= intervalMs) {
+                        shouldRun = true;
+                        console.log(`\n⏰ [Scheduler] Interval trigger for: "${job.description}" (every ${job.intervalHours}h)`);
+                    }
+                }
+
                 if (shouldRun) {
-                    console.log(`\n⏰ [Scheduler] Time-of-day trigger for: "${job.description}" (preferred: ${job.preferredTime})`);
-                }
-            } else {
-                const intervalMs = job.intervalHours * 60 * 60 * 1000;
-                const timeSinceLastRun = now - job.lastRunTimestamp;
-
-                if (timeSinceLastRun >= intervalMs) {
-                    shouldRun = true;
-                    console.log(`\n⏰ [Scheduler] Interval trigger for: "${job.description}" (every ${job.intervalHours}h)`);
+                    // Update timestamp immediately so if it crashes we don't rapid-fire
+                    job.lastRunTimestamp = now;
+                    jobsToRun.push({ ...job }); // Clone for execution outside the lock
                 }
             }
 
-            if (shouldRun) {
-                // Update timestamp immediately so if it crashes we don't rapid-fire
-                job.lastRunTimestamp = now;
-                jobsToRun.push(job);
-            }
-        }
-
-        // Write back updated timestamps BEFORE executing (prevents re-fire on crash)
-        if (jobsToRun.length > 0) {
-            writeJobsSync(jobs);
-        }
+            return jobs; // withJobs() writes this back atomically
+        });
 
         // Execute jobs OUTSIDE the lock — the file is already updated
         for (const job of jobsToRun) {
@@ -131,16 +131,21 @@ async function checkAndExecuteJobs() {
 }
 
 export async function runJobForcefully(jobId: string) {
-    const jobs = readJobsSync();
+    let jobToRun: CronJob | null = null;
 
-    const job = jobs.find(j => j.id === jobId);
-    if (!job) return false;
+    await withJobs((jobs: CronJob[]) => {
+        const job = jobs.find(j => j.id === jobId);
+        if (job) {
+            job.lastRunTimestamp = Date.now();
+            jobToRun = { ...job };
+        }
+        return jobs;
+    });
+
+    if (!jobToRun) return false;
+    const job = jobToRun as CronJob;
 
     console.log(`\n⚡ [Scheduler] Manually Triggering Job: "${job.description}"`);
-
-    // Update timestamp
-    job.lastRunTimestamp = Date.now();
-    writeJobsSync(jobs);
 
     const manager = new ManagerAgent();
     const cronPrompt = `[SYSTEM MANUAL TRIGGER] Wake up and execute your background task manually requested by the user. Do not ask me for permission. Just do it and summarize the results.\n\nTask: ${job.prompt}`;

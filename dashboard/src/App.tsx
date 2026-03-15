@@ -1425,6 +1425,12 @@ function CronView({ agents }: { agents: any[] }) {
                         const timeSinceLast = Date.now() - job.lastRunTimestamp;
                         const timeUntilNext = hasPreferredTime ? 0 : intervalMs - timeSinceLast;
 
+                        // Extract delivery info from prompt
+                        const emails: string[] = [...new Set((job.prompt.match(/[a-zA-Z0-9._%+-]+@(?:gmail|yahoo|hotmail|outlook|icloud|protonmail|aol)\.[a-z]{2,}/gi) || []) as string[])];
+                        const whatsappNumbers: string[] = [...new Set((job.prompt.match(/\+?\d{10,15}(?=@s\.whatsapp\.net)/g) || []) as string[])];
+                        const hasWhatsApp = /whatsapp/i.test(job.prompt);
+                        const hasEmail = /email/i.test(job.prompt) || emails.length > 0;
+
                         return (
                             <div key={job.id} className="bg-slate-900/60 backdrop-blur-xl rounded-2xl border border-white/5 p-6 flex flex-col gap-4 shadow-xl hover:bg-slate-900/80 transition-all">
 
@@ -1456,6 +1462,30 @@ function CronView({ agents }: { agents: any[] }) {
                                         </div>
                                     </div>
                                 </div>
+
+                                {/* Delivery Info */}
+                                {(hasEmail || hasWhatsApp) && (
+                                    <div className="mt-1">
+                                        <span className="text-[10px] uppercase font-bold text-slate-500 tracking-widest block mb-2">Delivery</span>
+                                        <div className="flex flex-wrap gap-2">
+                                            {emails.map((email, i) => (
+                                                <span key={`email-${i}`} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-500/10 text-blue-400 text-xs font-mono rounded-lg border border-blue-500/20">
+                                                    📧 {email}
+                                                </span>
+                                            ))}
+                                            {whatsappNumbers.map((num, i) => (
+                                                <span key={`wa-${i}`} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500/10 text-emerald-400 text-xs font-mono rounded-lg border border-emerald-500/20">
+                                                    💬 +{num}
+                                                </span>
+                                            ))}
+                                            {hasWhatsApp && whatsappNumbers.length === 0 && (
+                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500/10 text-emerald-400 text-xs font-mono rounded-lg border border-emerald-500/20">
+                                                    💬 WhatsApp (default user)
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
 
                                 {/* Prompt Block */}
                                 <div className="mt-2 text-sm text-slate-400 leading-relaxed max-w-3xl">
@@ -1570,6 +1600,87 @@ function CronView({ agents }: { agents: any[] }) {
                             <div>
                                 <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Task Prompt</label>
                                 <textarea required rows={6} value={editFormData.prompt} onChange={e => setEditFormData({ ...editFormData, prompt: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm text-slate-200 focus:ring-1 focus:ring-sky-500 focus:border-sky-500 outline-none resize-none" />
+                            </div>
+                            {/* Delivery Channels — add/remove recipients */}
+                            <div className="bg-slate-950/50 border border-slate-800 rounded-lg p-3">
+                                <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-3">Delivery Channels</label>
+                                {/* Detected recipients */}
+                                <div className="flex flex-wrap gap-2 mb-3">
+                                    {(() => {
+                                        const promptText = editFormData.prompt || '';
+                                        const detectedEmails: string[] = [...new Set((promptText.match(/[a-zA-Z0-9._%+-]+@(?:gmail|yahoo|hotmail|outlook|icloud|protonmail|aol)\.[a-z]{2,}/gi) || []) as string[])];
+                                        const detectedWA: string[] = [...new Set((promptText.match(/\+?\d{10,15}(?=@s\.whatsapp\.net)/g) || []) as string[])];
+                                        const mentionsWA = /whatsapp/i.test(promptText) && detectedWA.length === 0;
+                                        return (
+                                            <>
+                                                {detectedEmails.map((email, i) => (
+                                                    <span key={`edit-email-${i}`} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-500/10 text-blue-400 text-xs font-mono rounded-lg border border-blue-500/20">
+                                                        📧 {email}
+                                                        <button type="button" onClick={() => {
+                                                            // Remove this email from prompt
+                                                            const updated = editFormData.prompt.replace(new RegExp(`\\s*(AND\\s+)?${email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\s+AND)?`, 'gi'), ' ').replace(/\s{2,}/g, ' ');
+                                                            setEditFormData({ ...editFormData, prompt: updated });
+                                                        }} className="text-blue-400/60 hover:text-red-400 ml-1 text-[10px] font-bold">×</button>
+                                                    </span>
+                                                ))}
+                                                {detectedWA.map((num, i) => (
+                                                    <span key={`edit-wa-${i}`} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500/10 text-emerald-400 text-xs font-mono rounded-lg border border-emerald-500/20">
+                                                        💬 +{num}
+                                                        <button type="button" onClick={() => {
+                                                            const updated = editFormData.prompt.replace(new RegExp(`${num}@s\\.whatsapp\\.net`, 'g'), '').replace(/\s{2,}/g, ' ');
+                                                            setEditFormData({ ...editFormData, prompt: updated });
+                                                        }} className="text-emerald-400/60 hover:text-red-400 ml-1 text-[10px] font-bold">×</button>
+                                                    </span>
+                                                ))}
+                                                {mentionsWA && (
+                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500/10 text-emerald-400 text-xs font-mono rounded-lg border border-emerald-500/20">
+                                                        💬 WhatsApp (default user)
+                                                    </span>
+                                                )}
+                                                {detectedEmails.length === 0 && detectedWA.length === 0 && !mentionsWA && (
+                                                    <span className="text-xs text-slate-600 italic">No delivery channels detected</span>
+                                                )}
+                                            </>
+                                        );
+                                    })()}
+                                </div>
+                                {/* Add new recipient */}
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        id="add-recipient-input"
+                                        placeholder="Add email or WhatsApp # (e.g. user@gmail.com or +14155551234)"
+                                        className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:ring-1 focus:ring-sky-500 focus:border-sky-500 outline-none placeholder-slate-600"
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                                e.preventDefault();
+                                                (e.target as HTMLInputElement).nextElementSibling?.dispatchEvent(new Event('click', { bubbles: true }));
+                                            }
+                                        }}
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const input = document.getElementById('add-recipient-input') as HTMLInputElement;
+                                            const val = input?.value?.trim();
+                                            if (!val) return;
+                                            let updatedPrompt = editFormData.prompt;
+                                            if (val.includes('@') && /\.[a-z]{2,}$/i.test(val)) {
+                                                // Email — append to prompt
+                                                updatedPrompt += ` Also send via email to ${val}.`;
+                                            } else if (/^\+?\d{10,15}$/.test(val.replace(/[\s-]/g, ''))) {
+                                                // WhatsApp number
+                                                const cleaned = val.replace(/[\s-]/g, '').replace(/^\+/, '');
+                                                updatedPrompt += ` Also send via WhatsApp to ${cleaned}@s.whatsapp.net.`;
+                                            } else {
+                                                return; // Invalid format
+                                            }
+                                            setEditFormData({ ...editFormData, prompt: updatedPrompt });
+                                            input.value = '';
+                                        }}
+                                        className="px-3 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-bold transition-colors"
+                                    >+</button>
+                                </div>
                             </div>
                             <div className="pt-4 flex justify-end gap-3">
                                 <button type="button" onClick={() => setEditJob(null)} className="px-4 py-2 border border-slate-700 text-slate-300 rounded-lg text-sm hover:bg-slate-800 transition-colors">Cancel</button>
