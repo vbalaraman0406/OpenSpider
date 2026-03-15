@@ -1273,7 +1273,7 @@ function LogsView({ logs }: { logs: LogMessage[] }) {
     );
 }
 
-function CronView({ agents }: { agents: any[] }) {
+function CronView({ agents, logs }: { agents: any[]; logs: LogMessage[] }) {
     const [jobs, setJobs] = useState<any[]>([]);
     const [showModal, setShowModal] = useState(false);
     const [formData, setFormData] = useState({ description: '', prompt: '', intervalHours: '24', agentId: 'gateway', status: 'enabled', preferredTime: '' });
@@ -1690,6 +1690,71 @@ function CronView({ agents }: { agents: any[] }) {
                     </div>
                 </div>
             )}
+
+            {/* Cron Execution Logs */}
+            <div className="mt-12">
+                <h3 className="text-xl font-bold text-white tracking-tight flex items-center gap-3 mb-6">
+                    <FileText className="w-6 h-6 text-indigo-400" />
+                    Execution Logs
+                </h3>
+                {(() => {
+                    const cronLogs = logs.filter(l => (l as any).type === 'cron_result');
+                    if (cronLogs.length === 0) {
+                        return (
+                            <div className="text-slate-500 text-sm italic bg-slate-900/50 rounded-xl border border-slate-800/60 p-8 text-center">
+                                No cron execution results yet. Results will appear here as scheduled jobs complete.
+                            </div>
+                        );
+                    }
+                    return (
+                        <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
+                            {cronLogs
+                                .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+                                .slice(0, 50)
+                                .map((log, i) => {
+                                    const text = log.data.trim();
+                                    const cronMatch = text.match(/^\[Cron: (.+?)\] /);
+                                    const jobName = cronMatch ? cronMatch[1] : 'Unknown Job';
+                                    let content = cronMatch ? text.substring(cronMatch[0].length).trim() : text;
+                                    content = content.replace(/Plan execution finished successfully\. Final Output:?[\s\n]*/g, '').trim();
+                                    const time = new Date(log.timestamp);
+                                    const timeStr = time.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true });
+
+                                    return (
+                                        <details key={i} className="group bg-slate-900/50 rounded-xl border border-slate-800/60 overflow-hidden hover:border-indigo-500/30 transition-colors">
+                                            <summary className="px-5 py-4 cursor-pointer flex items-center justify-between hover:bg-slate-800/30 transition-colors">
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-indigo-400 text-lg">⏰</span>
+                                                    <span className="text-sm font-semibold text-white">{jobName}</span>
+                                                </div>
+                                                <span className="text-[11px] text-slate-500 font-mono">{timeStr}</span>
+                                            </summary>
+                                            <div className="px-5 pb-5 border-t border-slate-800/40">
+                                                <div className="prose prose-invert prose-sm max-w-none mt-4 prose-p:leading-relaxed prose-pre:bg-slate-950/80 prose-pre:border prose-pre:border-slate-800 text-[14px]">
+                                                    <ReactMarkdown
+                                                        remarkPlugins={[remarkGfm]}
+                                                        components={{
+                                                            table: ({ node, ...props }) => (
+                                                                <div className="overflow-x-auto my-4 rounded-xl border border-indigo-700/50 bg-indigo-950/50 shadow-lg">
+                                                                    <table className="min-w-full divide-y divide-indigo-700/50 text-sm" {...props} />
+                                                                </div>
+                                                            ),
+                                                            thead: ({ node, ...props }) => <thead className="bg-indigo-900/50" {...props} />,
+                                                            th: ({ node, ...props }) => <th className="px-4 py-3 text-left font-semibold text-indigo-200 tracking-wide bg-indigo-900/40 first:rounded-tl-lg last:rounded-tr-lg" {...props} />,
+                                                            td: ({ node, ...props }) => <td className="px-4 py-3 border-t border-indigo-700/40 text-slate-300" {...props} />,
+                                                            p: ({ node, ...props }) => <p className="mb-2.5 last:mb-0" {...props} />,
+                                                            a: ({ node, ...props }) => <a className="text-indigo-400 hover:text-indigo-300 underline underline-offset-2 decoration-indigo-500/30 hover:decoration-indigo-400 transition-all font-medium" {...props} />
+                                                        }}
+                                                    >{content}</ReactMarkdown>
+                                                </div>
+                                            </div>
+                                        </details>
+                                    );
+                                })}
+                        </div>
+                    );
+                })()}
+            </div>
         </div>
     );
 }
@@ -1803,19 +1868,21 @@ export default function App() {
             .then(data => setSkills(data.skills))
             .catch(e => console.error("Could not fetch skills API", e));
 
-        apiFetch('/api/chat/history')
-            .then(r => r.json())
-            .then(data => {
-                if (Array.isArray(data) && data.length > 0) {
-                    // Prepend history safely to avoid wiping out websocket events that arrived during the fetch
-                    setLogs(prev => {
-                        const existingIds = new Set(prev.map(p => p.timestamp + p.data));
-                        const uniqueHistory = data.filter(d => !existingIds.has(d.timestamp + d.data));
-                        return [...uniqueHistory, ...prev].slice(-5000); // Allow preserving up to 5000 history items
-                    });
-                }
-            })
-            .catch(e => console.error("Could not fetch chat history", e));
+        // Chat history is now served via WebSocket chatBuffer replay on connect
+        // (the /api/chat/history endpoint re-creates timestamps from memory file strings
+        //  which caused sort-order bugs due to timezone parsing inconsistencies)
+        // apiFetch('/api/chat/history')
+        //     .then(r => r.json())
+        //     .then(data => {
+        //         if (Array.isArray(data) && data.length > 0) {
+        //             setLogs(prev => {
+        //                 const existingIds = new Set(prev.map(p => p.timestamp + p.data));
+        //                 const uniqueHistory = data.filter(d => !existingIds.has(d.timestamp + d.data));
+        //                 return [...uniqueHistory, ...prev].slice(-5000);
+        //             });
+        //         }
+        //     })
+        //     .catch(e => console.error("Could not fetch chat history", e));
 
         fetchAgents();
 
@@ -2305,7 +2372,9 @@ export default function App() {
                                     </div>
                                 ) : logs.filter(log => {
                                     if (isVerbose) return true;
-                                    const text = log.data.trim(); // MUST Be trimmed so \n doesn't break startsWith!
+                                    let text = log.data.trim(); // MUST Be trimmed so \n doesn't break startsWith!
+                                    // Fix: Strip [CRON] prefix if present so dashboard messages still render correctly
+                                    if (text.startsWith('[CRON]')) text = text.substring(7).trim();
                                     // In non-verbose mode, strictly only show User questions and final Agent answers
                                     if (text.includes('[You]')) return true;
 
@@ -2316,10 +2385,10 @@ export default function App() {
                                         return true; // Keep genuine [Agent] dialogue responses
                                     }
 
-                                    // Show cron job results in chat
-                                    if ((log as any).type === 'cron_result') return true;
+                                    // Show cron job results only in verbose mode (they have their own Cron Jobs tab)
+                                    // if ((log as any).type === 'cron_result') return true;
 
-                                    // Hide absolutely everything else (raw JSON, [Server], [Web Chat], [Manager], [Worker])
+                                    // Hide absolutely everything else (raw JSON, [Server], [Web Chat], [Manager], [Worker], cron_result)
                                     return false;
                                 })
                                 // Sort by timestamp to fix out-of-order display from multiple async sources
@@ -2331,7 +2400,9 @@ export default function App() {
                                     return !arr.slice(0, idx).some(prev => (prev.timestamp + prev.data) === key);
                                 })
                                 .map((log, i) => {
-                                    const text = log.data.trim();
+                                    let text = log.data.trim();
+                                    // Fix: Strip [CRON] prefix for rendering too
+                                    if (text.startsWith('[CRON]')) text = text.substring(7).trim();
                                     const isUser = text.includes('[You]');
                                     const isAgent = text.includes('[Agent]');
                                     const isCronResult = (log as any).type === 'cron_result';
@@ -2639,7 +2710,7 @@ export default function App() {
                 }
                 {activeTab === 'usage' && <UsageView />}
                 {activeTab === 'logs' && <LogsView logs={logs} />}
-                {activeTab === 'cron' && <CronView agents={agents} />}
+                {activeTab === 'cron' && <CronView agents={agents} logs={logs} />}
                 {activeTab === 'processes' && <ProcessMonitor />}
             </main >
 

@@ -119,7 +119,15 @@ export function startServer() {
             const parsed = JSON.parse(raw);
             if (Array.isArray(parsed)) {
                 eventBuffer = parsed.slice(-MAX_BUFFER_SIZE);
-                console.log(`[Server] Restored ${eventBuffer.length} chat events from disk.`);
+                // Fix: Purge cron system noise from event buffer too
+                const beforeEventPurge = eventBuffer.length;
+                eventBuffer = eventBuffer.filter(e =>
+                    !e.data.startsWith('[CRON]') &&
+                    !e.data.includes('Sending structured request') &&
+                    !e.data.includes('Sending structured generation')
+                );
+                const eventPurged = beforeEventPurge - eventBuffer.length;
+                console.log(`[Server] Restored ${eventBuffer.length} chat events from disk${eventPurged > 0 ? ` (purged ${eventPurged} cron noise)` : ''}.`);
             }
         }
     } catch (e) {
@@ -140,7 +148,15 @@ export function startServer() {
                     return new Date(m.timestamp).getTime() > twoDaysAgo;
                 });
                 chatBuffer = fresh.slice(-MAX_CHAT_MESSAGES);
-                console.log(`[Server] Restored ${chatBuffer.length} conversation messages from disk (evicted ${parsed.length - fresh.length} older than 2 days).`);
+                // Fix: Purge cron system noise that may have leaked into the conversation buffer
+                const beforePurge = chatBuffer.length;
+                chatBuffer = chatBuffer.filter(m =>
+                    !m.data.startsWith('[CRON]') &&
+                    !m.data.includes('Sending structured request') &&
+                    !m.data.includes('Sending structured generation')
+                );
+                const purged = beforePurge - chatBuffer.length;
+                console.log(`[Server] Restored ${chatBuffer.length} conversation messages from disk (evicted ${parsed.length - fresh.length} older than 2 days${purged > 0 ? `, purged ${purged} cron noise entries` : ''}).`);
             }
         }
     } catch (e) {
@@ -418,12 +434,16 @@ export function startServer() {
                 const logEvent = { type: 'log', data: safeMessage, timestamp: new Date().toISOString() };
 
                 // Tag cron-originated logs so the dashboard can ignore them for typing state
-                if (activeCronJobs > 0) {
+                // Fix: Don't tag dashboard user/agent messages as cron — they're from the chat session
+                if (activeCronJobs > 0 && !message.includes('[You]') && !message.includes('[Web Chat]')) {
                     logEvent.data = `[CRON] ${logEvent.data}`;
                 }
 
                 // Buffer chat-relevant events for page refresh persistence
-                if (message.includes('[You]') || message.includes('[Agent]') || message.includes('[Web Chat]')) {
+                // Fix: Only buffer genuine user/agent conversation messages, not cron system logs
+                // that happen to contain '[Agent]' (e.g. '[Agent] [AntigravityInternal] Sending structured request...')
+                const isCronNoise = activeCronJobs > 0 && !message.includes('[You]') && !message.includes('[Web Chat]');
+                if (!isCronNoise && (message.includes('[You]') || message.includes('[Agent]') || message.includes('[Web Chat]'))) {
                     bufferEvent(logEvent);
                     // Also persist to chatBuffer so messages survive dashboard refresh
                     // This captures WhatsApp and all channel messages, not just dashboard chat
