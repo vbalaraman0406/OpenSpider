@@ -915,46 +915,43 @@ function SkillsView({ skills, onRefresh, isGenerating, setIsGenerating }: Skills
                     </div>
                 )}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 flex-1 min-h-0 overflow-y-auto pb-10">
-                    {skills.map(skillName => (
-                        <div key={skillName} className="bg-slate-900/40 backdrop-blur-xl rounded-2xl border border-white/5 p-6 shadow-xl relative overflow-hidden group hover:bg-slate-900/60 transition-all">
-                            <div className="absolute top-0 inset-x-0 h-px w-full bg-gradient-to-r from-transparent via-cyan-500/30 to-transparent"></div>
-                            <div className="flex items-center gap-3 mb-4">
-                                <div className="p-2.5 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-                                    <Terminal className="w-5 h-5" />
+                <div className="flex-1 min-h-0 overflow-y-auto pb-10">
+                    <div className="bg-slate-900/40 backdrop-blur-xl rounded-2xl border border-white/5 shadow-xl overflow-hidden">
+                        <div className="grid grid-cols-[auto_1fr_auto_auto] items-center px-5 py-3 border-b border-slate-800/60 text-[11px] uppercase tracking-widest text-slate-500 font-bold">
+                            <span className="w-8"></span>
+                            <span>Skill Name</span>
+                            <span className="text-center px-4">Type</span>
+                            <span className="text-right pr-1">Actions</span>
+                        </div>
+                        {skills.map(skillName => (
+                            <div key={skillName} className="grid grid-cols-[auto_1fr_auto_auto] items-center px-5 py-3.5 border-b border-slate-800/30 hover:bg-slate-800/30 transition-colors group">
+                                <div className="p-1.5 rounded-lg bg-cyan-500/10 text-cyan-400 mr-4">
+                                    <Terminal className="w-4 h-4" />
                                 </div>
-                                <h3 className="text-lg font-semibold text-white tracking-tight">{formatSkillName(skillName)}</h3>
-                            </div>
-                            <p className="text-sm text-slate-400 mb-6 line-clamp-2">Dynamically loaded system tool.</p>
-
-                            <div className="flex items-center justify-between mt-auto">
-                                <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold bg-slate-950/50 px-2.5 py-1 rounded border border-slate-800/60">Local File</span>
-                                <div className="flex items-center gap-3">
-                                    <button className="text-xs font-semibold text-rose-400 hover:text-rose-300 transition-colors" onClick={(e) => handleDeleteSkill(e, skillName)}>
-                                        Delete
-                                    </button>
-                                    <button className="text-xs font-semibold text-slate-400 hover:text-cyan-400 transition-colors" onClick={() => handleViewDetails(skillName)}>
+                                <span className="text-sm font-medium text-white truncate pr-4">{formatSkillName(skillName)}</span>
+                                <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold bg-slate-950/50 px-2.5 py-1 rounded border border-slate-800/60 mx-4 whitespace-nowrap">Local File</span>
+                                <div className="flex items-center gap-4">
+                                    <button className="text-xs font-semibold text-slate-500 hover:text-cyan-400 transition-colors" onClick={() => handleViewDetails(skillName)}>
                                         {isFetchingDetails ? '...' : 'Details'}
                                     </button>
+                                    <button className="text-xs font-semibold text-rose-500/60 hover:text-rose-400 transition-colors opacity-0 group-hover:opacity-100" onClick={(e) => handleDeleteSkill(e, skillName)}>
+                                        Delete
+                                    </button>
                                 </div>
                             </div>
-                        </div>
-                    ))}
+                        ))}
 
-                    {/* Add built-in core skills as well */}
-                    <div className="bg-slate-900/40 backdrop-blur-xl rounded-2xl border border-white/5 p-6 shadow-xl relative overflow-hidden group hover:bg-slate-900/60 transition-all">
-                        <div className="absolute top-0 inset-x-0 h-px w-full bg-gradient-to-r from-transparent via-cyan-500/30 to-transparent"></div>
-                        <div className="flex items-center gap-3 mb-4">
-                            <div className="p-2.5 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-                                <Globe className="w-5 h-5" />
+                        {/* Built-in core skill */}
+                        <div className="grid grid-cols-[auto_1fr_auto_auto] items-center px-5 py-3.5 hover:bg-slate-800/30 transition-colors group">
+                            <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 mr-4">
+                                <Globe className="w-4 h-4" />
                             </div>
-                            <h3 className="text-lg font-semibold text-white tracking-tight">{formatSkillName('web_search')}</h3>
-                        </div>
-                        <p className="text-sm text-slate-400 mb-6 line-clamp-2">Performs a Google Search and returns the snippet and URL results.</p>
-
-                        <div className="flex items-center justify-between mt-auto">
-                            <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold bg-slate-950/50 px-2.5 py-1 rounded border border-slate-800/60 text-emerald-400">System Required</span>
-                            <button className="text-xs font-semibold text-slate-400 hover:text-cyan-400 transition-colors" onClick={() => handleViewDetails('web_search')}>Details</button>
+                            <span className="text-sm font-medium text-white truncate pr-4">{formatSkillName('web_search')}</span>
+                            <span className="text-[10px] uppercase tracking-widest text-emerald-400 font-bold bg-slate-950/50 px-2.5 py-1 rounded border border-emerald-800/40 mx-4 whitespace-nowrap">System</span>
+                            <div className="flex items-center gap-4">
+                                <button className="text-xs font-semibold text-slate-500 hover:text-cyan-400 transition-colors" onClick={() => handleViewDetails('web_search')}>Details</button>
+                                <span className="text-xs text-transparent pointer-events-none">Delete</span>
+                            </div>
                         </div>
                     </div>
                 </div>
