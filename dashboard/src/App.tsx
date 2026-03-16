@@ -878,6 +878,9 @@ function SkillsView({ skills, onRefresh, isGenerating, setIsGenerating }: Skills
         }
     };
 
+    const formatSkillName = (name: string) =>
+        name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()).replace(/\bF1\b/gi, 'F1').replace(/\bS P\b/gi, 'S&P');
+
     return (
         <div className="flex-1 p-10 overflow-y-auto fade-in relative">
             <div className="w-full h-full flex flex-col">
@@ -920,7 +923,7 @@ function SkillsView({ skills, onRefresh, isGenerating, setIsGenerating }: Skills
                                 <div className="p-2.5 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
                                     <Terminal className="w-5 h-5" />
                                 </div>
-                                <h3 className="text-lg font-semibold text-white tracking-tight">{skillName}</h3>
+                                <h3 className="text-lg font-semibold text-white tracking-tight">{formatSkillName(skillName)}</h3>
                             </div>
                             <p className="text-sm text-slate-400 mb-6 line-clamp-2">Dynamically loaded system tool.</p>
 
@@ -945,7 +948,7 @@ function SkillsView({ skills, onRefresh, isGenerating, setIsGenerating }: Skills
                             <div className="p-2.5 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
                                 <Globe className="w-5 h-5" />
                             </div>
-                            <h3 className="text-lg font-semibold text-white tracking-tight">web_search</h3>
+                            <h3 className="text-lg font-semibold text-white tracking-tight">{formatSkillName('web_search')}</h3>
                         </div>
                         <p className="text-sm text-slate-400 mb-6 line-clamp-2">Performs a Google Search and returns the snippet and URL results.</p>
 
