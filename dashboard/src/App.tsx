@@ -1814,6 +1814,16 @@ export default function App() {
     } | null>(null);
     const [isHealthHovered, setIsHealthHovered] = useState(false);
 
+    // Version update banner state
+    const [updateInfo, setUpdateInfo] = useState<{
+        current: string;
+        latest: string;
+        updateAvailable: boolean;
+        releaseUrl?: string;
+        releaseName?: string;
+    } | null>(null);
+    const [updateDismissed, setUpdateDismissed] = useState(false);
+
     useEffect(() => {
         const fetchHealth = () => {
             apiFetch('/api/health')
@@ -1824,6 +1834,14 @@ export default function App() {
         fetchHealth();
         const interval = setInterval(fetchHealth, 30000);
         return () => clearInterval(interval);
+    }, []);
+
+    // Check for updates on mount
+    useEffect(() => {
+        apiFetch('/api/version-check')
+            .then(r => r.json())
+            .then(data => setUpdateInfo(data))
+            .catch(() => {}); // Silently fail — not critical
     }, []);
 
     const formatUptime = (seconds: number) => {
@@ -2100,6 +2118,18 @@ export default function App() {
                             )}
                         </div>
                         <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-widest mt-0.5">Dashboard</p>
+                        {/* Inline update hint in sidebar */}
+                        {updateInfo?.updateAvailable && !updateDismissed && (
+                            <a
+                                href={updateInfo.releaseUrl || '#'}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[10px] text-emerald-400 hover:text-emerald-300 mt-1 flex items-center gap-1 transition-colors"
+                            >
+                                <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                v{updateInfo.latest} available
+                            </a>
+                        )}
                     </div>
                 </div>
 
@@ -2333,6 +2363,41 @@ export default function App() {
 
             {/* Main Content Area */}
             <main className="flex-1 flex flex-col h-screen overflow-hidden relative bg-slate-950/50">
+                {/* Update Available Banner */}
+                {updateInfo?.updateAvailable && !updateDismissed && (
+                    <div className="relative px-6 py-3 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-cyan-500/10 border-b border-emerald-500/20 flex items-center justify-between shrink-0 animate-in slide-in-from-top">
+                        <div className="flex items-center gap-3">
+                            <span className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500/15 border border-emerald-500/30 rounded-full">
+                                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                                <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-wide">New Update</span>
+                            </span>
+                            <span className="text-sm text-slate-300">
+                                <strong className="text-white">OpenSpider {updateInfo.releaseName || `v${updateInfo.latest}`}</strong> is available
+                                <span className="text-slate-500 ml-1">(you're on v{updateInfo.current})</span>
+                            </span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <a
+                                href={updateInfo.releaseUrl || '#'}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs font-semibold text-emerald-400 hover:text-emerald-300 transition-colors underline underline-offset-2"
+                            >
+                                View Changes
+                            </a>
+                            <span className="text-[11px] text-slate-500 font-mono bg-slate-800/60 px-2 py-0.5 rounded border border-slate-700/50">
+                                openspider update
+                            </span>
+                            <button
+                                onClick={() => setUpdateDismissed(true)}
+                                className="p-1 text-slate-500 hover:text-slate-300 transition-colors rounded-md hover:bg-slate-800/50"
+                                title="Dismiss"
+                            >
+                                <X size={14} />
+                            </button>
+                        </div>
+                    </div>
+                )}
                 {activeTab === 'chat' && (
                     <div className="flex-1 p-8 flex gap-8 overflow-hidden w-full h-full fade-in">
 

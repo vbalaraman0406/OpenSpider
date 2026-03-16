@@ -490,6 +490,92 @@ export function startServer() {
         });
     });
 
+    // ═══════════════════════════════════════════════════════════════
+    // VERSION CHECK — GitHub release comparison with 1-hour cache
+    // ═══════════════════════════════════════════════════════════════
+    let versionCache: { data: any; timestamp: number } | null = null;
+    const VERSION_CACHE_TTL = 60 * 60 * 1000; // 1 hour
+
+    app.get('/api/version-check', async (req, res) => {
+        try {
+            const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf-8'));
+            const currentVersion = pkg.version;
+            const repoUrl = pkg.repository?.url || pkg.repository || '';
+            
+            // Extract owner/repo from GitHub URL
+            const repoMatch = (typeof repoUrl === 'string' ? repoUrl : '').match(/github\.com[/:]([^/]+)\/([^/.]+)/);
+            const owner = repoMatch?.[1] || 'vbalaraman0406';
+            const repo = repoMatch?.[2] || 'OpenSpider';
+
+            // Return cached result if fresh
+            if (versionCache && (Date.now() - versionCache.timestamp) < VERSION_CACHE_TTL) {
+                return res.json(versionCache.data);
+            }
+
+            // Fetch latest release from GitHub API
+            const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/releases/latest`, {
+                headers: {
+                    'Accept': 'application/vnd.github.v3+json',
+                    'User-Agent': 'OpenSpider-Gateway'
+                }
+            });
+
+            if (!response.ok) {
+                // If no releases exist yet, return current version info
+                const result = {
+                    current: currentVersion,
+                    latest: currentVersion,
+                    updateAvailable: false,
+                    releaseNotes: null,
+                    releaseUrl: `https://github.com/${owner}/${repo}/releases`,
+                    checkedAt: new Date().toISOString()
+                };
+                versionCache = { data: result, timestamp: Date.now() };
+                return res.json(result);
+            }
+
+            const release = await response.json() as any;
+            const latestVersion = (release.tag_name || '').replace(/^v/, '');
+
+            // Compare versions using simple semver comparison
+            const compareSemver = (a: string, b: string): number => {
+                const pa = a.split('.').map(Number);
+                const pb = b.split('.').map(Number);
+                for (let i = 0; i < 3; i++) {
+                    if ((pa[i] || 0) < (pb[i] || 0)) return -1;
+                    if ((pa[i] || 0) > (pb[i] || 0)) return 1;
+                }
+                return 0;
+            };
+
+            const updateAvailable = compareSemver(currentVersion, latestVersion) < 0;
+
+            const result = {
+                current: currentVersion,
+                latest: latestVersion,
+                updateAvailable,
+                releaseNotes: release.body ? release.body.substring(0, 500) : null,
+                releaseName: release.name || `v${latestVersion}`,
+                releaseUrl: release.html_url || `https://github.com/${owner}/${repo}/releases`,
+                publishedAt: release.published_at,
+                checkedAt: new Date().toISOString()
+            };
+
+            versionCache = { data: result, timestamp: Date.now() };
+            res.json(result);
+        } catch (e: any) {
+            console.error('[Version Check] Error:', e.message);
+            const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf-8'));
+            res.json({
+                current: pkg.version,
+                latest: pkg.version,
+                updateAvailable: false,
+                error: e.message,
+                checkedAt: new Date().toISOString()
+            });
+        }
+    });
+
     // API Route to fetch current connection config
     app.get('/api/config', (req, res) => {
         const provider = process.env.DEFAULT_PROVIDER || 'ollama';
