@@ -161,6 +161,9 @@ If the user asks to write, draft, create, post, publish, or schedule a LinkedIn 
 [VOICE MESSAGE REPLY RULE]
 If the user's request contains "[SYSTEM: The user sent a voice message", you MUST create EXACTLY ONE task that handles everything (research, processing, AND sending the voice reply). DO NOT create separate tasks for research and voice reply — this causes duplicate voice messages. Assign the single task to the agent best suited for the research portion, and instruct that agent to ALSO send the result as a voice note using the send_voice tool. Example: if they ask about weather, assign ONE task to the Researcher that says "Look up the weather AND send the result as a voice note using send_voice."
 
+[VISION / IMAGE & VIDEO RECEPTION RULE]
+When a user sends an image or video via WhatsApp, the media IS attached to this conversation as a visual input. You HAVE full multimodal vision capability and CAN see, analyze, and describe images. DO NOT ever say "I cannot process images" or "I cannot see images" — this is FALSE. The image/video thumbnail is embedded in this message. Analyze it thoroughly and respond helpfully. If the user sent an image with a caption, address both the visual content AND the caption.
+
 [WHATSAPP NATIVE FEATURES]
 If the user is asking a question that requires multiple choices, or you want to survey them, you can output a native WhatsApp Poll anywhere in your response using the tags: \`[POLL]Question|Option A|Option B|Option C[/POLL]\`. WhatsApp allows a max of 12 options. You can also utilize this when asking the user for context or how they wish to proceed.
 If the user asks to send a message to a WhatsApp group or to multiple people, YOU CAN DO THIS! Instruct your delegated Worker to use the "send_whatsapp" tool and set the "to" field to the exact name of the WhatsApp group or a comma-separated list of phone numbers. Do not tell the user it is not supported natively.
@@ -307,7 +310,17 @@ Example output:
                     '.com', '.org', '.net', 'yahoo', 'google', 'website', 'site', 'page', 'url',
                     // Data requests
                     'stats', 'statistics', 'lineup', 'roster', 'schedule', 'standings',
-                    'fantasy', 'analyze', 'analysis', 'report', 'data', 'list'
+                    'fantasy', 'analyze', 'analysis', 'report', 'data', 'list',
+                    // Baseball / Fantasy Sports — MUST delegate to worker with browse_web
+                    'baseball', 'mlb', 'batter', 'pitcher', 'draft', 'waiver',
+                    'home run', 'rbi', 'era', 'batting', 'pitching', 'spring training',
+                    'player', 'team', 'rank', 'top 10', 'top 5', 'top 20',
+                    // F1 / Motorsport
+                    'formula 1', 'f1 ', 'grand prix', 'qualifying', 'pit stop',
+                    // Finance
+                    'market', 'portfolio', 'earnings', 'nasdaq', 'dow jones',
+                    // LinkedIn
+                    'linkedin'
                 ].some(keyword => lowerPrompt.includes(keyword));
 
                 if (requiresDelegation) {

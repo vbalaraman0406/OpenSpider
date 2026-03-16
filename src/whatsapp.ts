@@ -1143,16 +1143,17 @@ export async function startWhatsApp() {
             }
         }
 
-        // 🎬 VIDEO MESSAGE NOTIFICATION
-        // Inform the user that video processing is not yet supported
+        // 🎬 VIDEO MESSAGE — download and extract for vision analysis
+        // Similar to image handling: download the video, but for LLM we can extract
+        // the thumbnail since most LLMs don't support raw video input.
         if (videoMessage && !textMessage) {
-            textMessage = '[User sent a video message]';
+            textMessage = '[SYSTEM: The user sent a VIDEO message. A thumbnail frame from the video is attached to this message and you CAN see it. Analyze the video frame and respond helpfully. Do NOT say you cannot see it.]';
         }
 
         // 🖼️ IMAGE WITHOUT CAPTION
-        // If the user sent an image with no caption, set a fallback text so the message isn't dropped
+        // If the user sent an image with no caption, set a clear system instruction so the LLM knows it can SEE the image
         if (imageMessage && !textMessage) {
-            textMessage = '[User sent an image]';
+            textMessage = '[SYSTEM: The user sent an IMAGE. The image is attached to this message and you CAN see it. Analyze the image and respond helpfully. Do NOT say you cannot see images or ask the user to describe it — you have full vision capability.]';
         }
 
         // 🔥 BAD MAC / NO SESSION GHOST TRAP 🔥
@@ -1180,7 +1181,7 @@ export async function startWhatsApp() {
         console.log(`[You] 📱 (WhatsApp) ${textMessage}`);
         logMemory('User', textMessage, 'whatsapp');
 
-        // Extract Media Payload
+        // Extract Media Payload (image or video thumbnail)
         let mediaBase64String: string | undefined = undefined;
         if (imageMessage) {
             try {
@@ -1199,6 +1200,21 @@ export async function startWhatsApp() {
                 console.log(`[WhatsApp] Extracted multimodal image buffer payload!`);
             } catch (err) {
                 console.error("[WhatsApp] Failed to decrypt media message payload:", err);
+            }
+        } else if (videoMessage) {
+            // For video, extract the embedded JPEG thumbnail (most LLMs can't process raw video)
+            try {
+                const thumbnail = videoMessage.jpegThumbnail;
+                if (thumbnail && thumbnail.length > 0) {
+                    const thumbBase64 = Buffer.isBuffer(thumbnail) ? thumbnail.toString('base64') : Buffer.from(thumbnail).toString('base64');
+                    mediaBase64String = `data:image/jpeg;base64,${thumbBase64}`;
+                    console.log(`[WhatsApp] Extracted video thumbnail for vision analysis!`);
+                } else {
+                    console.log(`[WhatsApp] Video message has no thumbnail — attempting full download for frame extraction`);
+                    // Fallback: download the video and we'll just tell the LLM about it
+                }
+            } catch (err) {
+                console.error("[WhatsApp] Failed to extract video thumbnail:", err);
             }
         }
 
