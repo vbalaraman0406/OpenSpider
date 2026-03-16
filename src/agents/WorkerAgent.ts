@@ -23,7 +23,7 @@ export class WorkerAgent {
         this.cancelChecker = cancelChecker;
     }
 
-    async executeTask(instruction: string, context: string[]): Promise<string> {
+    async executeTask(instruction: string, context: string[], imagesBase64: string[] = []): Promise<string> {
         await this.executor.initialize();
 
         // Look up this worker's capabilities
@@ -145,9 +145,18 @@ Context from previous steps:
 ${context.join('\n')}
 `;
 
+        // Build user content — include images as multimodal content blocks if present
+        let userContent: string | any[] = instruction;
+        if (imagesBase64.length > 0) {
+            userContent = [{ type: 'text', text: instruction }];
+            for (const img of imagesBase64) {
+                userContent.push({ type: 'image_url', image_url: { url: img } });
+            }
+        }
+
         let messages: ChatMessage[] = [
             { role: 'system', content: systemPrompt },
-            { role: 'user', content: instruction }
+            { role: 'user', content: userContent }
         ];
 
         // ═══════════════════════════════════════════════════════════════

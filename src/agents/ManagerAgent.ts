@@ -53,7 +53,7 @@ export class ManagerAgent {
 
     async processUserRequest(prompt: string, imagesBase64: string[] = []): Promise<string> {
         this.resetCancel(); // Clear any previous cancel flag
-        console.log(`\n[Manager] Analyzing request: "${prompt}"`);
+        console.log(`\n[Manager] Analyzing request: "${prompt}"${imagesBase64.length > 0 ? ` [with ${imagesBase64.length} image(s)]` : ''}`);
         const agentPersona = process.env.AGENT_PERSONA || "You are a helpful multi-agent assistant designed to write excellent code and utilize terminals.";
 
         // Build dynamic agent catalog
@@ -405,7 +405,7 @@ Example output:
 
                     const resolvedRole = this.resolveRole(step.role, existingRoles);
                     const worker = new WorkerAgent(this.llm, resolvedRole, () => this.cancelRequested);
-                    const result = await worker.executeTask(step.instruction, globalContext);
+                    const result = await worker.executeTask(step.instruction, globalContext, imagesBase64);
 
                     console.log(`[Manager] Task ${taskId} completed. Result:\n${result}\n`);
 
@@ -438,7 +438,7 @@ Example output:
                         const workerContext = [...globalContext];
                         const resolvedRole = this.resolveRole(subtask.role, existingRoles);
                         const worker = new WorkerAgent(this.llm, resolvedRole, () => this.cancelRequested);
-                        const result = await worker.executeTask(subtask.instruction, workerContext);
+                        const result = await worker.executeTask(subtask.instruction, workerContext, imagesBase64);
 
                         console.log(`[Manager] Parallel Task ${taskId} completed.`);
                         console.log(JSON.stringify({
