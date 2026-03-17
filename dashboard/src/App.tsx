@@ -1726,11 +1726,45 @@ function CronView({ agents, logs }: { agents: any[]; logs: LogMessage[] }) {
 
                                     {/* Contact dropdown */}
                                     {showContactDropdown && (waContacts.groups.length > 0 || waContacts.dms.length > 0) && (
-                                        <div className="absolute z-50 mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg shadow-2xl max-h-[240px] overflow-y-auto">
+                                        <div className="absolute z-50 mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg shadow-2xl max-h-[280px] overflow-y-auto">
+                                            {/* DMs section — shown first for quick access */}
+                                            {waContacts.dms.length > 0 && (
+                                                <>
+                                                    <div className="px-3 py-1.5 bg-slate-800/60 text-[9px] font-bold uppercase tracking-widest text-slate-500 sticky top-0 z-10 flex justify-between">
+                                                        <span>Direct Messages</span>
+                                                        <span className="text-slate-600">{waContacts.dms.filter((d: any) => !contactSearch || d.name.toLowerCase().includes(contactSearch.toLowerCase()) || d.number.includes(contactSearch)).length}</span>
+                                                    </div>
+                                                    {waContacts.dms
+                                                        .filter((d: any) => !contactSearch || d.name.toLowerCase().includes(contactSearch.toLowerCase()) || d.number.includes(contactSearch))
+                                                        .map((d: any, i: number) => (
+                                                            <button
+                                                                key={`dm-${i}`}
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    const updatedPrompt = editFormData.prompt + ` Also send via WhatsApp to ${d.number}@s.whatsapp.net.`;
+                                                                    setEditFormData({ ...editFormData, prompt: updatedPrompt });
+                                                                    setContactSearch('');
+                                                                    setShowContactDropdown(false);
+                                                                }}
+                                                                className="w-full text-left px-3 py-2 text-xs text-slate-300 hover:bg-sky-500/10 hover:text-sky-300 transition-colors flex items-center gap-2 border-b border-slate-800/40 last:border-b-0"
+                                                            >
+                                                                <span className="text-blue-400">💬</span>
+                                                                <span className="truncate">{d.name !== d.number ? d.name : `+${d.number}`}</span>
+                                                                <span className="text-slate-600 text-[10px] ml-auto font-mono">+{d.number}</span>
+                                                            </button>
+                                                        ))}
+                                                    {waContacts.dms.filter((d: any) => !contactSearch || d.name.toLowerCase().includes(contactSearch.toLowerCase()) || d.number.includes(contactSearch)).length === 0 && (
+                                                        <div className="px-3 py-2 text-[10px] text-slate-600 italic">No matching contacts</div>
+                                                    )}
+                                                </>
+                                            )}
                                             {/* Groups section */}
                                             {waContacts.groups.length > 0 && (
                                                 <>
-                                                    <div className="px-3 py-1.5 bg-slate-800/60 text-[9px] font-bold uppercase tracking-widest text-slate-500 sticky top-0">WhatsApp Groups</div>
+                                                    <div className="px-3 py-1.5 bg-slate-800/60 text-[9px] font-bold uppercase tracking-widest text-slate-500 sticky top-0 z-10 flex justify-between">
+                                                        <span>WhatsApp Groups</span>
+                                                        <span className="text-slate-600">{waContacts.groups.filter((g: any) => !contactSearch || g.name.toLowerCase().includes(contactSearch.toLowerCase())).length}</span>
+                                                    </div>
                                                     {waContacts.groups
                                                         .filter((g: any) => !contactSearch || g.name.toLowerCase().includes(contactSearch.toLowerCase()))
                                                         .map((g: any, i: number) => (
@@ -1751,34 +1785,6 @@ function CronView({ agents, logs }: { agents: any[]; logs: LogMessage[] }) {
                                                         ))}
                                                     {waContacts.groups.filter((g: any) => !contactSearch || g.name.toLowerCase().includes(contactSearch.toLowerCase())).length === 0 && (
                                                         <div className="px-3 py-2 text-[10px] text-slate-600 italic">No matching groups</div>
-                                                    )}
-                                                </>
-                                            )}
-                                            {/* DMs section */}
-                                            {waContacts.dms.length > 0 && (
-                                                <>
-                                                    <div className="px-3 py-1.5 bg-slate-800/60 text-[9px] font-bold uppercase tracking-widest text-slate-500 sticky top-0">Direct Messages</div>
-                                                    {waContacts.dms
-                                                        .filter((d: any) => !contactSearch || d.name.toLowerCase().includes(contactSearch.toLowerCase()) || d.number.includes(contactSearch))
-                                                        .map((d: any, i: number) => (
-                                                            <button
-                                                                key={`dm-${i}`}
-                                                                type="button"
-                                                                onClick={() => {
-                                                                    const updatedPrompt = editFormData.prompt + ` Also send via WhatsApp to ${d.number}@s.whatsapp.net.`;
-                                                                    setEditFormData({ ...editFormData, prompt: updatedPrompt });
-                                                                    setContactSearch('');
-                                                                    setShowContactDropdown(false);
-                                                                }}
-                                                                className="w-full text-left px-3 py-2 text-xs text-slate-300 hover:bg-sky-500/10 hover:text-sky-300 transition-colors flex items-center gap-2 border-b border-slate-800/40 last:border-b-0"
-                                                            >
-                                                                <span className="text-blue-400">💬</span>
-                                                                <span className="truncate">{d.name}</span>
-                                                                <span className="text-slate-600 text-[10px] ml-auto">+{d.number}</span>
-                                                            </button>
-                                                        ))}
-                                                    {waContacts.dms.filter((d: any) => !contactSearch || d.name.toLowerCase().includes(contactSearch.toLowerCase()) || d.number.includes(contactSearch)).length === 0 && (
-                                                        <div className="px-3 py-2 text-[10px] text-slate-600 italic">No matching contacts</div>
                                                     )}
                                                 </>
                                             )}
