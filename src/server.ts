@@ -653,6 +653,42 @@ export function startServer() {
         }
     });
 
+    // Combined contacts endpoint for cron job delivery picker
+    app.get('/api/whatsapp/contacts', async (req, res) => {
+        try {
+            // Fetch groups
+            let groups: Array<{ id: string; subject: string }> = [];
+            try {
+                groups = await getParticipatingGroups();
+            } catch (e) { }
+
+            // Fetch DM contacts from WhatsApp config
+            let dms: Array<{ number: string; name?: string }> = [];
+            try {
+                if (fs.existsSync(whatsappConfigPath)) {
+                    const config = JSON.parse(fs.readFileSync(whatsappConfigPath, 'utf-8'));
+                    const allowedDMs = config.allowedDMs || [];
+                    dms = allowedDMs.map((entry: any) => {
+                        if (typeof entry === 'string') {
+                            return { number: entry, name: entry };
+                        }
+                        return {
+                            number: entry.number || '',
+                            name: entry.name || entry.number || 'Unknown'
+                        };
+                    }).filter((d: any) => d.number);
+                }
+            } catch (e) { }
+
+            res.json({
+                groups: groups.map(g => ({ type: 'group', id: g.id, name: g.subject })),
+                dms: dms.map(d => ({ type: 'dm', id: `${d.number}@s.whatsapp.net`, name: d.name || `+${d.number}`, number: d.number }))
+            });
+        } catch (e: any) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
     app.post('/api/whatsapp/send', async (req, res) => {
         try {
             const { sendWhatsAppMessage } = require('./whatsapp');
