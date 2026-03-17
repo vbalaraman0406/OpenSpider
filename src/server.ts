@@ -693,8 +693,10 @@ export function startServer() {
         try {
             const { sendWhatsAppMessage } = require('./whatsapp');
             const { to, text } = req.body;
-            await sendWhatsAppMessage(`${to}@s.whatsapp.net`, text);
-            res.json({ success: true, message: `Dispatched to ${to}` });
+            // Support both raw JIDs (xxx@g.us, xxx@s.whatsapp.net) and plain phone numbers
+            const jid = to.includes('@') ? to : `${to}@s.whatsapp.net`;
+            await sendWhatsAppMessage(jid, text);
+            res.json({ success: true, message: `Dispatched to ${jid}` });
         } catch (e: any) {
             res.status(500).json({ error: e.message });
         }

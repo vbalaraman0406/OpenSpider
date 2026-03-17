@@ -1,103 +1,82 @@
-# OpenSpider Agent Handoff — Session Context
+# Agent Handoff — Session 2026-03-16
 
-> **Date:** 2026-03-10  
-> **Version:** v2.2.0  
-> **Last Tag:** `v2.1.0-stable` (rollback point)  
-> **Gateway Status:** Running via `pm2` (openspider-gateway)
+## 1. Current Goal
 
----
+Fix WhatsApp group messaging from the bot. The bot can send DMs fine but **cannot send messages to any WhatsApp group** — specifically the "Family" group (`14156249639-1373117853@g.us`). The error is a Baileys Signal protocol issue: `SessionError: No sessions` followed by `not-acceptable` (HTTP 406) on retry.
 
-## 1. Current State
-
-All v2.2.0 features have been implemented, built, and deployed. The gateway has been restarted with the new code.
+Secondary goal was improving the **cron job editor's delivery channel picker** in the dashboard — that part is complete and working.
 
 ---
 
-## 2. Version History
+## 2. Progress Status
 
-### v2.2.0 — LID Dashboard, Email Config, CLI (Current)
+### ✅ Working
+- **Contact picker in cron editor**: Groups show first on text search, DMs first on browse. Exact match sorting. Searchable.
+- **Delivery channel tag detection**: Group JIDs with hyphens (`14156249639-1373117853@g.us`) now properly detected and shown as 👥 tags.
+- **DM tag detection**: `@s.whatsapp.net` patterns detected and shown as 💬 tags.
+- **Removable tags**: × buttons correctly strip delivery instructions from the prompt.
+- **`/api/whatsapp/send` endpoint**: Fixed to support group JIDs (was always appending `@s.whatsapp.net`).
+- **`sendWhatsAppMessage` retry logic**: On "No sessions" error, fetches `groupMetadata()`, calls `assertSessions(participantJids, true)`, waits 2s, retries.
+- **DM messaging**: Works perfectly.
+- **WhatsApp connection**: Bot connects successfully after QR re-scan (device `:48`).
+- **Session warm-up**: 8 contacts, 5 groups warm-up completes on boot.
 
-#### A. LID Mapping Dashboard UI
-- **LID Identity Mappings** panel in WhatsApp Security (Channels → Configure WhatsApp)
-- When an unknown LID tries to DM, it appears as a **pending amber card** with the LID pre-filled
-- User types the phone number and clicks "Map" — no need to know the LID number
-- Resolved mappings are shown below with delete buttons
-- Backed by `GET /api/whatsapp/lid-mappings`, `GET /api/whatsapp/lid-pending`, `DELETE /api/whatsapp/lid-map/:lid`
+### ❌ Broken
+- **Group messaging**: ALL group sends fail. Tested Family group (`14156249639-1373117853@g.us`) extensively. Error flow:
+  1. First attempt: `SessionError: No sessions` at `libsignal/session_cipher.js:71`
+  2. `assertSessions(16 participants, force=true)` runs successfully
+  3. Retry attempt: `not-acceptable` (HTTP 406) from WhatsApp server
+  4. The failing participant is the **bot's own LID** (`150457066512456.0`) — a self-session issue during sender key distribution
+- **QR re-scan did NOT fix it**: Fresh `baileys_auth_info` (deleted and re-scanned), device changed from `:47` to `:48`, but same error persists.
 
-#### B. Email Configuration
-- **Email Notification Settings** panel in Channels → Configure WhatsApp
-- Two configurable fields:
-  - **Cron Job Results To:** — where automated cron results are delivered
-  - **Vendor & Friends To:** — default outbound email recipient
-- Stored in `workspace/email_config.json`
-- Backed by `GET /api/email/config`, `POST /api/email/config`
-
-#### C. Persisted `lidNotifiedCache`
-- The notification dedup cache (tracks which LIDs have been admin-notified) now persists to `workspace/lid_notified_cache.json`
-- Survives gateway restarts — blocked LIDs won't re-notify the admin
-- Debounce-written every 2 seconds
-
-#### D. CLI `openspider lid-map`
-- New command: `openspider lid-map <LID> <PHONE>`
-- Maps a WhatsApp LID to a phone number via the running gateway API
-- Reads PORT and DASHBOARD_API_KEY from `.env` for authentication
-
-#### E. Version Bump
-- `package.json`: `2.2.0`
-- CLI `.version()`: `2.2.0`
-
-### v2.1.0 — Memory & Context Optimization Suite
-1. Global Context Compaction — Worker results capped at 600 chars
-2. Smart Persona Context — Only LLM-relevant fields sent
-3. Skill Lazy Loading — Compact skill list
-4. End-of-Day Compaction — `compactYesterdayLog()`
-5. Memory Retention Policy — `cleanupOldMemoryLogs(30)`
-6. Channel-Tagged Memory — 📱/🖥️/⏰ tags
-
-### v2.0.x — LID Resolution System
-- LID↔Phone Cache — Persistent `lid_cache.json` + in-memory Maps
-- Admin `map` command — WhatsApp-based LID mapping
-- Admin Notifications — Blocked LID alerts with `map` syntax
-- Bot LID in Mention Checks — Group + DM mention checks match bot's `myLid`
-- POST /api/whatsapp/lid-map — API endpoint for LID mapping
+### Root Cause Analysis
+The error at `Object.150457066512456.0` (bot's own LID) in `session_cipher.js:171` means the bot cannot establish a Signal sender key session with **itself** in the group. This is likely a **Baileys 6.17.16 bug** with LID-based group messaging. Baileys 7.0.0-rc.9 is available and may fix this.
 
 ---
 
-## 3. Active Files (v2.2.0)
+## 3. Active Context — Files Edited
 
 | File | What Changed |
 |------|-------------|
-| `src/whatsapp.ts` | Persisted `lidNotifiedCache` to disk, added `getLidMappings()`, `removeLidMapping()`, `getPendingLids()` exports |
-| `src/server.ts` | Added 5 endpoints: `GET /api/whatsapp/lid-mappings`, `GET /api/whatsapp/lid-pending`, `DELETE /api/whatsapp/lid-map/:lid`, `GET /api/email/config`, `POST /api/email/config` |
-| `src/cli.ts` | Added `openspider lid-map <LID> <PHONE>` command, version bumped to `2.2.0` |
-| `dashboard/src/components/WhatsAppSecurity.tsx` | Added `LidMappingsPanel` with pending LIDs + resolved mappings |
-| `dashboard/src/components/EmailSettings.tsx` | **New file.** Email notification settings panel |
-| `dashboard/src/App.tsx` | Imported and rendered `<EmailSettings />` |
-| `package.json` | Version `2.2.0` |
+| `dashboard/src/App.tsx` | Contact picker dropdown (lines ~1727-1810): dynamic ordering (groups first on text search), group JID regex fixed to support hyphens `[\d-]+@g.us` |
+| `src/whatsapp.ts` | `sendWhatsAppMessage()` (lines ~280-330): retry logic with `assertSessions` + `groupMetadata` on "No sessions" error |
+| `src/server.ts` | `/api/whatsapp/send` endpoint (line ~692): fixed JID handling — `to.includes('@') ? to : ${to}@s.whatsapp.net` |
 
 ---
 
-## 4. Key Architecture Notes
+## 4. All Features Delivered This Session
 
-### LID Resolution Flow (DM Firewall)
-```
-Incoming DM from @lid JID
-  │
-  ├── Direct Match: phone number in allowlist → ✅ (normal @s.whatsapp.net)
-  ├── Layer 1: LID cache lookup (lid_cache.json) → ✅ if cached
-  ├── Layer 2: Config lid field match (whatsapp_config.json entry.lid) → ✅
-  ├── Layer 3: Group participant scan (cross-ref LID in groups) → ✅ if found
-  └── Layer 4: BLOCK + admin notification with "map <LID> <PHONE>" 
-```
+1. **Cron job WhatsApp contact picker** — searchable dropdown with groups + DMs when editing a cron job
+2. **Dynamic dropdown ordering** — text search shows groups first, number/empty search shows DMs first
+3. **Group JID tag detection** — hyphenated JIDs like `14156249639-1373117853@g.us` correctly detected in prompt
+4. **Exact-match group sorting** — searching "Family" shows exact "Family" match before "Morsbach family"
+5. **Removable delivery channel tags** — 👥 groups, 💬 DMs, 📧 emails with × remove buttons
+6. **`/api/whatsapp/send` fix** — now supports group JIDs directly (was broken for groups)
+7. **`sendWhatsAppMessage` retry** — `assertSessions` + `groupMetadata` refresh on "No sessions" errors
+8. **Cron logs persistence** — logs survive dashboard refresh (from earlier in session)
 
-### Important Variables in `whatsapp.ts`
-- `lidPhoneCache: Map<string, string>` — LID → phone (in-memory)
-- `phoneLidCache: Map<string, string>` — phone → LID (in-memory, reverse)
-- `lidNotifiedCache: Set<string>` — tracks notified LIDs (**persisted to disk**)
-- `myLid: string` — bot's own LID JID (discovered on connection/creds update)
+---
 
-### Workspace Config Files
-- `workspace/whatsapp_config.json` — DM/group allowlist, policies, LID fields on entries
-- `workspace/lid_cache.json` — LID↔phone mappings
-- `workspace/lid_notified_cache.json` — LIDs already admin-notified (dedup)
-- `workspace/email_config.json` — Email notification settings (`cronResultsTo`, `vendorEmailTo`)
+## 5. Next Immediate Steps
+
+### Option A: Upgrade Baileys (Recommended)
+The group messaging issue is almost certainly a Baileys 6.x LID bug. Version 7.0.0-rc.9 exists.
+
+- [ ] Check Baileys 7.x changelog for LID/group fixes: `npm view @whiskeysockets/baileys versions --json`
+- [ ] Back up current `node_modules/@whiskeysockets/baileys` 
+- [ ] Run `npm install @whiskeysockets/baileys@latest`
+- [ ] Check for breaking API changes in `makeWASocket`, `sendMessage`, `groupFetchAllParticipating`
+- [ ] Delete `baileys_auth_info` and re-scan QR: `openspider channels login`
+- [ ] Build and test: `npm run build && pm2 restart openspider-gateway`
+- [ ] Test group send: `curl -X POST -H "X-API-Key: $KEY" -H "Content-Type: application/json" -d '{"to":"14156249639-1373117853@g.us","text":"test"}' http://localhost:4001/api/whatsapp/send`
+
+### Option B: Workaround (If upgrade is too risky)
+- [ ] Investigate if the bot's own LID can be excluded from `assertSessions` participant list
+- [ ] Try sending with `{ cachedGroupMetadata: undefined }` in socket config
+- [ ] Check if `sock.sendMessage(jid, { text }, { participant: { jid: botLid } })` options can skip self-encryption
+- [ ] Try downgrading to Baileys `6.16.x` if the issue is a regression in `6.17.16`
+
+### Git Status
+- All changes committed and pushed to `main`
+- Latest commit: `0ab0ad6` — "fix: group JID regex to support hyphenated JIDs"
+- The `/api/whatsapp/send` fix (server.ts) needs to be committed: `git add src/server.ts && git commit -m "fix: /api/whatsapp/send now supports group JIDs" && git push`
