@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/) and this 
 
 ## [Unreleased]
 
+## [2.3.1] - 2026-03-17
+### Fixed
+- **WhatsApp Group Messaging**: Upgraded Baileys from 6.17.16 to 7.0.0-rc.9 to fix group message delivery (LID-based group addressing)
+- **Resilient Session Assertion**: Added `scripts/patch-baileys.js` to handle batch `assertSessions` failures gracefully (one-by-one fallback)
+- **Group Send Retry Logic**: Retry path now uses resilient one-by-one session assertion instead of failing on first error
+- WhatsApp send API now supports group JIDs with hyphenated format
+- Group session refresh and sender-key cleanup before group sends
+- WhatsApp contacts picker: DMs always visible, groups sort by exact match
+
+### Added
+- **WhatsApp Contacts Picker**: Cron job editor now has a contact/group selector
+- Cron execution log persistence to disk
+- `/release` workflow documentation
+
 ## [2.3.0] - 2026-03-16
 ### Added
 - **Image & Video Vision Support**: Agent can now see and analyze images sent via WhatsApp (previously said "I cannot process images")

@@ -280,21 +280,46 @@ export async function getParticipatingGroups(): Promise<Array<{ id: string, subj
 export async function sendWhatsAppMessage(jid: string, text: string) {
     if (!globalSocket) throw new Error("WhatsApp socket not connected");
 
+    // For group messages, clear stale sender-key-memory to force fresh
+    // sender key distribution to all participants on next send.
+    if (jid.endsWith('@g.us')) {
+        try {
+            const authDir = path.join(process.cwd(), 'baileys_auth_info');
+            const skmFile = `sender-key-memory-${jid}.json`;
+            const skmPath = path.join(authDir, skmFile);
+            if (fs.existsSync(skmPath)) {
+                fs.unlinkSync(skmPath);
+                console.log(`[WhatsApp] 🔑 Cleared stale sender-key-memory for ${jid}`);
+            }
+        } catch (e) { /* non-critical */ }
+    }
+
     let result;
     try {
         result = await globalSocket.sendMessage(jid, { text });
     } catch (e: any) {
         // Baileys "No sessions" error means encryption sessions are stale/missing
-        if (e?.message?.includes('No sessions') || e?.name === 'SessionError') {
-            console.warn(`[WhatsApp] "No sessions" error for ${jid}. Force-refreshing sessions...`);
+        if (e?.message?.includes('No sessions') || e?.name === 'SessionError' || e?.message?.includes('not-acceptable') || e?.output?.statusCode === 406) {
+            console.warn(`[WhatsApp] Session/delivery error for ${jid}: ${e?.message?.substring(0, 100)}. Force-refreshing sessions...`);
 
             try {
                 if (jid.endsWith('@g.us')) {
-                    // For groups: get participant JIDs and force-establish sessions with each
+                    // For groups: get participant JIDs and force-establish sessions
                     const metadata = await globalSocket.groupMetadata(jid);
                     const participantJids = metadata.participants.map((p: any) => p.id);
                     console.log(`[WhatsApp] Asserting sessions with ${participantJids.length} participants in group ${metadata.subject}...`);
-                    await (globalSocket as any).assertSessions(participantJids, true);
+                    // Use force=true to re-fetch even if sessions exist
+                    try {
+                        await (globalSocket as any).assertSessions(participantJids, true);
+                    } catch (e2: any) {
+                        // If batch fails, try one-by-one (same resilience as Baileys patch)
+                        console.warn(`[WhatsApp] Batch assertSessions retry failed: ${e2.message}. Trying one-by-one...`);
+                        for (const pid of participantJids) {
+                            try {
+                                await (globalSocket as any).assertSessions([pid], true);
+                            } catch (_) { /* skip failing participants */ }
+                        }
+                    }
                 } else {
                     // For DMs: assert session with the individual contact
                     await (globalSocket as any).assertSessions([jid], true);
@@ -461,6 +486,7 @@ export async function startWhatsApp() {
     });
 
     const baileysLogger = pino({ level: 'error' }, loggerStream);
+
 
     const sock = makeWASocket({
         version,

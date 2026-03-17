@@ -26,3 +26,9 @@ skills/morning_*.py
 skills/parse_*.py
 skills/scrape_*.py
 skills/weather_*.py
+Antigravity-config-setup.md
+
+baileys_auth_info.bak/
+backup-*/
+*.bak
+handoff.md
