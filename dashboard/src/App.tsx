@@ -1886,6 +1886,26 @@ export default function App() {
             .then(data => setSkills(data.skills))
             .catch(e => console.error("Could not fetch skills API", e));
 
+        // Fetch persisted cron execution logs so they survive dashboard refresh
+        apiFetch('/api/cron/logs')
+            .then(r => r.json())
+            .then(data => {
+                if (data.logs && Array.isArray(data.logs) && data.logs.length > 0) {
+                    const cronEntries = data.logs.map((log: any) => ({
+                        type: 'cron_result' as any,
+                        data: `[Cron: ${log.jobName}] ${log.result}`,
+                        timestamp: log.timestamp || new Date().toISOString()
+                    }));
+                    setLogs(prev => {
+                        // Deduplicate by timestamp to avoid double-counting live + persisted
+                        const existingTimestamps = new Set(prev.filter((l: any) => l.type === 'cron_result').map(l => l.timestamp));
+                        const uniqueCronEntries = cronEntries.filter((e: any) => !existingTimestamps.has(e.timestamp));
+                        return [...uniqueCronEntries, ...prev];
+                    });
+                }
+            })
+            .catch(e => console.error("Could not fetch cron logs", e));
+
         // Chat history is now served via WebSocket chatBuffer replay on connect
         // (the /api/chat/history endpoint re-creates timestamps from memory file strings
         //  which caused sort-order bugs due to timezone parsing inconsistencies)

@@ -111,6 +111,10 @@ export function startServer() {
     const CHAT_MESSAGES_PATH = path.join(process.cwd(), 'workspace', 'chat_messages.json');
     const MAX_CHAT_MESSAGES = 200;
 
+    // Persistent cron execution log — stores results from completed cron jobs
+    const CRON_LOGS_PATH = path.join(process.cwd(), 'workspace', 'cron_logs.json');
+    const MAX_CRON_LOGS = 200;
+
     // Load persisted buffer from disk on startup
     let eventBuffer: Array<{ type: string; data: string; timestamp: string }> = [];
     try {
@@ -161,6 +165,25 @@ export function startServer() {
         }
     } catch (e) {
         console.warn('[Server] Could not restore chat messages from disk, starting fresh.');
+    }
+
+    // Load persisted cron logs from disk
+    let cronLogBuffer: Array<{ jobName: string; result: string; timestamp: string }> = [];
+    try {
+        if (fs.existsSync(CRON_LOGS_PATH)) {
+            const raw = fs.readFileSync(CRON_LOGS_PATH, 'utf-8');
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+                // Evict logs older than 7 days
+                const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+                cronLogBuffer = parsed.filter((m: any) =>
+                    m.timestamp && new Date(m.timestamp).getTime() > sevenDaysAgo
+                ).slice(-MAX_CRON_LOGS);
+                console.log(`[Server] Restored ${cronLogBuffer.length} cron execution logs from disk.`);
+            }
+        }
+    } catch (e) {
+        console.warn('[Server] Could not restore cron logs from disk, starting fresh.');
     }
 
     // Debounced disk persistence to avoid excessive I/O
@@ -219,9 +242,36 @@ export function startServer() {
         }
     };
 
+    // Buffer a cron execution result for persistence
+    let cronLogDirty = false;
+    let cronFlushTimer: ReturnType<typeof setTimeout> | null = null;
+    const flushCronLogsToDisk = () => {
+        if (cronLogDirty) {
+            try {
+                fs.writeFileSync(CRON_LOGS_PATH, JSON.stringify(cronLogBuffer, null, 2));
+                cronLogDirty = false;
+            } catch (e) {
+                console.error('[Server] Failed to persist cron logs:', e);
+            }
+        }
+    };
+    const bufferCronLog = (log: { jobName: string; result: string; timestamp: string }) => {
+        cronLogBuffer.push(log);
+        if (cronLogBuffer.length > MAX_CRON_LOGS) {
+            cronLogBuffer.shift();
+        }
+        cronLogDirty = true;
+        if (!cronFlushTimer) {
+            cronFlushTimer = setTimeout(() => {
+                flushCronLogsToDisk();
+                cronFlushTimer = null;
+            }, 2000);
+        }
+    };
+
     // Also flush on process exit
-    process.on('SIGINT', () => { flushBufferToDisk(); process.exit(); });
-    process.on('SIGTERM', () => { flushBufferToDisk(); process.exit(); });
+    process.on('SIGINT', () => { flushBufferToDisk(); flushCronLogsToDisk(); process.exit(); });
+    process.on('SIGTERM', () => { flushBufferToDisk(); flushCronLogsToDisk(); process.exit(); });
 
     const manager = new ManagerAgent();
 
@@ -413,6 +463,15 @@ export function startServer() {
                                 }));
                             }
                         });
+
+                        // Persist cron results to disk so they survive restarts
+                        if (parsed.type === 'cron_result') {
+                            bufferCronLog({
+                                jobName: parsed.jobName || 'Unknown Job',
+                                result: parsed.result || '',
+                                timestamp: parsed.timestamp || new Date().toISOString()
+                            });
+                        }
                     }
                 }
             } catch (e) {
@@ -1501,6 +1560,17 @@ Return ONLY the raw Python code.`;
         try {
             const jobs = readJobsSync();
             res.json(jobs);
+        } catch (e: any) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    // Cron execution logs — persisted results from completed cron jobs
+    app.get('/api/cron/logs', (req, res) => {
+        try {
+            // Return logs sorted newest-first
+            const logs = [...cronLogBuffer].reverse();
+            res.json({ logs, total: logs.length });
         } catch (e: any) {
             res.status(500).json({ error: e.message });
         }
