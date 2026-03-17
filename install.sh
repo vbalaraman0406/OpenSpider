@@ -80,6 +80,23 @@ echo ""
 echo -e "${GREEN}Installing PM2 (process manager)...${NC}"
 npm install -g pm2 --unsafe-perm || sudo npm install -g pm2 --unsafe-perm
 
+# 4b. Configure PM2 to auto-start on boot
+echo -e "${GREEN}Configuring PM2 to start on boot...${NC}"
+# Get the startup command PM2 generates and execute it
+PM2_STARTUP_CMD=$(pm2 startup 2>&1 | grep 'sudo' | head -1)
+if [ -n "$PM2_STARTUP_CMD" ]; then
+    echo -e "${YELLOW}Running PM2 startup command (may require password):${NC}"
+    eval "$PM2_STARTUP_CMD" 2>/dev/null || {
+        echo -e "${YELLOW}⚠️  PM2 auto-start setup requires sudo. Run this manually after install:${NC}"
+        echo -e "  ${PM2_STARTUP_CMD}"
+        echo -e "${YELLOW}  Then run: pm2 save${NC}"
+    }
+    echo -e "${GREEN}✔ PM2 configured for auto-start on boot${NC}"
+else
+    # On some systems pm2 startup works without sudo
+    pm2 startup 2>/dev/null || echo -e "${YELLOW}⚠️  Could not configure PM2 auto-start. Run 'pm2 startup' manually.${NC}"
+fi
+
 echo ""
 
 # 5. Link the command globally
