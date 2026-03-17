@@ -1620,24 +1620,50 @@ function CronView({ agents, logs }: { agents: any[]; logs: LogMessage[] }) {
                                         const promptText = editFormData.prompt || '';
                                         const detectedEmails: string[] = [...new Set((promptText.match(/[a-zA-Z0-9._%+-]+@(?:gmail|yahoo|hotmail|outlook|icloud|protonmail|aol)\.[a-z]{2,}/gi) || []) as string[])];
                                         const detectedWA: string[] = [...new Set((promptText.match(/\+?\d{10,15}(?=@s\.whatsapp\.net)/g) || []) as string[])];
-                                        const mentionsWA = /whatsapp/i.test(promptText) && detectedWA.length === 0;
+                                        // Detect WhatsApp group JIDs (format: 120363423852747118@g.us)
+                                        const groupMatches = [...promptText.matchAll(/group\s+(?:JID:\s*)?(\d+@g\.us)/gi)];
+                                        const detectedGroups: { jid: string; name: string }[] = [];
+                                        for (const m of groupMatches) {
+                                            const jid = m[1];
+                                            if (!detectedGroups.find(g => g.jid === jid)) {
+                                                // Try to extract the group name from the prompt (pattern: "GroupName" (group JID: xxx@g.us))
+                                                const nameMatch = promptText.match(new RegExp(`"([^"]+)"\\s*\\(group\\s+JID:\\s*${jid.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\)`, 'i'));
+                                                detectedGroups.push({ jid, name: nameMatch ? nameMatch[1] : jid });
+                                            }
+                                        }
+                                        const mentionsWA = /whatsapp/i.test(promptText) && detectedWA.length === 0 && detectedGroups.length === 0;
                                         return (
                                             <>
                                                 {detectedEmails.map((email, i) => (
                                                     <span key={`edit-email-${i}`} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-500/10 text-blue-400 text-xs font-mono rounded-lg border border-blue-500/20">
                                                         📧 {email}
                                                         <button type="button" onClick={() => {
-                                                            // Remove this email from prompt
                                                             const updated = editFormData.prompt.replace(new RegExp(`\\s*(AND\\s+)?${email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\s+AND)?`, 'gi'), ' ').replace(/\s{2,}/g, ' ');
                                                             setEditFormData({ ...editFormData, prompt: updated });
                                                         }} className="text-blue-400/60 hover:text-red-400 ml-1 text-[10px] font-bold">×</button>
+                                                    </span>
+                                                ))}
+                                                {detectedGroups.map((g, i) => (
+                                                    <span key={`edit-grp-${i}`} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500/10 text-emerald-400 text-xs rounded-lg border border-emerald-500/20">
+                                                        👥 {g.name}
+                                                        <button type="button" onClick={() => {
+                                                            // Remove the entire group delivery sentence from prompt
+                                                            const escaped = g.jid.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                                                            const updated = editFormData.prompt
+                                                                .replace(new RegExp(`\\s*Also send[^.]*${escaped}[^.]*\\.?`, 'gi'), '')
+                                                                .replace(/\s{2,}/g, ' ').trim();
+                                                            setEditFormData({ ...editFormData, prompt: updated });
+                                                        }} className="text-emerald-400/60 hover:text-red-400 ml-1 text-[10px] font-bold">×</button>
                                                     </span>
                                                 ))}
                                                 {detectedWA.map((num, i) => (
                                                     <span key={`edit-wa-${i}`} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500/10 text-emerald-400 text-xs font-mono rounded-lg border border-emerald-500/20">
                                                         💬 +{num}
                                                         <button type="button" onClick={() => {
-                                                            const updated = editFormData.prompt.replace(new RegExp(`${num}@s\\.whatsapp\\.net`, 'g'), '').replace(/\s{2,}/g, ' ');
+                                                            // Remove the entire DM delivery sentence from prompt
+                                                            const updated = editFormData.prompt
+                                                                .replace(new RegExp(`\\s*Also send[^.]*${num}@s\\.whatsapp\\.net[^.]*\\.?`, 'gi'), '')
+                                                                .replace(/\s{2,}/g, ' ').trim();
                                                             setEditFormData({ ...editFormData, prompt: updated });
                                                         }} className="text-emerald-400/60 hover:text-red-400 ml-1 text-[10px] font-bold">×</button>
                                                     </span>
@@ -1647,7 +1673,7 @@ function CronView({ agents, logs }: { agents: any[]; logs: LogMessage[] }) {
                                                         💬 WhatsApp (default user)
                                                     </span>
                                                 )}
-                                                {detectedEmails.length === 0 && detectedWA.length === 0 && !mentionsWA && (
+                                                {detectedEmails.length === 0 && detectedWA.length === 0 && detectedGroups.length === 0 && !mentionsWA && (
                                                     <span className="text-xs text-slate-600 italic">No delivery channels detected</span>
                                                 )}
                                             </>
