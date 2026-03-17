@@ -279,7 +279,28 @@ export async function getParticipatingGroups(): Promise<Array<{ id: string, subj
 
 export async function sendWhatsAppMessage(jid: string, text: string) {
     if (!globalSocket) throw new Error("WhatsApp socket not connected");
-    const result = await globalSocket.sendMessage(jid, { text });
+
+    let result;
+    try {
+        result = await globalSocket.sendMessage(jid, { text });
+    } catch (e: any) {
+        // Baileys "No sessions" error means encryption session is stale — retry once after a delay
+        // This forces Baileys to re-establish the session with the group/contact
+        if (e?.message?.includes('No sessions') || e?.name === 'SessionError') {
+            console.warn(`[WhatsApp] "No sessions" error for ${jid}. Retrying in 2s...`);
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            try {
+                result = await globalSocket.sendMessage(jid, { text });
+                console.log(`[WhatsApp] Retry succeeded for ${jid}`);
+            } catch (retryErr: any) {
+                console.error(`[WhatsApp] Retry also failed for ${jid}:`, retryErr.message);
+                throw retryErr;
+            }
+        } else {
+            throw e;
+        }
+    }
+
     // Store the sent message so Baileys can re-relay it on retry requests
     if (result?.key?.id && result?.message) {
         sentMessageStore.set(result.key.id, result.message);
