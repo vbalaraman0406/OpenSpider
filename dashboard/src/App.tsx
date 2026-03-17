@@ -1620,8 +1620,8 @@ function CronView({ agents, logs }: { agents: any[]; logs: LogMessage[] }) {
                                         const promptText = editFormData.prompt || '';
                                         const detectedEmails: string[] = [...new Set((promptText.match(/[a-zA-Z0-9._%+-]+@(?:gmail|yahoo|hotmail|outlook|icloud|protonmail|aol)\.[a-z]{2,}/gi) || []) as string[])];
                                         const detectedWA: string[] = [...new Set((promptText.match(/\+?\d{10,15}(?=@s\.whatsapp\.net)/g) || []) as string[])];
-                                        // Detect WhatsApp group JIDs (format: 120363423852747118@g.us)
-                                        const groupMatches = [...promptText.matchAll(/group\s+(?:JID:\s*)?(\d+@g\.us)/gi)];
+                                        // Detect WhatsApp group JIDs (format: 120363423852747118@g.us or 14156249639-1373117853@g.us)
+                                        const groupMatches = [...promptText.matchAll(/group\s+(?:JID:\s*)?([\d-]+@g\.us)/gi)];
                                         const detectedGroups: { jid: string; name: string }[] = [];
                                         for (const m of groupMatches) {
                                             const jid = m[1];

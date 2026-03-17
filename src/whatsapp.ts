@@ -284,22 +284,28 @@ export async function sendWhatsAppMessage(jid: string, text: string) {
     try {
         result = await globalSocket.sendMessage(jid, { text });
     } catch (e: any) {
-        // Baileys "No sessions" error means encryption session is stale — need to refresh
+        // Baileys "No sessions" error means encryption sessions are stale/missing
         if (e?.message?.includes('No sessions') || e?.name === 'SessionError') {
-            console.warn(`[WhatsApp] "No sessions" error for ${jid}. Refreshing session...`);
+            console.warn(`[WhatsApp] "No sessions" error for ${jid}. Force-refreshing sessions...`);
 
             try {
-                // For group JIDs: fetch group metadata to force Baileys to refresh participant sessions
                 if (jid.endsWith('@g.us')) {
-                    console.log(`[WhatsApp] Fetching group metadata for ${jid} to refresh sessions...`);
-                    await globalSocket.groupMetadata(jid);
+                    // For groups: get participant JIDs and force-establish sessions with each
+                    const metadata = await globalSocket.groupMetadata(jid);
+                    const participantJids = metadata.participants.map((p: any) => p.id);
+                    console.log(`[WhatsApp] Asserting sessions with ${participantJids.length} participants in group ${metadata.subject}...`);
+                    await (globalSocket as any).assertSessions(participantJids, true);
+                } else {
+                    // For DMs: assert session with the individual contact
+                    await (globalSocket as any).assertSessions([jid], true);
                 }
-                // Short delay to let session keys propagate
-                await new Promise(resolve => setTimeout(resolve, 3000));
+
+                // Delay to let keys propagate
+                await new Promise(resolve => setTimeout(resolve, 2000));
 
                 // Retry the send
                 result = await globalSocket.sendMessage(jid, { text });
-                console.log(`[WhatsApp] Retry succeeded for ${jid}`);
+                console.log(`[WhatsApp] Retry succeeded for ${jid} after session refresh`);
             } catch (retryErr: any) {
                 console.error(`[WhatsApp] Retry also failed for ${jid}:`, retryErr.message);
                 throw retryErr;
