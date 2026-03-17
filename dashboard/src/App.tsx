@@ -1724,96 +1724,86 @@ function CronView({ agents, logs }: { agents: any[]; logs: LogMessage[] }) {
                                         </button>
                                     </div>
 
-                                    {/* Contact dropdown */}
-                                    {showContactDropdown && (waContacts.groups.length > 0 || waContacts.dms.length > 0) && (
-                                        <div className="absolute z-50 mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg shadow-2xl max-h-[280px] overflow-y-auto">
-                                            {/* DMs section — always shown (search only filters groups, not DMs with phone-number names) */}
-                                            {waContacts.dms.length > 0 && (() => {
-                                                // Only filter DMs if search looks like a phone number
-                                                const isNumericSearch = contactSearch && /^\+?\d+$/.test(contactSearch.replace(/[\s-]/g, ''));
-                                                const filteredDMs = isNumericSearch
-                                                    ? waContacts.dms.filter((d: any) => d.number.includes(contactSearch.replace(/[\s+-]/g, '')))
-                                                    : waContacts.dms;
-                                                return (
-                                                    <>
-                                                        <div className="px-3 py-1.5 bg-slate-800/60 text-[9px] font-bold uppercase tracking-widest text-slate-500 sticky top-0 z-10 flex justify-between">
-                                                            <span>Direct Messages</span>
-                                                            <span className="text-slate-600">{filteredDMs.length}</span>
-                                                        </div>
-                                                        {filteredDMs.map((d: any, i: number) => (
-                                                            <button
-                                                                key={`dm-${i}`}
-                                                                type="button"
-                                                                onClick={() => {
-                                                                    const updatedPrompt = editFormData.prompt + ` Also send via WhatsApp to ${d.number}@s.whatsapp.net.`;
-                                                                    setEditFormData({ ...editFormData, prompt: updatedPrompt });
-                                                                    setContactSearch('');
-                                                                    setShowContactDropdown(false);
-                                                                }}
-                                                                className="w-full text-left px-3 py-2 text-xs text-slate-300 hover:bg-sky-500/10 hover:text-sky-300 transition-colors flex items-center gap-2 border-b border-slate-800/40 last:border-b-0"
-                                                            >
-                                                                <span className="text-blue-400">💬</span>
-                                                                <span className="truncate">{d.name !== d.number ? d.name : `+${d.number}`}</span>
-                                                                <span className="text-slate-600 text-[10px] ml-auto font-mono">+{d.number}</span>
-                                                            </button>
-                                                        ))}
-                                                        {filteredDMs.length === 0 && (
-                                                            <div className="px-3 py-2 text-[10px] text-slate-600 italic">No matching contacts</div>
-                                                        )}
-                                                    </>
-                                                );
-                                            })()}
-                                            {/* Groups section — sorted: exact matches first */}
-                                            {waContacts.groups.length > 0 && (() => {
-                                                const search = contactSearch.toLowerCase();
-                                                const filtered = waContacts.groups
-                                                    .filter((g: any) => !contactSearch || g.name.toLowerCase().includes(search))
-                                                    .sort((a: any, b: any) => {
-                                                        if (!search) return 0;
-                                                        const aExact = a.name.toLowerCase() === search;
-                                                        const bExact = b.name.toLowerCase() === search;
-                                                        if (aExact && !bExact) return -1;
-                                                        if (!aExact && bExact) return 1;
-                                                        // Then sort by "starts with" before "contains"
-                                                        const aStarts = a.name.toLowerCase().startsWith(search);
-                                                        const bStarts = b.name.toLowerCase().startsWith(search);
-                                                        if (aStarts && !bStarts) return -1;
-                                                        if (!aStarts && bStarts) return 1;
-                                                        return 0;
-                                                    });
-                                                return (
-                                                    <>
-                                                        <div className="px-3 py-1.5 bg-slate-800/60 text-[9px] font-bold uppercase tracking-widest text-slate-500 sticky top-0 z-10 flex justify-between">
-                                                            <span>WhatsApp Groups</span>
-                                                            <span className="text-slate-600">{filtered.length}</span>
-                                                        </div>
-                                                        {filtered.map((g: any, i: number) => (
-                                                            <button
-                                                                key={`grp-${i}`}
-                                                                type="button"
-                                                                onClick={() => {
-                                                                    const updatedPrompt = editFormData.prompt + ` Also send the results to the WhatsApp group "${g.name}" (group JID: ${g.id}).`;
-                                                                    setEditFormData({ ...editFormData, prompt: updatedPrompt });
-                                                                    setContactSearch('');
-                                                                    setShowContactDropdown(false);
-                                                                }}
-                                                                className="w-full text-left px-3 py-2 text-xs text-slate-300 hover:bg-sky-500/10 hover:text-sky-300 transition-colors flex items-center gap-2 border-b border-slate-800/40 last:border-b-0"
-                                                            >
-                                                                <span className="text-emerald-400">👥</span>
-                                                                <span className="truncate">{g.name}</span>
-                                                            </button>
-                                                        ))}
-                                                        {filtered.length === 0 && (
-                                                            <div className="px-3 py-2 text-[10px] text-slate-600 italic">No matching groups</div>
-                                                        )}
-                                                    </>
-                                                );
-                                            })()}
-                                            {waContacts.groups.length === 0 && waContacts.dms.length === 0 && (
-                                                <div className="px-3 py-3 text-[10px] text-slate-600 italic text-center">No WhatsApp contacts available</div>
+                                    {/* Contact dropdown — groups first on text search, DMs first on number/empty search */}
+                                    {showContactDropdown && (waContacts.groups.length > 0 || waContacts.dms.length > 0) && (() => {
+                                        const search = contactSearch.toLowerCase().trim();
+                                        const isNumericSearch = contactSearch && /^\+?\d+$/.test(contactSearch.replace(/[\s-]/g, ''));
+                                        const isTextSearch = contactSearch && !isNumericSearch;
+
+                                        // Filter DMs: only by number when numeric, show all otherwise
+                                        const filteredDMs = isNumericSearch
+                                            ? waContacts.dms.filter((d: any) => d.number.includes(contactSearch.replace(/[\s+-]/g, '')))
+                                            : waContacts.dms;
+
+                                        // Filter + sort groups: exact → starts with → contains
+                                        const filteredGroups = waContacts.groups
+                                            .filter((g: any) => !search || g.name.toLowerCase().includes(search))
+                                            .sort((a: any, b: any) => {
+                                                if (!search) return 0;
+                                                const aExact = a.name.toLowerCase() === search;
+                                                const bExact = b.name.toLowerCase() === search;
+                                                if (aExact && !bExact) return -1;
+                                                if (!aExact && bExact) return 1;
+                                                const aStarts = a.name.toLowerCase().startsWith(search);
+                                                const bStarts = b.name.toLowerCase().startsWith(search);
+                                                if (aStarts && !bStarts) return -1;
+                                                if (!aStarts && bStarts) return 1;
+                                                return 0;
+                                            });
+
+                                        const dmSection = filteredDMs.length > 0 && (
+                                            <>
+                                                <div className="px-3 py-1.5 bg-slate-800/60 text-[9px] font-bold uppercase tracking-widest text-slate-500 sticky top-0 z-10 flex justify-between">
+                                                    <span>Direct Messages</span>
+                                                    <span className="text-slate-600">{filteredDMs.length}</span>
+                                                </div>
+                                                {filteredDMs.map((d: any, i: number) => (
+                                                    <button key={`dm-${i}`} type="button"
+                                                        onClick={() => {
+                                                            setEditFormData({ ...editFormData, prompt: editFormData.prompt + ` Also send via WhatsApp to ${d.number}@s.whatsapp.net.` });
+                                                            setContactSearch(''); setShowContactDropdown(false);
+                                                        }}
+                                                        className="w-full text-left px-3 py-2 text-xs text-slate-300 hover:bg-sky-500/10 hover:text-sky-300 transition-colors flex items-center gap-2 border-b border-slate-800/40 last:border-b-0"
+                                                    >
+                                                        <span className="text-blue-400">💬</span>
+                                                        <span className="truncate">{d.name !== d.number ? d.name : `+${d.number}`}</span>
+                                                        <span className="text-slate-600 text-[10px] ml-auto font-mono">+{d.number}</span>
+                                                    </button>
+                                                ))}
+                                            </>
+                                        );
+
+                                        const groupSection = filteredGroups.length > 0 && (
+                                            <>
+                                                <div className="px-3 py-1.5 bg-slate-800/60 text-[9px] font-bold uppercase tracking-widest text-slate-500 sticky top-0 z-10 flex justify-between">
+                                                    <span>WhatsApp Groups</span>
+                                                    <span className="text-slate-600">{filteredGroups.length}</span>
+                                                </div>
+                                                {filteredGroups.map((g: any, i: number) => (
+                                                    <button key={`grp-${i}`} type="button"
+                                                        onClick={() => {
+                                                            setEditFormData({ ...editFormData, prompt: editFormData.prompt + ` Also send the results to the WhatsApp group "${g.name}" (group JID: ${g.id}).` });
+                                                            setContactSearch(''); setShowContactDropdown(false);
+                                                        }}
+                                                        className="w-full text-left px-3 py-2 text-xs text-slate-300 hover:bg-sky-500/10 hover:text-sky-300 transition-colors flex items-center gap-2 border-b border-slate-800/40 last:border-b-0"
+                                                    >
+                                                        <span className="text-emerald-400">👥</span>
+                                                        <span className="truncate">{g.name}</span>
+                                                    </button>
+                                                ))}
+                                            </>
+                                        );
+
+                                        return (
+                                            <div className="absolute z-50 mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg shadow-2xl max-h-[280px] overflow-y-auto">
+                                                {/* When text searched: groups first. Otherwise: DMs first */}
+                                                {isTextSearch ? <>{groupSection}{dmSection}</> : <>{dmSection}{groupSection}</>}
+                                                {!filteredDMs.length && !filteredGroups.length && (
+                                                    <div className="px-3 py-3 text-[10px] text-slate-600 italic text-center">No matching contacts</div>
                                                 )}
-                                        </div>
-                                    )}
+                                            </div>
+                                        );
+                                    })()}
                                 </div>
                             </div>
                             <div className="pt-4 flex justify-end gap-3">

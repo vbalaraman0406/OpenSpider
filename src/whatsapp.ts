@@ -284,12 +284,20 @@ export async function sendWhatsAppMessage(jid: string, text: string) {
     try {
         result = await globalSocket.sendMessage(jid, { text });
     } catch (e: any) {
-        // Baileys "No sessions" error means encryption session is stale — retry once after a delay
-        // This forces Baileys to re-establish the session with the group/contact
+        // Baileys "No sessions" error means encryption session is stale — need to refresh
         if (e?.message?.includes('No sessions') || e?.name === 'SessionError') {
-            console.warn(`[WhatsApp] "No sessions" error for ${jid}. Retrying in 2s...`);
-            await new Promise(resolve => setTimeout(resolve, 2000));
+            console.warn(`[WhatsApp] "No sessions" error for ${jid}. Refreshing session...`);
+
             try {
+                // For group JIDs: fetch group metadata to force Baileys to refresh participant sessions
+                if (jid.endsWith('@g.us')) {
+                    console.log(`[WhatsApp] Fetching group metadata for ${jid} to refresh sessions...`);
+                    await globalSocket.groupMetadata(jid);
+                }
+                // Short delay to let session keys propagate
+                await new Promise(resolve => setTimeout(resolve, 3000));
+
+                // Retry the send
                 result = await globalSocket.sendMessage(jid, { text });
                 console.log(`[WhatsApp] Retry succeeded for ${jid}`);
             } catch (retryErr: any) {
