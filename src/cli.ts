@@ -123,10 +123,14 @@ program
     .action(async () => {
         console.log('\n🕷️ Restarting OpenSpider Gateway...\n');
 
+        // Derive project root from the compiled CLI location, not process.cwd()
+        // (user may run `openspider restart` from any directory)
+        const rootDir = __dirname.endsWith('src') ? path.join(__dirname, '..') : path.join(__dirname, '..');
+
         // Step 1: Rebuild TypeScript
         console.log('🔨 Rebuilding TypeScript...');
         try {
-            execSync('npm run build:backend', { cwd: process.cwd(), stdio: 'inherit' });
+            execSync('npm run build:backend', { cwd: rootDir, stdio: 'inherit' });
             console.log('✅ Build successful.\n');
         } catch {
             console.error('❌ Build failed. Fix errors before restarting.');
@@ -134,7 +138,7 @@ program
         }
 
         // Step 2: Rebuild Dashboard (if it exists)
-        const dashboardDir = path.join(process.cwd(), 'dashboard');
+        const dashboardDir = path.join(rootDir, 'dashboard');
         if (fs.existsSync(path.join(dashboardDir, 'package.json'))) {
             console.log('🎨 Rebuilding Dashboard...');
             try {
