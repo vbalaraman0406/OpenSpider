@@ -7,7 +7,7 @@
     "openspider": "./dist/cli.js"
   },
   "scripts": {
-    "postinstall": "cd dashboard && npm install --no-fund --no-audit && node scripts/patch-baileys.js",
+    "postinstall": "(cd dashboard && npm install --no-fund --no-audit) && node scripts/patch-baileys.js",
     "start": "ts-node src/index.ts",
     "dev:backend": "nodemon src/index.ts",
     "dev:frontend": "cd dashboard && npm run dev",
