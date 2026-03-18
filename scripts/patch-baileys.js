@@ -71,8 +71,8 @@ const PATCHED = `                    // [BAILEYS-PATCH] Resilient session assert
                     }`;
 
 if (!code.includes(ORIGINAL)) {
-  console.error('[patch-baileys] Could not find target code pattern. Baileys version may have changed.');
-  process.exit(1);
+  console.log('[patch-baileys] Target pattern not found (Baileys version may not need this patch). Skipping.');
+  process.exit(0);
 }
 
 code = code.replace(ORIGINAL, PATCHED);
