@@ -354,7 +354,22 @@ ${context.join('\n')}
                         direction: response.args as 'up' | 'down',
                     };
                     console.log(`[Worker - ${this.role}] Browser action: ${browseAction.action} ${browseAction.url || browseAction.selector || ''}`);
-                    toolOutput = await this.browserTool.execute(browseAction);
+                    let rawBrowserOutput = await this.browserTool.execute(browseAction);
+                    // SECURITY (V7): Sanitize web content to prevent prompt injection from malicious websites
+                    if (subAction === 'read_content' || subAction === 'execute_js') {
+                        rawBrowserOutput = rawBrowserOutput
+                            .replace(/\[SYSTEM\]/gi, '[WEB]')
+                            .replace(/\[ASSISTANT\]/gi, '[WEB]')
+                            .replace(/\[USER\]/gi, '[WEB]')
+                            .replace(/ignore previous instructions/gi, '[FILTERED]')
+                            .replace(/ignore all previous/gi, '[FILTERED]')
+                            .replace(/you are now/gi, '[FILTERED]')
+                            .replace(/new instructions:/gi, '[FILTERED]')
+                            .replace(/\x00/g, '');
+                        toolOutput = `---BEGIN WEB CONTENT---\n${rawBrowserOutput}\n---END WEB CONTENT---`;
+                    } else {
+                        toolOutput = rawBrowserOutput;
+                    }
                 } else if (response.action === 'wait_for_user') {
                     const waitMessage = response.message || 'Please complete the required action in the browser.';
                     console.log(`[Worker - ${this.role}] Requesting user interaction: ${waitMessage}`);
@@ -435,48 +450,45 @@ ${context.join('\n')}
                         }
                     }
                 } else if (response.action === 'update_whatsapp_whitelist' && response.command && response.target) {
+                    // SECURITY (V3): Human-in-the-loop guard — allowlist changes are QUEUED, not applied immediately.
+                    // This prevents prompt injection attacks from modifying the allowlist without admin knowledge.
                     try {
-                        const configPath = path.join(process.cwd(), 'workspace', 'whatsapp_config.json');
-                        let waConfig: any = { dmPolicy: 'allowlist', allowedDMs: [], groupPolicy: 'allowlist', allowedGroups: [], botMode: 'mention' };
-                        if (fs.existsSync(configPath)) {
-                            waConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-                        }
-
                         const target = response.target.trim();
-                        const rawNumber = target.replace(/\D/g, ''); // Extract just digits for DMs
-
-                        if (response.command === 'add_dm' && rawNumber) {
-                            if (!waConfig.allowedDMs) waConfig.allowedDMs = [];
-                            const exists = waConfig.allowedDMs.some((e: any) =>
-                                (typeof e === 'string' ? e : e.number || '').replace(/\D/g, '') === rawNumber
-                            );
-                            if (!exists) waConfig.allowedDMs.push({ number: rawNumber, mode: 'mention' });
-                            toolOutput = `Successfully added ${rawNumber} to the WhatsApp Direct Messages Allowlist (mode: mention).`;
-                        } else if (response.command === 'remove_dm' && rawNumber) {
-                            if (waConfig.allowedDMs) {
-                                waConfig.allowedDMs = waConfig.allowedDMs.filter((e: any) =>
-                                    (typeof e === 'string' ? e : e.number || '').replace(/\D/g, '') !== rawNumber
-                                );
-                            }
-                            toolOutput = `Successfully removed ${rawNumber} from the WhatsApp Direct Messages Allowlist.`;
-                        } else if (response.command === 'add_group') {
-                            if (!waConfig.allowedGroups) waConfig.allowedGroups = [];
-                            const exists = waConfig.allowedGroups.some((g: any) => typeof g === 'string' ? g === target : g.jid === target);
-                            if (!exists) waConfig.allowedGroups.push({ jid: target, mode: "mention" });
-                            toolOutput = `Successfully added group ${target} to the Allowlist.`;
-                        } else if (response.command === 'remove_group') {
-                            if (waConfig.allowedGroups) {
-                                waConfig.allowedGroups = waConfig.allowedGroups.filter((g: any) => typeof g === 'string' ? g !== target : g.jid !== target);
-                            }
-                            toolOutput = `Successfully removed group ${target} from the Allowlist.`;
+                        const command = response.command;
+                        const validCommands = ['add_dm', 'remove_dm', 'add_group', 'remove_group'];
+                        if (!validCommands.includes(command)) {
+                            toolOutput = `Error: Invalid command "${command}". Valid: ${validCommands.join(', ')}`;
                         } else {
-                            toolOutput = `Error: Invalid command or target format.`;
-                        }
+                            // Queue the change to a pending file for dashboard/admin review
+                            const pendingPath = path.join(process.cwd(), 'workspace', 'pending_allowlist_changes.json');
+                            let pending: any[] = [];
+                            if (fs.existsSync(pendingPath)) {
+                                try { pending = JSON.parse(fs.readFileSync(pendingPath, 'utf8')); } catch { pending = []; }
+                            }
+                            pending.push({
+                                id: 'awl-' + Math.random().toString(36).substr(2, 9),
+                                command,
+                                target,
+                                requestedBy: this.role,
+                                requestedAt: new Date().toISOString(),
+                                status: 'pending'
+                            });
+                            fs.writeFileSync(pendingPath, JSON.stringify(pending, null, 2));
+                            console.log(`[Worker - ${this.role}] SECURITY: Allowlist change QUEUED (not applied): ${command} → ${target}`);
 
-                        fs.writeFileSync(configPath, JSON.stringify(waConfig, null, 2));
-                        console.log(`[Worker - ${this.role}] Updated WhatsApp Allowlist via Agent Command.`);
+                            // Notify admin via WhatsApp
+                            const ownerJid = process.env.OWNER_JID || process.env.WHATSAPP_OWNER_NUMBER;
+                            if (ownerJid) {
+                                try {
+                                    await sendWhatsAppMessage(ownerJid.includes('@') ? ownerJid : `${ownerJid}@s.whatsapp.net`,
+                                        `🔐 *Security Alert*\n\nAn agent requested a WhatsApp allowlist change:\n• Action: ${command}\n• Target: ${target}\n• Requested by: ${this.role}\n\n⚠️ This change was NOT applied automatically. Please review and approve via the Dashboard.`
+                                    );
+                                } catch { /* non-critical if notification fails */ }
+                            }
+                            toolOutput = `✅ Allowlist change request queued for admin review.\n- Action: ${command}\n- Target: ${target}\n\nFor security, allowlist modifications require manual admin approval via the Dashboard.`;
+                        }
                     } catch (e: any) {
-                        toolOutput = `Failed to update WhatsApp whitelist: ${e.message}`;
+                        toolOutput = `Failed to queue allowlist change: ${e.message}`;
                     }
                 } else if (response.action === 'send_email' && response.to && response.subject && response.body) {
                     console.log(`[Worker - ${this.role}] Dispatching email to ${response.to}...`);

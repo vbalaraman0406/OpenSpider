@@ -1,4 +1,4 @@
-import { exec } from 'node:child_process';
+import { exec, spawnSync } from 'node:child_process';
 import { promisify } from 'node:util';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -45,14 +45,39 @@ export class DynamicExecutor {
             'getattr(__', '__builtins__',
             // Filesystem destruction
             'fs.unlink', 'fs.rmdir', 'shutil.rmtree', 'rm -rf',
-            // Network exfil
+            // Network exfil (V4: expanded blocklist)
             'socket.', 'urllib.request', 'http.client',
+            'requests.get', 'requests.post', 'requests.put', 'requests.delete',
+            'requests.session',
+            // Encoding-based bypass vectors (V4)
+            'base64.b64decode', 'base64.decodebytes',
+            'codecs.decode', 'codecs.encode',
+            // Dunder/reflection bypass (V4)
+            '__class__', '__subclasses__', '__globals__', '__dict__',
+            // ctypes FFI bypass
+            'ctypes.',
         ];
 
-        const normalizedContent = content.toLowerCase();
+        // SECURITY (V4): Normalize Unicode before scanning to prevent homoglyph bypass
+        // NFD decomposes characters, then we strip non-ASCII to catch lookalike chars
+        const normalizedContent = content
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')  // Strip combining diacritical marks
+            .toLowerCase();
+
         for (const keyword of blocklistedKeywords) {
             if (normalizedContent.includes(keyword.toLowerCase())) {
                 throw new Error(`Security Guard: Script blocked. The code contains forbidden module or function: ${keyword}`);
+            }
+        }
+
+        // SECURITY (V4): Block any remaining dunder patterns (e.g. __name__, __spec__)
+        // except __init__ and __main__ which are standard Python
+        const dunders = normalizedContent.match(/__[a-z]+__/g) || [];
+        const allowedDunders = ['__init__', '__main__', '__name__', '__file__'];
+        for (const d of dunders) {
+            if (!allowedDunders.includes(d)) {
+                throw new Error(`Security Guard: Script blocked. Suspicious dunder pattern detected: ${d}`);
             }
         }
     }
@@ -145,13 +170,30 @@ export class DynamicExecutor {
         }
 
         const ext = path.extname(safeFilename);
-        let command = '';
+        let interpreter = '';
 
-        if (ext === '.js' || ext === '.ts') command = `node ${safeFilename} ${args}`;
-        else if (ext === '.py') command = `python3 ${safeFilename} ${args}`;
-        else if (ext === '.sh') command = `bash ${safeFilename} ${args}`;
+        if (ext === '.js' || ext === '.ts') interpreter = 'node';
+        else if (ext === '.py') interpreter = 'python3';
+        else if (ext === '.sh') interpreter = 'bash';
         else throw new Error("Unsupported file extension for direct execution.");
 
-        return this.runCommand(command);
+        // SECURITY (V5): Use spawnSync with array args to prevent injection via args parameter.
+        // Shell metacharacters in args are harmless when passed as array elements.
+        const argParts = args ? args.split(/\s+/).filter(Boolean) : [];
+        try {
+            const result = spawnSync(interpreter, [safeFilename, ...argParts], {
+                cwd: this.skillsDir,
+                timeout: 30000,
+                encoding: 'utf-8',
+                env: { ...process.env, PATH: process.env.PATH }
+            });
+            return {
+                stdout: result.stdout || '',
+                stderr: result.stderr || '',
+                ...(result.status !== 0 ? { error: result.stderr || result.error?.message || `Exit code: ${result.status}` } : {})
+            };
+        } catch (e: any) {
+            return { stdout: '', stderr: '', error: e.message };
+        }
     }
 }

@@ -419,7 +419,15 @@ Example output:
 
                     // Compact result to prevent unbounded context growth in multi-step plans
                     const compacted = this.compactResult(result);
-                    globalContext.push(`Task ${taskId} (${step.role}): ${compacted}`);
+                    // SECURITY (V6): Sanitize cross-agent context to prevent prompt injection propagation
+                    const sanitizedContext = compacted
+                        .replace(/\[SYSTEM\]/gi, '[CTX]')
+                        .replace(/\[ASSISTANT\]/gi, '[CTX]')
+                        .replace(/ignore previous instructions/gi, '[FILTERED]')
+                        .replace(/ignore all previous/gi, '[FILTERED]')
+                        .replace(/you are now/gi, '[FILTERED]')
+                        .replace(/new instructions:/gi, '[FILTERED]');
+                    globalContext.push(`Task ${taskId} (${step.role}): ${sanitizedContext}`);
                     finalOutput = result;
 
                 } else if (step.type === 'parallel' && step.subtasks) {
