@@ -1026,6 +1026,10 @@ program
     .command('tui')
     .description('Launch the Terminal User Interface to chat with the agent')
     .action(async () => {
+        // Load .env so DASHBOARD_API_KEY is available for WebSocket auth
+        const rootDir = __dirname.endsWith('src') ? path.join(__dirname, '..') : path.join(__dirname, '..');
+        const envPath = path.join(rootDir, '.env');
+        require('dotenv').config({ path: envPath });
         await startTUI();
     });
 program

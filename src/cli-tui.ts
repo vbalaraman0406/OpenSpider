@@ -1,26 +1,11 @@
 import WebSocket from 'ws';
 import * as readline from 'readline';
 import chalk from 'chalk';
-import * as fs from 'fs';
-import * as path from 'path';
-
-// Read API key from the project's .env file
-function getApiKey(): string {
-    const rootDir = __dirname.endsWith('src') ? path.join(__dirname, '..') : path.join(__dirname, '..');
-    const envPath = path.join(rootDir, '.env');
-    try {
-        if (fs.existsSync(envPath)) {
-            const envContent = fs.readFileSync(envPath, 'utf-8');
-            const match = envContent.match(/^DASHBOARD_API_KEY=(.+)$/m);
-            if (match && match[1]) return match[1].trim();
-        }
-    } catch { }
-    return process.env.DASHBOARD_API_KEY || '';
-}
 
 const BASE_URL = process.env.GATEWAY_URL || 'ws://localhost:4001';
-const apiKey = getApiKey();
-const GATEWAY_URL = apiKey ? `${BASE_URL}/?apiKey=${apiKey}` : BASE_URL;
+
+// GATEWAY_URL is computed at call time via startTUI(), not module load time,
+// because dotenv is loaded by cli.ts before calling startTUI().
 
 const OPENSPIDER_ASCII = `
    ____                   ____        _     __
@@ -32,6 +17,10 @@ const OPENSPIDER_ASCII = `
 `;
 
 export async function startTUI() {
+    // Compute GATEWAY_URL at call time (after dotenv is loaded by cli.ts)
+    const apiKey = process.env.DASHBOARD_API_KEY || '';
+    const GATEWAY_URL = apiKey ? `${BASE_URL}/?apiKey=${apiKey}` : BASE_URL;
+
     console.clear();
     console.log(chalk.cyan(OPENSPIDER_ASCII));
     console.log(chalk.cyan('🕷️ Connecting to OpenSpider Gateway...'));
