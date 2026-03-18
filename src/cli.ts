@@ -126,7 +126,7 @@ program
         // Step 1: Rebuild TypeScript
         console.log('🔨 Rebuilding TypeScript...');
         try {
-            execSync('npx tsc', { cwd: process.cwd(), stdio: 'inherit' });
+            execSync('npm run build:backend', { cwd: process.cwd(), stdio: 'inherit' });
             console.log('✅ Build successful.\n');
         } catch {
             console.error('❌ Build failed. Fix errors before restarting.');
