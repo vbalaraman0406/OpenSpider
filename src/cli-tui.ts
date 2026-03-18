@@ -35,6 +35,9 @@ export async function startTUI() {
     console.clear();
     console.log(chalk.cyan(OPENSPIDER_ASCII));
     console.log(chalk.cyan('🕷️ Connecting to OpenSpider Gateway...'));
+    if (!apiKey) {
+        console.log(chalk.yellow('⚠️  No API key found in .env — connection may be rejected.'));
+    }
 
     const ws = new WebSocket(GATEWAY_URL);
 
@@ -79,8 +82,9 @@ export async function startTUI() {
         }
     });
 
-    ws.on('close', () => {
-        console.log(chalk.red('\nDisconnected from OpenSpider Gateway.'));
+    ws.on('close', (code, reason) => {
+        const reasonStr = reason?.toString() || 'unknown';
+        console.log(chalk.red(`\nDisconnected from OpenSpider Gateway. (code: ${code}, reason: ${reasonStr})`));
         process.exit(0);
     });
 
