@@ -5,6 +5,7 @@ import { OpenAIProvider } from './providers/OpenAIProvider';
 import { CustomOpenAIProvider } from './providers/CustomOpenAIProvider';
 import { AnthropicProvider } from './providers/AnthropicProvider';
 import { AntigravityInternalProvider } from './providers/AntigravityInternalProvider';
+import { NvidiaProvider } from './providers/NvidiaProvider';
 
 export function getProvider(modelNameOverride?: string): LLMProvider {
     const provider = modelNameOverride || process.env.DEFAULT_PROVIDER || 'ollama';
@@ -24,6 +25,20 @@ export function getProvider(modelNameOverride?: string): LLMProvider {
                 return new AnthropicProvider();
             case 'custom':
                 return new CustomOpenAIProvider();
+            case 'nvidia-1': {
+                const k = process.env.NVIDIA_API_KEY_1;
+                const m = process.env.NVIDIA_MODEL_1;
+                if (k && m) return new NvidiaProvider(k, m);
+                console.warn('nvidia-1 requested but NVIDIA_API_KEY_1/NVIDIA_MODEL_1 not set. Falling back to Ollama.');
+                return new OllamaProvider();
+            }
+            case 'nvidia-2': {
+                const k = process.env.NVIDIA_API_KEY_2;
+                const m = process.env.NVIDIA_MODEL_2;
+                if (k && m) return new NvidiaProvider(k, m);
+                console.warn('nvidia-2 requested but NVIDIA_API_KEY_2/NVIDIA_MODEL_2 not set. Falling back to Ollama.');
+                return new OllamaProvider();
+            }
             default:
                 console.warn(`Unknown provider ${p}, falling back to Ollama.`);
                 return new OllamaProvider();
@@ -32,59 +47,116 @@ export function getProvider(modelNameOverride?: string): LLMProvider {
 
     const primaryProvider = instantiateProvider(provider);
 
-    // Only wrap the primary provider if a fallback is configured and this isn't already the fallback
-    const fallbackModel = process.env.FALLBACK_MODEL;
-    if (!fallbackModel || modelNameOverride) {
+    // If this is an explicit override (e.g. a fallback being instantiated), skip chaining
+    if (modelNameOverride) {
         return primaryProvider;
     }
 
-    // Proxy the provider to intercept API calls and retry with fallback
+    // ═══════════════════════════════════════════════════════════════
+    // MULTI-LEVEL FALLBACK CHAIN
+    // Build an ordered list of fallback providers to try when the
+    // primary fails. Order: FALLBACK_MODEL → NVIDIA 1 → NVIDIA 2
+    // ═══════════════════════════════════════════════════════════════
+    const fallbackProviders: { provider: LLMProvider; label: string }[] = [];
+
+    // 1. Legacy single-model fallback (FALLBACK_MODEL env var)
+    const fallbackModel = process.env.FALLBACK_MODEL;
+    if (fallbackModel) {
+        let fallbackProviderName = 'ollama';
+        if (fallbackModel.includes('gemini') || fallbackModel.includes('learnlm')) fallbackProviderName = 'antigravity';
+        else if (fallbackModel.includes('claude-opus-4-6') || fallbackModel.includes('thinking')) fallbackProviderName = 'antigravity-internal';
+        else if (fallbackModel.includes('gpt') || fallbackModel.includes('o1') || fallbackModel.includes('o3')) fallbackProviderName = 'openai';
+        else if (fallbackModel.includes('claude')) fallbackProviderName = 'anthropic';
+
+        // Temporarily swap the env var so the provider constructor picks up the right model
+        const envKeyMap: Record<string, string> = {
+            'antigravity': 'GEMINI_MODEL',
+            'antigravity-internal': 'GEMINI_MODEL',
+            'openai': 'OPENAI_MODEL',
+            'anthropic': 'ANTHROPIC_MODEL',
+            'ollama': 'OLLAMA_MODEL'
+        };
+        const envKey = envKeyMap[fallbackProviderName] || '';
+        const originalValue = envKey ? process.env[envKey] : undefined;
+        if (envKey) process.env[envKey] = fallbackModel;
+
+        try {
+            fallbackProviders.push({
+                provider: instantiateProvider(fallbackProviderName),
+                label: `${fallbackProviderName}/${fallbackModel}`
+            });
+        } finally {
+            // Restore original env var
+            if (envKey) {
+                if (originalValue !== undefined) {
+                    process.env[envKey] = originalValue;
+                } else {
+                    delete process.env[envKey];
+                }
+            }
+        }
+    }
+
+    // 2. NVIDIA Backup Model 1
+    const nvidiaKey1 = process.env.NVIDIA_API_KEY_1;
+    const nvidiaModel1 = process.env.NVIDIA_MODEL_1;
+    if (nvidiaKey1 && nvidiaModel1) {
+        fallbackProviders.push({
+            provider: new NvidiaProvider(nvidiaKey1, nvidiaModel1),
+            label: `nvidia/${nvidiaModel1}`
+        });
+    }
+
+    // 3. NVIDIA Backup Model 2
+    const nvidiaKey2 = process.env.NVIDIA_API_KEY_2;
+    const nvidiaModel2 = process.env.NVIDIA_MODEL_2;
+    if (nvidiaKey2 && nvidiaModel2) {
+        fallbackProviders.push({
+            provider: new NvidiaProvider(nvidiaKey2, nvidiaModel2),
+            label: `nvidia/${nvidiaModel2}`
+        });
+    }
+
+    // If no fallbacks are configured, return the primary directly
+    if (fallbackProviders.length === 0) {
+        return primaryProvider;
+    }
+
+    // Log the fallback chain at startup
+    const chainLabels = [`primary/${provider}`, ...fallbackProviders.map(f => f.label)];
+    console.log(`[LLM] Fallback chain: ${chainLabels.join(' → ')}`);
+
+    // Proxy the provider to intercept API calls and cascade through fallbacks
     return new Proxy(primaryProvider, {
         get(target, prop, receiver) {
             const origMethod = target[prop as keyof LLMProvider];
             if (typeof origMethod === 'function') {
                 return async function (...args: any[]) {
+                    // Try primary first
                     try {
                         return await (origMethod as Function).apply(target, args);
-                    } catch (error: any) {
-                        console.warn(`\n⚠️ [Agent] Primary model failed: ${error.message}`);
-                        console.log(`[Agent] Retrying with Fallback Model: ${fallbackModel}...`);
+                    } catch (primaryError: any) {
+                        console.warn(`\n⚠️ [LLM] Primary model failed: ${primaryError.message?.substring(0, 200)}`);
 
-                        // We assume FALLBACK_MODEL is a string like 'gemini-2.5-flash'.
-                        // For simplicity, we just use the AntigravityProvider for the fallback if 
-                        // it looks like a Gemini model, OpenAI for gpt, Anthropic for claude, etc.
-                        let fallbackProviderName = 'ollama';
-                        if (fallbackModel.includes('gemini') || fallbackModel.includes('learnlm')) fallbackProviderName = 'antigravity';
-                        else if (fallbackModel.includes('claude-opus-4-6') || fallbackModel.includes('thinking')) fallbackProviderName = 'antigravity-internal';
-                        else if (fallbackModel.includes('gpt') || fallbackModel.includes('o1') || fallbackModel.includes('o3')) fallbackProviderName = 'openai';
-                        else if (fallbackModel.includes('claude')) fallbackProviderName = 'anthropic';
+                        // Cascade through fallbacks in order
+                        for (let i = 0; i < fallbackProviders.length; i++) {
+                            const fb = fallbackProviders[i]!;
+                            console.log(`[LLM] Trying fallback ${i + 1}/${fallbackProviders.length}: ${fb.label}...`);
 
-                        // Temporarily set the environment variable so the fallback provider picks it up
-                        const originalEnvMap: Record<string, string | undefined> = {
-                            gemini: process.env.GEMINI_MODEL,
-                            openai: process.env.OPENAI_MODEL,
-                            anthropic: process.env.ANTHROPIC_MODEL,
-                            ollama: process.env.OLLAMA_MODEL
-                        };
-
-                        if (fallbackProviderName === 'antigravity' || fallbackProviderName === 'antigravity-internal') process.env.GEMINI_MODEL = fallbackModel;
-                        if (fallbackProviderName === 'openai') process.env.OPENAI_MODEL = fallbackModel;
-                        if (fallbackProviderName === 'anthropic') process.env.ANTHROPIC_MODEL = fallbackModel;
-                        if (fallbackProviderName === 'ollama') process.env.OLLAMA_MODEL = fallbackModel;
-
-                        const fallbackProvider = instantiateProvider(fallbackProviderName);
-
-                        try {
-                            // Retry the exact same method on the fallback provider
-                            const fallbackMethod = fallbackProvider[prop as keyof LLMProvider];
-                            return await (fallbackMethod as Function).apply(fallbackProvider, args);
-                        } finally {
-                            // Restore original env vars
-                            if (fallbackProviderName === 'antigravity' || fallbackProviderName === 'antigravity-internal') process.env.GEMINI_MODEL = originalEnvMap.gemini;
-                            if (fallbackProviderName === 'openai') process.env.OPENAI_MODEL = originalEnvMap.openai;
-                            if (fallbackProviderName === 'anthropic') process.env.ANTHROPIC_MODEL = originalEnvMap.anthropic;
-                            if (fallbackProviderName === 'ollama') process.env.OLLAMA_MODEL = originalEnvMap.ollama;
+                            try {
+                                const fallbackMethod = fb.provider[prop as keyof LLMProvider];
+                                if (typeof fallbackMethod === 'function') {
+                                    return await (fallbackMethod as Function).apply(fb.provider, args);
+                                }
+                            } catch (fallbackError: any) {
+                                console.warn(`⚠️ [LLM] Fallback ${fb.label} also failed: ${fallbackError.message?.substring(0, 200)}`);
+                                // Continue to next fallback
+                            }
                         }
+
+                        // All fallbacks exhausted — rethrow the original error
+                        console.error(`❌ [LLM] All ${fallbackProviders.length} fallback(s) exhausted. Rethrowing primary error.`);
+                        throw primaryError;
                     }
                 };
             }

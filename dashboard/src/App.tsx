@@ -1276,9 +1276,9 @@ function LogsView({ logs }: { logs: LogMessage[] }) {
 function CronView({ agents, logs }: { agents: any[]; logs: LogMessage[] }) {
     const [jobs, setJobs] = useState<any[]>([]);
     const [showModal, setShowModal] = useState(false);
-    const [formData, setFormData] = useState({ description: '', prompt: '', intervalHours: '24', agentId: 'gateway', status: 'enabled', preferredTime: '' });
+    const [formData, setFormData] = useState({ description: '', prompt: '', intervalHours: '24', agentId: 'gateway', status: 'enabled', preferredTime: '', modelOverride: '' });
     const [editJob, setEditJob] = useState<any>(null);
-    const [editFormData, setEditFormData] = useState({ description: '', prompt: '', intervalHours: '24', preferredTime: '' });
+    const [editFormData, setEditFormData] = useState({ description: '', prompt: '', intervalHours: '24', preferredTime: '', modelOverride: '' });
     const [expandedPrompts, setExpandedPrompts] = useState<Set<string>>(new Set());
     const [waContacts, setWaContacts] = useState<{ groups: any[]; dms: any[] }>({ groups: [], dms: [] });
     const [contactSearch, setContactSearch] = useState('');
@@ -1328,14 +1328,14 @@ function CronView({ agents, logs }: { agents: any[]; logs: LogMessage[] }) {
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            const payload = { ...formData, preferredTime: formData.preferredTime || undefined };
+            const payload = { ...formData, preferredTime: formData.preferredTime || undefined, modelOverride: formData.modelOverride || undefined };
             await apiFetch('/api/cron', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
             setShowModal(false);
-            setFormData({ description: '', prompt: '', intervalHours: '24', agentId: 'gateway', status: 'enabled', preferredTime: '' });
+            setFormData({ description: '', prompt: '', intervalHours: '24', agentId: 'gateway', status: 'enabled', preferredTime: '', modelOverride: '' });
             fetchJobs();
         } catch (e) { }
     };
@@ -1347,6 +1347,7 @@ function CronView({ agents, logs }: { agents: any[]; logs: LogMessage[] }) {
             prompt: job.prompt || '',
             intervalHours: String(job.intervalHours || 24),
             preferredTime: job.preferredTime || '',
+            modelOverride: job.modelOverride || '',
         });
         setContactSearch('');
         setShowContactDropdown(false);
@@ -1371,6 +1372,7 @@ function CronView({ agents, logs }: { agents: any[]; logs: LogMessage[] }) {
             } else {
                 payload.preferredTime = undefined;
             }
+            payload.modelOverride = editFormData.modelOverride || undefined;
             await apiFetch(`/api/cron/${editJob.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
@@ -1450,6 +1452,7 @@ function CronView({ agents, logs }: { agents: any[]; logs: LogMessage[] }) {
                                         <h3 className="text-xl font-bold text-white tracking-tight mb-1">{job.description}</h3>
                                         <div className="text-xs text-slate-500 font-mono flex gap-2">
                                             <span>{job.preferredTime ? `Daily at ${job.preferredTime}` : `Every ${job.intervalHours}h`}</span>
+                                            {job.modelOverride && <span className="ml-2 px-1.5 py-0.5 bg-purple-500/10 text-purple-400 text-[10px] font-bold rounded border border-purple-500/20 uppercase">{job.modelOverride}</span>}
                                         </div>
                                     </div>
 
@@ -1571,6 +1574,18 @@ function CronView({ agents, logs }: { agents: any[]; logs: LogMessage[] }) {
                                 <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Task Prompt</label>
                                 <textarea required rows={4} value={formData.prompt} onChange={e => setFormData({ ...formData, prompt: e.target.value })} placeholder="Agent instructions..." className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm text-slate-200 focus:ring-1 focus:ring-rose-500 focus:border-rose-500 outline-none resize-none" />
                             </div>
+                            <div>
+                                <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Model Override — leave as Default to use primary model</label>
+                                <select value={formData.modelOverride} onChange={e => setFormData({ ...formData, modelOverride: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm text-slate-200 focus:ring-1 focus:ring-rose-500 focus:border-rose-500 outline-none">
+                                    <option value="">Default (Primary Model)</option>
+                                    <option value="nvidia-1">NVIDIA Backup 1</option>
+                                    <option value="nvidia-2">NVIDIA Backup 2</option>
+                                    <option value="antigravity">Antigravity (Gemini)</option>
+                                    <option value="openai">OpenAI</option>
+                                    <option value="anthropic">Anthropic</option>
+                                    <option value="ollama">Ollama</option>
+                                </select>
+                            </div>
                             <div className="pt-4 flex justify-end gap-3">
                                 <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 border border-slate-700 text-slate-300 rounded-lg text-sm hover:bg-slate-800 transition-colors">Cancel</button>
                                 <button type="submit" className="px-5 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-sm font-semibold transition-colors">Deploy Job</button>
@@ -1610,6 +1625,18 @@ function CronView({ agents, logs }: { agents: any[]; logs: LogMessage[] }) {
                             <div>
                                 <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Task Prompt</label>
                                 <textarea required rows={6} value={editFormData.prompt} onChange={e => setEditFormData({ ...editFormData, prompt: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm text-slate-200 focus:ring-1 focus:ring-sky-500 focus:border-sky-500 outline-none resize-none" />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Model Override</label>
+                                <select value={editFormData.modelOverride} onChange={e => setEditFormData({ ...editFormData, modelOverride: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm text-slate-200 focus:ring-1 focus:ring-sky-500 focus:border-sky-500 outline-none">
+                                    <option value="">Default (Primary Model)</option>
+                                    <option value="nvidia-1">NVIDIA Backup 1</option>
+                                    <option value="nvidia-2">NVIDIA Backup 2</option>
+                                    <option value="antigravity">Antigravity (Gemini)</option>
+                                    <option value="openai">OpenAI</option>
+                                    <option value="anthropic">Anthropic</option>
+                                    <option value="ollama">Ollama</option>
+                                </select>
                             </div>
                             {/* Delivery Channels — add/remove recipients */}
                             <div className="bg-slate-950/50 border border-slate-800 rounded-lg p-3">

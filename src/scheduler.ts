@@ -106,7 +106,7 @@ async function checkAndExecuteJobs() {
 
         // Execute jobs OUTSIDE the lock — the file is already updated
         for (const job of jobsToRun) {
-            const manager = new ManagerAgent();
+            const manager = new ManagerAgent(job.modelOverride || undefined);
             const cronPrompt = `[SYSTEM CRON TRIGGER] Wake up and execute your scheduled background task. Do not ask me for permission. Just do it and summarize the results.\n\nTask: ${job.prompt}`;
 
             activeCronJobs++;
@@ -147,7 +147,7 @@ export async function runJobForcefully(jobId: string) {
 
     console.log(`\n⚡ [Scheduler] Manually Triggering Job: "${job.description}"`);
 
-    const manager = new ManagerAgent();
+    const manager = new ManagerAgent(job.modelOverride || undefined);
     const cronPrompt = `[SYSTEM MANUAL TRIGGER] Wake up and execute your background task manually requested by the user. Do not ask me for permission. Just do it and summarize the results.\n\nTask: ${job.prompt}`;
 
     // Fire and forget

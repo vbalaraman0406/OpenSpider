@@ -10,8 +10,13 @@ export class ManagerAgent {
     private llm: LLMProvider;
     public cancelRequested: boolean = false;
 
-    constructor() {
-        this.llm = getProvider();
+    constructor(providerOverride?: string) {
+        if (providerOverride) {
+            this.llm = getProvider(providerOverride);
+            console.log(`[Manager] Using model override: ${providerOverride}`);
+        } else {
+            this.llm = getProvider();
+        }
     }
 
     /** Signal the agent to stop at the next safe checkpoint */
