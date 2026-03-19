@@ -39,6 +39,13 @@ export function getProvider(modelNameOverride?: string): LLMProvider {
                 console.warn('nvidia-2 requested but NVIDIA_API_KEY_2/NVIDIA_MODEL_2 not set. Falling back to Ollama.');
                 return new OllamaProvider();
             }
+            case 'deepseek': {
+                const k = process.env.DEEPSEEK_API_KEY;
+                const m = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
+                if (k) return new OpenAIProvider(k, m, 'https://api.deepseek.com/v1');
+                console.warn('deepseek requested but DEEPSEEK_API_KEY not set. Falling back to Ollama.');
+                return new OllamaProvider();
+            }
             default:
                 console.warn(`Unknown provider ${p}, falling back to Ollama.`);
                 return new OllamaProvider();

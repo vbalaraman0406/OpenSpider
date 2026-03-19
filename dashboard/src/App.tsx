@@ -1580,6 +1580,7 @@ function CronView({ agents, logs }: { agents: any[]; logs: LogMessage[] }) {
                                     <option value="">Default (Primary Model)</option>
                                     <option value="nvidia-1">NVIDIA Backup 1</option>
                                     <option value="nvidia-2">NVIDIA Backup 2</option>
+                                    <option value="deepseek">DeepSeek V3</option>
                                     <option value="antigravity">Antigravity (Gemini)</option>
                                     <option value="openai">OpenAI</option>
                                     <option value="anthropic">Anthropic</option>
@@ -1632,6 +1633,7 @@ function CronView({ agents, logs }: { agents: any[]; logs: LogMessage[] }) {
                                     <option value="">Default (Primary Model)</option>
                                     <option value="nvidia-1">NVIDIA Backup 1</option>
                                     <option value="nvidia-2">NVIDIA Backup 2</option>
+                                    <option value="deepseek">DeepSeek V3</option>
                                     <option value="antigravity">Antigravity (Gemini)</option>
                                     <option value="openai">OpenAI</option>
                                     <option value="anthropic">Anthropic</option>

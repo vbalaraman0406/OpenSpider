@@ -41,6 +41,8 @@ const PRICING_MATRIX: Record<string, { prompt: number, completion: number }> = {
     'gpt-3.5-turbo': { prompt: 0.50, completion: 1.50 },
     // NVIDIA NIM models (free-tier / credit-based — set to $0, update if pricing changes)
     'nvidia/llama-3.1-nemotron-ultra-253b-v1': { prompt: 0, completion: 0 },
+    // DeepSeek (very low cost)
+    'deepseek-chat': { prompt: 0.27, completion: 1.10 },
 };
 
 function calculateExactCost(model: string, usage: TokenUsage): number {

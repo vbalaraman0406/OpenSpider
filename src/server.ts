@@ -1655,7 +1655,7 @@ Return ONLY the raw Python code.`;
             if (safePreferredTime) newJob.preferredTime = safePreferredTime;
 
             // Model override — validate it's a known provider name
-            const VALID_OVERRIDES = ['nvidia-1', 'nvidia-2', 'antigravity', 'antigravity-internal', 'openai', 'anthropic', 'ollama', 'custom'];
+            const VALID_OVERRIDES = ['nvidia-1', 'nvidia-2', 'deepseek', 'antigravity', 'antigravity-internal', 'openai', 'anthropic', 'ollama', 'custom'];
             if (modelOverride && VALID_OVERRIDES.includes(modelOverride)) {
                 newJob.modelOverride = modelOverride;
             }
