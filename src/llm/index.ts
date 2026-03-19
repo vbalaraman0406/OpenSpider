@@ -6,6 +6,7 @@ import { CustomOpenAIProvider } from './providers/CustomOpenAIProvider';
 import { AnthropicProvider } from './providers/AnthropicProvider';
 import { AntigravityInternalProvider } from './providers/AntigravityInternalProvider';
 import { NvidiaProvider } from './providers/NvidiaProvider';
+import { DeepSeekProvider } from './providers/DeepSeekProvider';
 
 export function getProvider(modelNameOverride?: string): LLMProvider {
     const provider = modelNameOverride || process.env.DEFAULT_PROVIDER || 'ollama';
@@ -42,7 +43,7 @@ export function getProvider(modelNameOverride?: string): LLMProvider {
             case 'deepseek': {
                 const k = process.env.DEEPSEEK_API_KEY;
                 const m = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
-                if (k) return new OpenAIProvider(k, m, 'https://api.deepseek.com/v1');
+                if (k) return new DeepSeekProvider(k, m);
                 console.warn('deepseek requested but DEEPSEEK_API_KEY not set. Falling back to Ollama.');
                 return new OllamaProvider();
             }
