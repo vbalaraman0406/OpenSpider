@@ -21,6 +21,22 @@ export class NvidiaProvider implements LLMProvider {
     async generateResponse(messages: ChatMessage[], agentId?: string): Promise<{ text: string, usage?: TokenUsage }> {
         console.log(`[Agent] [NVIDIA] Generating response using ${this.model}...`);
 
+        // Inject quality enhancement into system prompt for better output
+        const qualitySuffix = `\n\nIMPORTANT OUTPUT QUALITY RULES:
+- NEVER use placeholder text like [value], [data], or [info] — always include REAL, ACTUAL data values.
+- Format all output professionally and clearly with proper structure.
+- When presenting data (weather, reports, etc.), use clean formatting with specific numbers, dates, and details.
+- Be thorough and detailed — include all relevant information requested.
+- If you don't have specific data, say so explicitly rather than inserting brackets or placeholders.`;
+
+        const enhancedMessages = messages.map((m, i) => {
+            if (m.role === 'system' && i === 0) {
+                const content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
+                return { ...m, content: content + qualitySuffix };
+            }
+            return m;
+        });
+
         const response = await fetch(`${this.baseUrl}/chat/completions`, {
             method: 'POST',
             headers: {
@@ -29,10 +45,10 @@ export class NvidiaProvider implements LLMProvider {
             },
             body: JSON.stringify({
                 model: this.model,
-                messages: messages.map(m => ({ role: m.role, content: m.content })),
+                messages: enhancedMessages.map(m => ({ role: m.role, content: m.content })),
                 temperature: 0.6,
                 top_p: 0.95,
-                max_tokens: 4096
+                max_tokens: 8192
             })
         });
 
