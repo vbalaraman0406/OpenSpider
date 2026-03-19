@@ -330,54 +330,7 @@ export async function runSetup() {
     envContent += `FALLBACK_MODEL = ${fallback}\n`;
   }
 
-  // NVIDIA Backup Models (optional)
-  const configureNvidia = await p.confirm({
-    message: 'Do you want to configure NVIDIA backup models? (Used when primary + fallback both fail)',
-    initialValue: false,
-  });
-
-  if (!p.isCancel(configureNvidia) && configureNvidia) {
-    const nvidiaKey1 = await p.text({
-      message: 'Enter NVIDIA API Key for Backup 1:',
-      placeholder: 'nvapi-...',
-      validate(value) { if (!value.startsWith('nvapi-')) return 'NVIDIA keys start with nvapi-'; },
-    }) as string;
-    if (!p.isCancel(nvidiaKey1)) {
-      const nvidiaModel1 = await p.text({
-        message: 'Enter NVIDIA Model for Backup 1:',
-        placeholder: 'nvidia/llama-3.1-nemotron-ultra-253b-v1',
-        initialValue: 'nvidia/llama-3.1-nemotron-ultra-253b-v1',
-      }) as string;
-      if (!p.isCancel(nvidiaModel1)) {
-        envContent += `NVIDIA_API_KEY_1 = ${nvidiaKey1}\n`;
-        envContent += `NVIDIA_MODEL_1 = ${nvidiaModel1}\n`;
-      }
-    }
-
-    const addSecond = await p.confirm({
-      message: 'Add a second NVIDIA backup model?',
-      initialValue: false,
-    });
-
-    if (!p.isCancel(addSecond) && addSecond) {
-      const nvidiaKey2 = await p.text({
-        message: 'Enter NVIDIA API Key for Backup 2:',
-        placeholder: 'nvapi-...',
-        validate(value) { if (!value.startsWith('nvapi-')) return 'NVIDIA keys start with nvapi-'; },
-      }) as string;
-      if (!p.isCancel(nvidiaKey2)) {
-        const nvidiaModel2 = await p.text({
-          message: 'Enter NVIDIA Model for Backup 2:',
-          placeholder: 'nvidia/llama-3.1-nemotron-ultra-253b-v1',
-          initialValue: 'nvidia/llama-3.1-nemotron-ultra-253b-v1',
-        }) as string;
-        if (!p.isCancel(nvidiaModel2)) {
-          envContent += `NVIDIA_API_KEY_2 = ${nvidiaKey2}\n`;
-          envContent += `NVIDIA_MODEL_2 = ${nvidiaModel2}\n`;
-        }
-      }
-    }
-  }
+  envContent += await promptForBackupModels();
 
   const scanQr = await p.confirm({
     message: 'Would you like to connect your WhatsApp account now?',
@@ -406,6 +359,7 @@ export async function runSetup() {
     'CUSTOM_API_KEY', 'CUSTOM_MODEL', 'AGENT_PERSONA', 'FALLBACK_MODEL', 'ENABLE_WHATSAPP',
     'DASHBOARD_API_KEY', 'OPENSPIDER_HOOK_TOKEN', 'PORT',
     'NVIDIA_API_KEY_1', 'NVIDIA_MODEL_1', 'NVIDIA_API_KEY_2', 'NVIDIA_MODEL_2',
+    'DEEPSEEK_API_KEY', 'DEEPSEEK_MODEL',
   ]);
   // Preserve any manually-set keys (e.g. ANTIGRAVITY_CLIENT_ID, ANTIGRAVITY_CLIENT_SECRET, PORT overrides)
   if (fs.existsSync(envPath)) {
@@ -438,6 +392,92 @@ export async function runSetup() {
   }
 
   p.outro(`🕷️ Setup complete! You can change these settings in the .env file anytime. Run 'openspider gateway' and 'openspider tui'.`);
+}
+
+export async function promptForBackupModels(): Promise<string> {
+  let envContent = '';
+
+  const configureBackups = await p.confirm({
+    message: 'Do you want to configure Backup Models? (Highly recommended. Used automatically if primary model hits rate limits or fails)',
+    initialValue: true,
+  });
+
+  if (!p.isCancel(configureBackups) && configureBackups) {
+    // DeepSeek Backup
+    const wantsDeepSeek = await p.confirm({
+      message: 'Configure DeepSeek (Backup 1 - Recommended)?',
+      initialValue: true,
+    });
+    
+    if (!p.isCancel(wantsDeepSeek) && wantsDeepSeek) {
+        const deepseekKey = await p.text({
+          message: 'Enter DeepSeek API Key:',
+          placeholder: 'sk-...',
+          validate(value) { if (!value.startsWith('sk-')) return 'DeepSeek keys start with sk-'; },
+        }) as string;
+        
+        if (!p.isCancel(deepseekKey)) {
+          envContent += `DEEPSEEK_API_KEY = ${deepseekKey}\n`;
+          const deepseekModel = await p.text({
+            message: 'Enter DeepSeek Model:',
+            placeholder: 'deepseek-chat',
+            initialValue: 'deepseek-chat',
+          }) as string;
+          if (!p.isCancel(deepseekModel)) envContent += `DEEPSEEK_MODEL = ${deepseekModel}\n`;
+        }
+    }
+
+    // NVIDIA Backup Models
+    const configureNvidia = await p.confirm({
+      message: 'Configure NVIDIA models (Backup 2 & 3)?',
+      initialValue: false,
+    });
+
+    if (!p.isCancel(configureNvidia) && configureNvidia) {
+      const nvidiaKey1 = await p.text({
+        message: 'Enter NVIDIA API Key for Backup 2:',
+        placeholder: 'nvapi-...',
+        validate(value) { if (!value.startsWith('nvapi-')) return 'NVIDIA keys start with nvapi-'; },
+      }) as string;
+      if (!p.isCancel(nvidiaKey1)) {
+        const nvidiaModel1 = await p.text({
+          message: 'Enter NVIDIA Model for Backup 2:',
+          placeholder: 'nvidia/llama-3.1-nemotron-ultra-253b-v1',
+          initialValue: 'nvidia/llama-3.1-nemotron-ultra-253b-v1',
+        }) as string;
+        if (!p.isCancel(nvidiaModel1)) {
+          envContent += `NVIDIA_API_KEY_1 = ${nvidiaKey1}\n`;
+          envContent += `NVIDIA_MODEL_1 = ${nvidiaModel1}\n`;
+        }
+      }
+
+      const addSecond = await p.confirm({
+        message: 'Add an additional NVIDIA backup model (Backup 3)?',
+        initialValue: false,
+      });
+
+      if (!p.isCancel(addSecond) && addSecond) {
+        const nvidiaKey2 = await p.text({
+          message: 'Enter NVIDIA API Key for Backup 3:',
+          placeholder: 'nvapi-...',
+          validate(value) { if (!value.startsWith('nvapi-')) return 'NVIDIA keys start with nvapi-'; },
+        }) as string;
+        if (!p.isCancel(nvidiaKey2)) {
+          const nvidiaModel2 = await p.text({
+            message: 'Enter NVIDIA Model for Backup 3:',
+            placeholder: 'nvidia/llama-3.1-nemotron-ultra-253b-v1',
+            initialValue: 'nvidia/llama-3.1-nemotron-ultra-253b-v1',
+          }) as string;
+          if (!p.isCancel(nvidiaModel2)) {
+            envContent += `NVIDIA_API_KEY_2 = ${nvidiaKey2}\n`;
+            envContent += `NVIDIA_MODEL_2 = ${nvidiaModel2}\n`;
+          }
+        }
+      }
+    }
+  }
+  
+  return envContent;
 }
 
 // Allow running this script directly

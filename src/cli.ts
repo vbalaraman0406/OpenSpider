@@ -797,6 +797,10 @@ modelsMenu
         if (process.env.OPENAI_API_KEY) configured.push(`openai       (model: ${process.env.OPENAI_MODEL || 'gpt-4o'})`);
         if (process.env.ANTHROPIC_API_KEY) configured.push(`anthropic    (model: ${process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet'})`);
         if (process.env.CUSTOM_BASE_URL) configured.push(`custom       (model: ${process.env.CUSTOM_MODEL || 'N/A'}, url: ${process.env.CUSTOM_BASE_URL})`);
+        if (process.env.DEEPSEEK_API_KEY) configured.push(`deepseek     (model: ${process.env.DEEPSEEK_MODEL || 'deepseek-chat'})`);
+        if (process.env.NVIDIA_API_KEY_1) configured.push(`nvidia-1     (model: ${process.env.NVIDIA_MODEL_1 || 'Unknown'})`);
+        if (process.env.NVIDIA_API_KEY_2) configured.push(`nvidia-2     (model: ${process.env.NVIDIA_MODEL_2 || 'Unknown'})`);
+
         // antigravity-internal is the managed cloud mode (no separate key env var)
         if (provider === 'antigravity-internal' && configured.length === 0) {
             configured.push(`antigravity-internal  (model: ${process.env.GEMINI_MODEL || 'claude-opus-4-6-thinking'})`);
@@ -805,7 +809,14 @@ modelsMenu
         console.log('─'.repeat(50));
         console.log(`Default Provider:   ${provider}`);
         console.log(`Primary Model:      ${primaryModel}`);
-        console.log(`Fallback Model:     ${process.env.FALLBACK_MODEL || 'None'}`);
+        
+        // Build the fallback chain display
+        const chain = ['Primary'];
+        if (process.env.FALLBACK_MODEL) chain.push(process.env.FALLBACK_MODEL);
+        if (process.env.DEEPSEEK_API_KEY) chain.push('DeepSeek');
+        if (process.env.NVIDIA_API_KEY_1) chain.push('NVIDIA-1');
+        if (process.env.NVIDIA_API_KEY_2) chain.push('NVIDIA-2');
+        console.log(`Fallback Chain:     ${chain.join(' → ')}`);
         console.log('─'.repeat(50));
         if (configured.length > 0) {
             console.log('\nAll configured providers:');
@@ -816,6 +827,35 @@ modelsMenu
         console.log(`\nConfig file: ${envPath}`);
         console.log('');
         process.exit(0);
+    });
+
+modelsMenu
+    .command('add')
+    .description('Add backup LLMs (DeepSeek, NVIDIA) to the fallback chain')
+    .action(async () => {
+        try {
+            const rootDir = __dirname.endsWith('src') ? path.join(__dirname, '..') : path.join(__dirname, '..');
+            const envPath = path.join(rootDir, '.env');
+            const p = await import('@clack/prompts');
+            const fs = await import('node:fs');
+            
+            p.intro('🕷️ Configure Backup Models');
+            console.log('Central config file:', envPath, '\n');
+
+            const { promptForBackupModels } = await import('./setup');
+            const newEnvLines = await promptForBackupModels();
+
+            if (newEnvLines.trim()) {
+                fs.appendFileSync(envPath, '\n# Added via `openspider models add`\n' + newEnvLines);
+                p.outro(`✅ Added backup models successfully! Restart Gateway to apply: openspider restart`);
+            } else {
+                p.outro('No changes made.');
+            }
+            process.exit(0);
+        } catch (e: any) {
+            console.error('Failed to add models:', e.message);
+            process.exit(1);
+        }
     });
 
 modelsMenu
