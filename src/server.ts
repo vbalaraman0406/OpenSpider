@@ -1616,7 +1616,7 @@ Return ONLY the raw Python code.`;
 
     app.post('/api/cron', (req, res) => {
         try {
-            const { description, prompt, intervalHours, agentId, preferredTime } = req.body;
+            const { description, prompt, intervalHours, agentId, preferredTime, modelOverride } = req.body;
 
             // SECURITY: Input validation
             if (!description || !prompt) return res.status(400).json({ error: 'description and prompt are required.' });
@@ -1653,6 +1653,12 @@ Return ONLY the raw Python code.`;
                 status: 'enabled'
             };
             if (safePreferredTime) newJob.preferredTime = safePreferredTime;
+
+            // Model override — validate it's a known provider name
+            const VALID_OVERRIDES = ['nvidia-1', 'nvidia-2', 'antigravity', 'antigravity-internal', 'openai', 'anthropic', 'ollama', 'custom'];
+            if (modelOverride && VALID_OVERRIDES.includes(modelOverride)) {
+                newJob.modelOverride = modelOverride;
+            }
 
             jobs.push(newJob);
             writeJobsSync(jobs);
