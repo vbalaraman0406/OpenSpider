@@ -92,7 +92,7 @@ export class NvidiaProvider implements LLMProvider {
                 messages: augmentedMessages.map(m => ({ role: m.role, content: m.content })),
                 temperature: 0.6,
                 top_p: 0.95,
-                max_tokens: 4096
+                max_tokens: 16384
             })
         });
 
@@ -115,18 +115,21 @@ export class NvidiaProvider implements LLMProvider {
         const rawContent = data.choices?.[0]?.message?.content || '';
 
         try {
-            // Intelligent JSON extraction — strip markdown fences and ambient text
-            let cleanJSON = rawContent.trim();
+            // Strip <think>...</think> reasoning tags that Nemotron models emit
+            let cleanJSON = rawContent.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
             // Remove markdown code fences if present
             cleanJSON = cleanJSON.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
-            // Extract first JSON object or array
-            const jsonMatch = cleanJSON.match(/[\{\[][\\s\S]*[\}\]]/);
+            // Extract first JSON object or array (fixed regex: [\s\S] not [\\s\S])
+            const jsonMatch = cleanJSON.match(/[\{\[][\s\S]*[\}\]]/);
             if (jsonMatch) {
                 cleanJSON = jsonMatch[0];
             }
+            if (!cleanJSON) {
+                throw new Error('No JSON content found in response');
+            }
             return JSON.parse(cleanJSON) as T;
         } catch (e) {
-            console.error('[NVIDIA] Failed JSON parse:', rawContent.substring(0, 500));
+            console.error('[NVIDIA] Failed JSON parse. Raw response (first 800 chars):', rawContent.substring(0, 800));
             throw new Error(`Failed to parse NVIDIA JSON response: ${e}`);
         }
     }
