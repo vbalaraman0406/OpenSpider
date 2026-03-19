@@ -42,7 +42,9 @@ export class NvidiaProvider implements LLMProvider {
         }
 
         const data = await response.json();
-        const text = data.choices?.[0]?.message?.content || '';
+        // Nemotron models may return content in 'reasoning_content' instead of 'content'
+        const message = data.choices?.[0]?.message;
+        const text = message?.content || message?.reasoning_content || '';
         if (data.usage) {
             const usage: TokenUsage = {
                 promptTokens: data.usage.prompt_tokens || 0,
@@ -112,7 +114,9 @@ export class NvidiaProvider implements LLMProvider {
             console.log(JSON.stringify({ type: 'usage', model: this.model, usage, agentId: agentId || 'gateway' }));
         }
 
-        const rawContent = data.choices?.[0]?.message?.content || '';
+        // Nemotron models may return content in 'reasoning_content' instead of 'content'
+        const message = data.choices?.[0]?.message;
+        const rawContent = message?.content || message?.reasoning_content || '';
 
         try {
             // Strip <think>...</think> reasoning tags that Nemotron models emit
