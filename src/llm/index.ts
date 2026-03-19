@@ -105,7 +105,17 @@ export function getProvider(modelNameOverride?: string): LLMProvider {
         }
     }
 
-    // 2. NVIDIA Backup Model 1
+    // 2. DeepSeek Backup Model
+    const deepseekKey = process.env.DEEPSEEK_API_KEY;
+    const deepseekModel = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
+    if (deepseekKey) {
+        fallbackProviders.push({
+            provider: new DeepSeekProvider(deepseekKey, deepseekModel),
+            label: `deepseek/${deepseekModel}`
+        });
+    }
+
+    // 3. NVIDIA Backup Model 1
     const nvidiaKey1 = process.env.NVIDIA_API_KEY_1;
     const nvidiaModel1 = process.env.NVIDIA_MODEL_1;
     if (nvidiaKey1 && nvidiaModel1) {
