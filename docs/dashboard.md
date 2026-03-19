@@ -128,6 +128,7 @@ Manage scheduled tasks:
 - Enable/disable individual jobs
 - Manually trigger a job for immediate execution
 - Monitor last run timestamps
+- Override the active LLM Provider and Model on a per-job basis
 - Cron results appear inline in the Agent Chat view
 
 ### Process Monitor 🖥️

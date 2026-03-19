@@ -239,7 +239,7 @@ openspider webhooks gmail run
 
 ### `openspider models list`
 
-Display the currently configured LLM provider and all available models.
+Display the currently configured LLM provider and all available active fallback models.
 
 ```bash
 openspider models list
@@ -250,19 +250,32 @@ openspider models list
 ```
 🕷️  OpenSpider Model Configuration:
 ──────────────────────────────────────────────────
-Default Provider:   anthropic
-Primary Model:      claude-opus-4-5
-Fallback Model:     None
+Default Provider:   antigravity-internal
+Primary Model:      claude-opus-4-6-thinking
+Fallback Chain:     Primary → DeepSeek → NVIDIA-1 → NVIDIA-2
 ──────────────────────────────────────────────────
 
 All configured providers:
-  ✅ anthropic    (model: claude-opus-4-5)
-  ✅ openai       (model: gpt-4o)
+  ✅ antigravity  (model: claude-opus-4-6-thinking)
+  ✅ deepseek     (model: deepseek-chat)
+  ✅ nvidia-1     (model: nvidia/llama-3.1-nemotron-ultra-253b-v1)
+  ✅ nvidia-2     (model: nvidia/llama-3.1-nemotron-ultra-253b-v1)
 
 Config file: /Users/name/OpenSpider/.env
 ```
 
 The config file path is shown so you can quickly find and edit your settings.
+
+---
+
+### `openspider models add`
+
+Interactively configure and append backup LLMs to your Fallback Chain without re-running the full setup wizard. 
+This command will prompt you for DeepSeek (Backup 1) and NVIDIA (Backups 2 & 3) API keys and securely append them to your `.env` file.
+
+```bash
+openspider models add
+```
 
 ---
 

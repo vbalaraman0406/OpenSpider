@@ -89,6 +89,23 @@ To view your current configuration:
 openspider models list
 ```
 
+### Automatic Backup Fallback Chain
+
+If your primary LLM encounters a rate limit (429), authentication error (401), server error (500), or API timeout, OpenSpider automatically cascades through a built-in fallback chain so the task does not crash.
+
+| Priority | Backup Level | Required Env Vars | Description |
+|---|---|---|---|
+| **1** | **Primary Provider** | e.g. `GEMINI_API_KEY` | The default provider as configured above |
+| **2** | **Legacy Fallback** | `FALLBACK_MODEL` | Simple text model override (e.g. `gemini-2.5-flash`) |
+| **3** | **DeepSeek Backup** | `DEEPSEEK_API_KEY`, `DEEPSEEK_MODEL` | DeepSeek explicitly acts as the strongest, cheapest first backup |
+| **4** | **NVIDIA Backup 1** | `NVIDIA_API_KEY_1`, `NVIDIA_MODEL_1` | First NVIDIA API endpoint (e.g. Nemotron) |
+| **5** | **NVIDIA Backup 2** | `NVIDIA_API_KEY_2`, `NVIDIA_MODEL_2` | Second NVIDIA API endpoint |
+
+You can safely add these backup models at any time by running:
+```bash
+openspider models add
+```
+
 ## Config Files
 
 ### WhatsApp Configuration
