@@ -62,23 +62,6 @@ function shouldRunTimeOfDay(job: CronJob, now: Date): boolean {
     return true;
 }
 
-function getEmailOverridePrompt(): string {
-    try {
-        const emailConfigPath = path.join(process.cwd(), 'workspace', 'email_config.json');
-        if (fs.existsSync(emailConfigPath)) {
-            const emailConfig = JSON.parse(fs.readFileSync(emailConfigPath, 'utf-8'));
-            if (emailConfig.cronResultsTo && emailConfig.vendorEmailTo) {
-                return `\n\n[EMAIL ROUTING OVERRIDE] Whenever the task below explicitly asks you to send an email to ${emailConfig.vendorEmailTo} (or any old admin email) to deliver this report, you MUST INSTEAD email ${emailConfig.cronResultsTo}. Leave any OTHER third-party email addresses in the task completely unchanged.`;
-            } else if (emailConfig.cronResultsTo) {
-                return `\n\n[EMAIL ROUTING OVERRIDE] You MUST send ALL report/result emails strictly to ${emailConfig.cronResultsTo}. IGNORE ANY OTHER single admin email addresses inside the Task description below - they are deprecated.`;
-            }
-        }
-    } catch (e) {
-        console.error('[Scheduler] Failed to load email_config.json', e);
-    }
-    return '';
-}
-
 async function checkAndExecuteJobs() {
     try {
         // Use the mutex-protected withJobs() to atomically read and update timestamps.
@@ -122,11 +105,9 @@ async function checkAndExecuteJobs() {
         });
 
         // Execute jobs OUTSIDE the lock — the file is already updated
-        const emailOverride = getEmailOverridePrompt();
-        
         for (const job of jobsToRun) {
             const manager = new ManagerAgent(job.modelOverride || undefined);
-            const cronPrompt = `[SYSTEM CRON TRIGGER] Wake up and execute your scheduled background task. Do not ask me for permission. Just do it and summarize the results.${emailOverride}\n\nTask: ${job.prompt}`;
+            const cronPrompt = `[SYSTEM CRON TRIGGER] Wake up and execute your scheduled background task. Do not ask me for permission. Just do it and summarize the results.\n\nTask: ${job.prompt}`;
 
             activeCronJobs++;
             manager.processUserRequest(cronPrompt).then(result => {
@@ -167,8 +148,7 @@ export async function runJobForcefully(jobId: string) {
     console.log(`\n⚡ [Scheduler] Manually Triggering Job: "${job.description}"`);
 
     const manager = new ManagerAgent(job.modelOverride || undefined);
-    const emailOverride = getEmailOverridePrompt();
-    const cronPrompt = `[SYSTEM MANUAL TRIGGER] Wake up and execute your background task manually requested by the user. Do not ask me for permission. Just do it and summarize the results.${emailOverride}\n\nTask: ${job.prompt}`;
+    const cronPrompt = `[SYSTEM MANUAL TRIGGER] Wake up and execute your background task manually requested by the user. Do not ask me for permission. Just do it and summarize the results.\n\nTask: ${job.prompt}`;
 
     // Fire and forget
     activeCronJobs++;
