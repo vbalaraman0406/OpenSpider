@@ -37,17 +37,25 @@ def md_to_html(md_text: str) -> str:
         nonlocal table_rows, in_table
         if not table_rows:
             return ''
-        out = '<table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:14px;">\n'
+        # Outer wrapper with visible border
+        out = '<table style="width:100%;border-collapse:collapse;margin:20px 0;font-size:13.5px;border:1px solid #3a3a6a;border-radius:8px;overflow:hidden;">\n'
         for idx, row in enumerate(table_rows):
             cells = [c.strip() for c in row.strip('|').split('|')]
             tag = 'th' if idx == 0 else 'td'
-            style_header = 'background:#1a1a2e;color:#e0e0ff;padding:10px 14px;text-align:left;border-bottom:2px solid #333;font-weight:600;'
-            style_cell = 'padding:10px 14px;border-bottom:1px solid #2a2a3a;color:#c8c8d8;'
-            row_bg = '' if idx % 2 == 0 else ' style="background:#12121f;"'
-            out += f'<tr{row_bg}>'
+            # Header: indigo-blue bg, white bold text, bottom border
+            style_header = ('background:#1e1e4a;color:#ffffff;padding:11px 14px;'
+                            'text-align:left;border-bottom:2px solid #3a3a6a;'
+                            'font-weight:700;font-size:13px;border-right:1px solid #3a3a6a;')
+            # Even data rows slightly lighter for contrast
+            bg_even = '#16162a'
+            bg_odd  = '#0d0d1a'
+            bg = bg_even if idx % 2 == 0 else bg_odd
+            style_cell = (f'background:{bg};padding:10px 14px;'
+                          'border-bottom:1px solid #2a2a44;color:#c8c8d8;'
+                          'border-right:1px solid #2a2a44;font-size:13px;')
+            out += f'<tr>'
             for cell in cells:
                 st = style_header if idx == 0 else style_cell
-                # For data rows (not headers), inject weather emojis before inline formatting
                 display_cell = weather_emoji_inject(cell) if idx > 0 else cell
                 out += f'<{tag} style="{st}">{inline_format(display_cell)}</{tag}>'
             out += '</tr>\n'
@@ -141,6 +149,19 @@ def md_to_html(md_text: str) -> str:
             html_lines.append('<hr style="border:none;border-top:1px solid #2a2a3a;margin:20px 0;">')
             continue
 
+        # Alert / callout lines — lines starting with ⚠️ 🚨 🔴 get a callout box
+        ALERT_EMOJIS = ('⚠️', '🚨', '🔴', '‼️', '🛑', '❗')
+        if any(stripped.startswith(e) for e in ALERT_EMOJIS):
+            if in_list:
+                html_lines.append(f'</ul>')
+                in_list = False
+            callout = ('<div style="background:#1a140a;border-left:4px solid #f59e0b;'
+                       'border-radius:6px;padding:12px 16px;margin:12px 0;">'
+                       '<p style="color:#fbbf24;font-size:13.5px;margin:0;line-height:1.6;">'
+                       + inline_format(stripped) + '</p></div>')
+            html_lines.append(callout)
+            continue
+
         # Headers
         if stripped.startswith('######'):
             html_lines.append(f'<h6 style="color:#a5b4fc;font-size:13px;margin:12px 0 4px;font-weight:600;">{inline_format(stripped[6:].strip())}</h6>')
@@ -149,24 +170,34 @@ def md_to_html(md_text: str) -> str:
         elif stripped.startswith('####'):
             html_lines.append(f'<h4 style="color:#c7d2fe;font-size:15px;margin:14px 0 6px;font-weight:600;">{inline_format(stripped[4:].strip())}</h4>')
         elif stripped.startswith('###'):
-            html_lines.append(f'<h3 style="color:#c7d2fe;font-size:16px;margin:16px 0 8px;font-weight:600;">{inline_format(stripped[3:].strip())}</h3>')
+            # H3 — violet/indigo accent
+            html_lines.append(f'<h3 style="color:#c4b5fd;font-size:16px;margin:20px 0 8px;font-weight:700;">{inline_format(stripped[3:].strip())}</h3>')
         elif stripped.startswith('##'):
-            html_lines.append(f'<h2 style="color:#e0e0ff;font-size:18px;margin:20px 0 10px;font-weight:700;border-bottom:1px solid #2a2a3a;padding-bottom:6px;">{inline_format(stripped[2:].strip())}</h2>')
+            # H2 — orange-amber accent (main section headers like "🔥 Top Headlines")
+            html_lines.append(f'<h2 style="color:#fb923c;font-size:18px;margin:28px 0 10px;font-weight:700;">{inline_format(stripped[2:].strip())}</h2>')
         elif stripped.startswith('#'):
+            # H1 — large white (usually the report title in body)
             html_lines.append(f'<h1 style="color:#fff;font-size:22px;margin:24px 0 12px;font-weight:700;">{inline_format(stripped[1:].strip())}</h1>')
+        # Numbered list
+        elif re.match(r'^\d+\.\s', stripped):
+            if not in_list:
+                html_lines.append('<ol style="margin:8px 0;padding-left:24px;color:#c8c8d8;">')
+                in_list = 'ol'
+            list_text = re.sub(r'^\d+\.\s', '', stripped)
+            html_lines.append(f'<li style="margin:5px 0;line-height:1.65;">{inline_format(list_text)}</li>')
         # Unordered list
         elif stripped.startswith('- ') or stripped.startswith('* '):
             if not in_list:
                 html_lines.append('<ul style="margin:8px 0;padding-left:24px;color:#c8c8d8;">')
-                in_list = True
-            html_lines.append(f'<li style="margin:4px 0;line-height:1.6;">{inline_format(stripped[2:])}</li>')
+                in_list = 'ul'
+            html_lines.append(f'<li style="margin:5px 0;line-height:1.65;">{inline_format(stripped[2:])}</li>')
         else:
             if in_list:
-                html_lines.append('</ul>')
+                html_lines.append(f'</{in_list}>')
                 in_list = False
             # Regular paragraph
             if stripped:
-                html_lines.append(f'<p style="color:#c8c8d8;line-height:1.7;margin:8px 0;font-size:14px;">{inline_format(stripped)}</p>')
+                html_lines.append(f'<p style="color:#c8c8d8;line-height:1.75;margin:8px 0;font-size:14px;">{inline_format(stripped)}</p>')
             else:
                 html_lines.append('')
 
@@ -174,7 +205,7 @@ def md_to_html(md_text: str) -> str:
     if in_table:
         html_lines.append(flush_table())
     if in_list:
-        html_lines.append('</ul>')
+        html_lines.append(f'</{in_list}>' if isinstance(in_list, str) else '</ul>')
 
     return '\n'.join(html_lines)
 
@@ -193,9 +224,35 @@ def get_agent_name() -> str:
     return 'OpenSpider'
 
 
+def _extract_hero_from_body(html_body: str, subject: str) -> tuple[str, str]:
+    """Extract the first <h1> from the body as the hero title. Returns (hero_title, remaining_html)."""
+    h1_match = re.search(r'<h1[^>]*>(.*?)</h1>', html_body, re.DOTALL)
+    if h1_match:
+        hero = h1_match.group(1).strip()
+        remaining = html_body[:h1_match.start()] + html_body[h1_match.end():]
+        return hero, remaining
+    # Fall back to subject line, stripping leading emoji from subject for cleaner display
+    clean_subject = re.sub(r'^[\U00010000-\U0010ffff\u2600-\u27ff\u1F300-\u1F9FF]+\s*', '', subject).strip()
+    emoji_match = re.match(r'^([\U00010000-\U0010ffff\u2600-\u27ff\u1F300-\u1F9FF]+)', subject)
+    hero_emoji = emoji_match.group(1) if emoji_match else ''
+    hero = f'{hero_emoji} {clean_subject}' if hero_emoji else clean_subject
+    return hero, html_body
+
+
 def wrap_in_email_template(html_body: str, subject: str = '') -> str:
-    """Wrap HTML content in a professional dark-themed email template."""
+    """Wrap HTML content in the Option A premium dark-themed email template."""
     agent_name = get_agent_name()
+
+    # Strip any LLM-generated outer HTML wrappers to prevent style conflicts
+    html_body = re.sub(r'<!DOCTYPE[^>]*>', '', html_body, flags=re.IGNORECASE)
+    html_body = re.sub(r'<html[^>]*>|</html>', '', html_body, flags=re.IGNORECASE)
+    html_body = re.sub(r'<head[^>]*>.*?</head>', '', html_body, flags=re.IGNORECASE | re.DOTALL)
+    html_body = re.sub(r'<body[^>]*>|</body>', '', html_body, flags=re.IGNORECASE)
+    html_body = html_body.strip()
+
+    # Extract H1 as hero title, use remainder as body
+    hero_title, body_content = _extract_hero_from_body(html_body, subject)
+
     return f'''<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -204,48 +261,56 @@ def wrap_in_email_template(html_body: str, subject: str = '') -> str:
 </head>
 <body style="margin:0;padding:0;background:#0a0a14;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#0a0a14;">
-<tr><td align="center" style="padding:20px 0;">
-<table role="presentation" width="640" cellspacing="0" cellpadding="0" style="background:#111127;border-radius:12px;border:1px solid #1e1e3a;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.4);">
+<tr><td align="center" style="padding:24px 16px;">
+<table role="presentation" width="640" cellspacing="0" cellpadding="0"
+  style="max-width:640px;width:100%;background:#111127;border-radius:14px;
+         border:1px solid #1e1e3a;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.5);">
 
-<!-- Header -->
+<!-- ═══ HEADER BANNER ═══ -->
 <tr>
-<td style="background:linear-gradient(135deg,#1e1b4b,#312e81);padding:24px 32px;">
-<table width="100%" cellspacing="0" cellpadding="0">
-<tr>
-<td>
-  <span style="font-size:24px;font-weight:700;color:#fff;letter-spacing:-0.5px;">♾️ {agent_name}</span>
-  <br/>
-  <span style="font-size:12px;color:#a5b4fc;letter-spacing:1px;text-transform:uppercase;">Autonomous Agent Report</span>
+<td style="background:linear-gradient(135deg,#1e1b4b 0%,#312e81 100%);padding:22px 32px;">
+<table width="100%" cellspacing="0" cellpadding="0"><tr>
+<td style="vertical-align:middle;">
+  <span style="font-size:22px;font-weight:800;color:#fff;letter-spacing:-0.5px;">♾️ {agent_name}</span><br/>
+  <span style="font-size:10.5px;color:#a5b4fc;letter-spacing:2px;text-transform:uppercase;font-weight:600;">Autonomous Agent Report</span>
 </td>
 <td align="right" style="vertical-align:top;">
-  <span style="font-size:11px;color:#818cf8;background:#1e1b4b;padding:4px 10px;border-radius:20px;border:1px solid #312e81;">Automated</span>
+  <span style="font-size:10px;color:#818cf8;background:rgba(30,27,75,0.8);
+    padding:4px 12px;border-radius:20px;border:1px solid #4338ca;
+    font-weight:600;letter-spacing:0.5px;">Automated</span>
 </td>
-</tr>
-</table>
-</td>
-</tr>
-
-<!-- Body -->
-<tr>
-<td style="padding:28px 32px;">
-{html_body}
+</tr></table>
 </td>
 </tr>
 
-<!-- Footer -->
+<!-- ═══ HERO SECTION ═══ -->
 <tr>
-<td style="background:#0d0d1a;padding:16px 32px;border-top:1px solid #1e1e3a;">
-<table width="100%" cellspacing="0" cellpadding="0">
+<td style="background:linear-gradient(180deg,#181830 0%,#0f0f22 100%);
+           padding:28px 32px 24px;border-bottom:1px solid #1e1e3a;">
+  <h1 style="margin:0;font-size:24px;font-weight:800;color:#ffffff;
+            line-height:1.3;letter-spacing:-0.3px;">{hero_title}</h1>
+</td>
+</tr>
+
+<!-- ═══ BODY CONTENT ═══ -->
 <tr>
-<td style="font-size:11px;color:#64648a;line-height:1.5;">
-  Powered by ♾️ <strong style="color:#818cf8;">{agent_name}</strong> — OpenSpider Agent System<br/>
+<td style="background:#0d0d1a;padding:28px 32px;">
+{body_content}
+</td>
+</tr>
+
+<!-- ═══ FOOTER ═══ -->
+<tr>
+<td style="background:#080812;padding:18px 32px;border-top:1px solid #1e1e3a;">
+<table width="100%" cellspacing="0" cellpadding="0"><tr>
+<td style="font-size:11px;color:#4a4a6a;line-height:1.6;">
+  Powered by ♾️ <strong style="color:#6366f1;">{agent_name}</strong> — OpenSpider Agent System<br/>
   This is an automated message. Do not reply directly.
 </td>
-<td align="right" style="font-size:11px;color:#64648a;">
-  🔒 Secure • 🤖 AI-Generated
+<td align="right" style="font-size:11px;color:#4a4a6a;white-space:nowrap;">
+  🔒 Secure &nbsp;•&nbsp; 🤖 AI-Generated
 </td>
-</tr>
-</table>
+</tr></table>
 </td>
 </tr>
 
