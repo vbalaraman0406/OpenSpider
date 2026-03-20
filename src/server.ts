@@ -1059,6 +1059,27 @@ export function startServer() {
         }
     });
 
+    app.post('/api/voice/elevenlabs', async (req, res) => {
+        try {
+            const { apiKey } = req.body;
+            if (!apiKey) return res.status(400).json({ error: 'API key required' });
+            
+            const response = await fetch('https://api.elevenlabs.io/v1/voices', {
+                headers: { 'xi-api-key': apiKey }
+            });
+            
+            if (!response.ok) {
+                const errorStr = await response.text();
+                return res.status(response.status).json({ error: errorStr });
+            }
+            
+            const data = await response.json();
+            res.json(data);
+        } catch (e: any) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
     app.post('/api/voice/config', (req, res) => {
         try {
             const { voiceId, voiceName, elevenlabsApiKey, whisperModel } = req.body;

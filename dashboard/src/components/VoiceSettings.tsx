@@ -53,8 +53,10 @@ export function VoiceSettings() {
         if (!apiKey) return;
         setIsFetchingVoices(true);
         try {
-            const res = await fetch('https://api.elevenlabs.io/v1/voices', {
-                headers: { 'xi-api-key': apiKey }
+            const res = await apiFetch('/api/voice/elevenlabs', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ apiKey })
             });
             if (res.ok) {
                 const data = await res.json();
