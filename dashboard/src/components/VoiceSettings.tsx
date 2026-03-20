@@ -58,18 +58,26 @@ export function VoiceSettings() {
             });
             if (res.ok) {
                 const data = await res.json();
-                const custom = data.voices.filter((v: any) => v.category !== 'premade');
+                
+                // Keep any voice that isn't already in our hardcoded preset list
+                const custom = data.voices.filter((v: any) => !ELEVENLABS_VOICES.some(ev => ev.id === v.voice_id));
+                
                 setCustomVoices(
                     custom.map((v: any) => ({
                         id: v.voice_id,
                         name: v.name,
-                        style: v.labels?.description || 'Custom',
+                        style: v.labels?.description || v.category || 'Custom',
                         accent: v.labels?.accent || 'Personal'
                     }))
                 );
+            } else {
+                const errorStr = await res.text();
+                console.error("ElevenLabs API Error:", errorStr);
+                alert("Failed to sync ElevenLabs voices. Is your API key correct?");
             }
         } catch (e) {
             console.error("Failed to fetch user voices from ElevenLabs", e);
+            alert("Network error while reaching out to ElevenLabs. Ensure you are not blocking their API.");
         } finally {
             setIsFetchingVoices(false);
         }
