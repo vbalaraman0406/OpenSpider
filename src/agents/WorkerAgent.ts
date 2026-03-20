@@ -54,11 +54,29 @@ export class WorkerAgent {
         const persona = new PersonaShell(this.role);
         const compiledPersonaPrompt = persona.compileSystemPrompt();
 
+        // Inject email routing rules from dashboard config
+        let emailRoutingContext = '';
+        try {
+            const emailConfigPath = path.join(process.cwd(), 'workspace', 'email_config.json');
+            if (fs.existsSync(emailConfigPath)) {
+                const emailConfig = JSON.parse(fs.readFileSync(emailConfigPath, 'utf-8'));
+                const cronEmail = emailConfig.cronResultsTo;
+                const vendorEmail = emailConfig.vendorEmailTo;
+                if (cronEmail || vendorEmail) {
+                    emailRoutingContext = `\n\n[EMAIL ROUTING RULES]\n`;
+                    if (cronEmail) emailRoutingContext += `• Cron / Automated Report Emails (task results, briefings, market snapshots, etc.): ALWAYS send to ${cronEmail}.\n`;
+                    if (vendorEmail) emailRoutingContext += `• Manual user requests to email a contractor, vendor, friend, or external party (when no explicit address is given): default to ${vendorEmail}.\n`;
+                    emailRoutingContext += `These are the ONLY addresses you should use when no other explicit recipient is given in the task.`;
+                }
+            }
+        } catch (e) { }
+
         const systemPrompt = `${compiledPersonaPrompt}
 
 [CURRENT DATE & TIME]
 Today is: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })} at ${new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZoneName: 'short' })}.
 CRITICAL: This date/time comes from the host server's real-time clock and is CORRECT. Do NOT doubt, question, "correct", or override this date under ANY circumstances. Do NOT suggest the user's date might be wrong or that the "actual date" is something else. Your training data cutoff is irrelevant — the system clock is the single source of truth.
+${emailRoutingContext}
 
 [TASK INSTRUCTIONS]
 Your Role: ${this.role}
