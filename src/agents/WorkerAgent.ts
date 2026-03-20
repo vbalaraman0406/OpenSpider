@@ -14,13 +14,15 @@ export class WorkerAgent {
     private browserTool: BrowserTool;
     private role: string;
     private cancelChecker: (() => boolean) | undefined;
+    private isCron: boolean;
 
-    constructor(llm: LLMProvider, role: string, cancelChecker?: () => boolean) {
+    constructor(llm: LLMProvider, role: string, cancelChecker?: () => boolean, isCron: boolean = false) {
         this.llm = llm;
         this.executor = new DynamicExecutor();
         this.browserTool = new BrowserTool();
         this.role = role;
         this.cancelChecker = cancelChecker;
+        this.isCron = isCron;
     }
 
     async executeTask(instruction: string, context: string[], imagesBase64: string[] = []): Promise<string> {
@@ -505,7 +507,21 @@ ${context.join('\n')}
                             '--subject', response.subject,
                             '--body', response.body
                         ];
-                        if (response.from) args.push('--from', response.from);
+
+                        // Determine the From address:
+                        // 1. LLM-specified from (only if explicitly set)
+                        // 2. cronFromEmail from config if this is a cron job (code-enforced)
+                        let fromEmail: string | null = response.from || null;
+                        if (!fromEmail && this.isCron) {
+                            try {
+                                const emailConfigPath = path.join(process.cwd(), 'workspace', 'email_config.json');
+                                if (fs.existsSync(emailConfigPath)) {
+                                    const emailConfig = JSON.parse(fs.readFileSync(emailConfigPath, 'utf-8'));
+                                    if (emailConfig.cronFromEmail) fromEmail = emailConfig.cronFromEmail;
+                                }
+                            } catch (e) { /* ignore, use default */ }
+                        }
+                        if (fromEmail) args.push('--from', fromEmail);
 
                         const result = spawnSync('python3', args, { timeout: 30000, encoding: 'utf-8' });
 

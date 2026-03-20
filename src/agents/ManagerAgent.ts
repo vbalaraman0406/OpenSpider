@@ -60,6 +60,8 @@ export class ManagerAgent {
         this.resetCancel(); // Clear any previous cancel flag
         console.log(`\n[Manager] Analyzing request: "${prompt}"${imagesBase64.length > 0 ? ` [with ${imagesBase64.length} image(s)]` : ''}`);
         const agentPersona = process.env.AGENT_PERSONA || "You are a helpful multi-agent assistant designed to write excellent code and utilize terminals.";
+        // Detect if this is a cron-triggered job — used to enforce the email From alias at code level
+        const isCron = prompt.includes('[SYSTEM CRON TRIGGER]') || prompt.includes('[SYSTEM MANUAL TRIGGER]');
 
         // Build dynamic agent catalog
         let agentCapabilities = "\n\n[AVAILABLE WORKER AGENTS]\nThe following agents are ALREADY registered and running in this system. You MUST delegate tasks to these existing agents ONLY. DO NOT invent new role names.\n";
@@ -410,7 +412,7 @@ Example output:
                     }));
 
                     const resolvedRole = this.resolveRole(step.role, existingRoles);
-                    const worker = new WorkerAgent(this.llm, resolvedRole, () => this.cancelRequested);
+                    const worker = new WorkerAgent(this.llm, resolvedRole, () => this.cancelRequested, isCron);
                     const result = await worker.executeTask(step.instruction, globalContext, imagesBase64);
 
                     console.log(`[Manager] Task ${taskId} completed. Result:\n${result}\n`);
@@ -451,7 +453,7 @@ Example output:
                         // Parallel tasks get a copy of the CURRENT global context!
                         const workerContext = [...globalContext];
                         const resolvedRole = this.resolveRole(subtask.role, existingRoles);
-                        const worker = new WorkerAgent(this.llm, resolvedRole, () => this.cancelRequested);
+                        const worker = new WorkerAgent(this.llm, resolvedRole, () => this.cancelRequested, isCron);
                         const result = await worker.executeTask(subtask.instruction, workerContext, imagesBase64);
 
                         console.log(`[Manager] Parallel Task ${taskId} completed.`);
