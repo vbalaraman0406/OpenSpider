@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Mic, Save, CheckCircle, Volume2, Play } from 'lucide-react';
+import { Mic, Save, CheckCircle, Volume2, Play, RefreshCw, Loader2 } from 'lucide-react';
 import { apiFetch } from '../lib/apiFetch';
 
 const ELEVENLABS_VOICES = [
@@ -20,6 +20,8 @@ export function VoiceSettings() {
     const [isLoading, setIsLoading] = useState(true);
     const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
     const [previewVoice, setPreviewVoice] = useState<string | null>(null);
+    const [customVoices, setCustomVoices] = useState<typeof ELEVENLABS_VOICES>([]);
+    const [isFetchingVoices, setIsFetchingVoices] = useState(false);
 
     useEffect(() => {
         fetchConfig();
@@ -31,6 +33,9 @@ export function VoiceSettings() {
             const res = await apiFetch('/api/voice/config');
             const data = await res.json();
             setConfig(data);
+            if (data.elevenlabsApiKey) {
+                fetchCustomVoices(data.elevenlabsApiKey);
+            }
         } catch (e) {
             console.error("Failed to fetch voice config", e);
             setConfig({
@@ -41,6 +46,32 @@ export function VoiceSettings() {
             });
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const fetchCustomVoices = async (apiKey: string) => {
+        if (!apiKey) return;
+        setIsFetchingVoices(true);
+        try {
+            const res = await fetch('https://api.elevenlabs.io/v1/voices', {
+                headers: { 'xi-api-key': apiKey }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                const custom = data.voices.filter((v: any) => v.category !== 'premade');
+                setCustomVoices(
+                    custom.map((v: any) => ({
+                        id: v.voice_id,
+                        name: v.name,
+                        style: v.labels?.description || 'Custom',
+                        accent: v.labels?.accent || 'Personal'
+                    }))
+                );
+            }
+        } catch (e) {
+            console.error("Failed to fetch user voices from ElevenLabs", e);
+        } finally {
+            setIsFetchingVoices(false);
         }
     };
 
@@ -67,6 +98,8 @@ export function VoiceSettings() {
     if (isLoading || !config) {
         return <div className="p-8 text-center text-slate-500 animate-pulse">Loading Voice Settings...</div>;
     }
+
+    const allVoices = [...ELEVENLABS_VOICES, ...customVoices];
 
     return (
         <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500 mt-8">
@@ -108,7 +141,7 @@ export function VoiceSettings() {
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                        {ELEVENLABS_VOICES.map(voice => {
+                        {allVoices.map(voice => {
                             const isSelected = config.voiceId === voice.id;
                             return (
                                 <button
@@ -126,7 +159,12 @@ export function VoiceSettings() {
                                         {voice.name.charAt(0)}
                                     </div>
                                     <div className="text-center">
-                                        <div className={`text-sm font-semibold ${isSelected ? 'text-violet-300' : 'text-slate-300'}`}>{voice.name}</div>
+                                        <div className={`text-sm font-semibold flex items-center justify-center gap-1 ${isSelected ? 'text-violet-300' : 'text-slate-300'}`}>
+                                            {voice.name}
+                                            {customVoices.some(cv => cv.id === voice.id) && (
+                                                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block ml-0.5" title="Custom Voice"></span>
+                                            )}
+                                        </div>
                                         <div className="text-[10px] text-slate-500 mt-0.5">{voice.style}</div>
                                     </div>
                                     {isSelected && (
@@ -171,7 +209,19 @@ export function VoiceSettings() {
                         placeholder="sk_..."
                         className="w-full bg-slate-900 border border-slate-800 rounded-lg p-3 text-sm text-slate-300 font-mono focus:ring-1 focus:ring-amber-500 focus:border-amber-500 outline-none placeholder:text-slate-600"
                     />
-                    <p className="text-[10px] text-slate-600 leading-snug mt-2">Get your API key from <a href="https://elevenlabs.io" target="_blank" rel="noreferrer" className="text-amber-400 hover:underline">elevenlabs.io</a>. This is stored locally and never sent to any third party.</p>
+                    <div className="flex justify-between items-start mt-2">
+                        <p className="text-[10px] text-slate-600 leading-snug">Get your API key from <a href="https://elevenlabs.io" target="_blank" rel="noreferrer" className="text-amber-400 hover:underline">elevenlabs.io</a>.</p>
+                        {config.elevenlabsApiKey && (
+                            <button 
+                                onClick={() => fetchCustomVoices(config.elevenlabsApiKey)}
+                                disabled={isFetchingVoices}
+                                className="text-[10px] flex items-center gap-1.5 text-amber-500 hover:text-amber-400 font-bold transition-colors disabled:opacity-50 bg-amber-500/10 px-2 py-1 rounded border border-amber-500/20 shadow-sm whitespace-nowrap"
+                            >
+                                {isFetchingVoices ? <Loader2 className="w-3 h-3 animate-spin"/> : <RefreshCw className="w-3 h-3"/>}
+                                {isFetchingVoices ? 'Syncing...' : 'Sync Custom Voices'}
+                            </button>
+                        )}
+                    </div>
                 </div>
 
                 {/* Whisper Model Card */}
