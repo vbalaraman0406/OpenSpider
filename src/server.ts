@@ -989,7 +989,7 @@ export function startServer() {
     app.get('/api/email/config', (req, res) => {
         try {
             if (!fs.existsSync(emailConfigPath)) {
-                return res.json({ cronResultsTo: '', vendorEmailTo: '' });
+                return res.json({ cronResultsTo: '', vendorEmailTo: '', cronFromEmail: '' });
             }
             const config = JSON.parse(fs.readFileSync(emailConfigPath, 'utf-8'));
             res.json(config);
@@ -1000,7 +1000,7 @@ export function startServer() {
 
     app.post('/api/email/config', (req, res) => {
         try {
-            const { cronResultsTo, vendorEmailTo } = req.body;
+            const { cronResultsTo, vendorEmailTo, cronFromEmail } = req.body;
 
             // Basic email validation (allow empty = unset)
             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -1010,10 +1010,14 @@ export function startServer() {
             if (vendorEmailTo && !emailRegex.test(vendorEmailTo)) {
                 return res.status(400).json({ error: 'Invalid vendorEmailTo email address.' });
             }
+            if (cronFromEmail && !emailRegex.test(cronFromEmail)) {
+                return res.status(400).json({ error: 'Invalid cronFromEmail address.' });
+            }
 
             const newConfig = {
                 cronResultsTo: cronResultsTo || '',
-                vendorEmailTo: vendorEmailTo || ''
+                vendorEmailTo: vendorEmailTo || '',
+                cronFromEmail: cronFromEmail || ''
             };
 
             // Ensure workspace directory exists

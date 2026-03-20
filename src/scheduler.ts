@@ -62,6 +62,17 @@ function shouldRunTimeOfDay(job: CronJob, now: Date): boolean {
     return true;
 }
 
+function getCronEmailFromAddress(): string {
+    try {
+        const emailConfigPath = path.join(process.cwd(), 'workspace', 'email_config.json');
+        if (fs.existsSync(emailConfigPath)) {
+            const emailConfig = JSON.parse(fs.readFileSync(emailConfigPath, 'utf-8'));
+            if (emailConfig.cronFromEmail) return emailConfig.cronFromEmail;
+        }
+    } catch (e) { }
+    return '';
+}
+
 async function checkAndExecuteJobs() {
     try {
         // Use the mutex-protected withJobs() to atomically read and update timestamps.
@@ -105,9 +116,12 @@ async function checkAndExecuteJobs() {
         });
 
         // Execute jobs OUTSIDE the lock — the file is already updated
+        const cronFrom = getCronEmailFromAddress();
+        const cronFromNote = cronFrom ? `\n\n[CRON EMAIL SENDER RULE] IMPORTANT: When sending any emails as part of this automated task, you MUST always set the "from" field to "${cronFrom}" in your send_email tool call. This is a system-level requirement for all cron job emails.` : '';
+
         for (const job of jobsToRun) {
             const manager = new ManagerAgent(job.modelOverride || undefined);
-            const cronPrompt = `[SYSTEM CRON TRIGGER] Wake up and execute your scheduled background task. Do not ask me for permission. Just do it and summarize the results.\n\nTask: ${job.prompt}`;
+            const cronPrompt = `[SYSTEM CRON TRIGGER] Wake up and execute your scheduled background task. Do not ask me for permission. Just do it and summarize the results.${cronFromNote}\n\nTask: ${job.prompt}`;
 
             activeCronJobs++;
             manager.processUserRequest(cronPrompt).then(result => {
@@ -148,7 +162,9 @@ export async function runJobForcefully(jobId: string) {
     console.log(`\n⚡ [Scheduler] Manually Triggering Job: "${job.description}"`);
 
     const manager = new ManagerAgent(job.modelOverride || undefined);
-    const cronPrompt = `[SYSTEM MANUAL TRIGGER] Wake up and execute your background task manually requested by the user. Do not ask me for permission. Just do it and summarize the results.\n\nTask: ${job.prompt}`;
+    const cronFrom = getCronEmailFromAddress();
+    const cronFromNote = cronFrom ? `\n\n[CRON EMAIL SENDER RULE] IMPORTANT: When sending any emails as part of this automated task, you MUST always set the "from" field to "${cronFrom}" in your send_email tool call. This is a system-level requirement for all cron job emails.` : '';
+    const cronPrompt = `[SYSTEM MANUAL TRIGGER] Wake up and execute your background task manually requested by the user. Do not ask me for permission. Just do it and summarize the results.${cronFromNote}\n\nTask: ${job.prompt}`;
 
     // Fire and forget
     activeCronJobs++;

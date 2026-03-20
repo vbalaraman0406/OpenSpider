@@ -89,7 +89,7 @@ Available tools you can request in your JSON response:
 - wait_for_user: { "message": "Please log in to your account" } (Pause and ask the user to do something in the browser, like logging in. Waits up to 120 seconds.)
 - schedule_task: { "command": "24", "content": "Fetch Vancouver WA weather and send to user via WhatsApp", "filename": "Daily Weather Brief" } (Schedule OR UPDATE a recurring task. If a job with the same "filename" already exists it will be UPDATED in place — use this when the user asks to change/modify an existing job. To create or update an interval-based job: "command" = interval in hours (e.g. "24"). To create or update a time-of-day job (runs once daily at a fixed time): "command" = "preferredTime:HH:MM" (e.g. "preferredTime:07:00"). "content" = the prompt/task to execute, "filename" = short name for the job (must match exactly to update).)
 - message_agent: { "target": "Role Name", "message": "Text to send" } (Delegate a sub-task to a specialized sub-agent)
-- send_email: { "to": "user@example.com", "subject": "Hello", "body": "My message here" } (Send an outbound email natively using OAuth.)
+- send_email: { "to": "user@example.com", "subject": "Hello", "body": "My message here", "from": "optional-alias@gmail.com" } (Send an outbound email natively using OAuth. Use the optional "from" field only when explicitly instructed to send from a specific alias.)
 - read_emails: { "content": "query string", "target": "5" } (Scan the user's Gmail inbox natively. "content" is the search query like 'is:unread' or 'from:boss', and "target" is the max number of results.)
 - send_whatsapp: { "message": "Hello!", "to": "Engineering Team" } (Send a WhatsApp message. "to" is optional – if omitted, the message goes to the default configured owner. You can provide a comma-separated list of phone numbers, the word "default", OR the exact name of a WhatsApp Group the bot is in. CRITICAL: the "message" field is the exact text that the human user will read. Do NOT put internal status logs like 'Message sent successfully' in here. Write the conversational answer.)
 - send_voice: { "message": "Hello, how are you?", "args": "voice_id" } (Send a voice note to the user via WhatsApp. The text in "message" will be converted to speech using ElevenLabs TTS and delivered as an audio message. Use "args" to optionally specify a voice ID. Available voices:
@@ -260,6 +260,7 @@ ${context.join('\n')}
                     to?: string;
                     subject?: string;
                     body?: string;
+                    from?: string;
                     result?: string;
                     summary_of_findings: string;
                     thought: string;
@@ -498,12 +499,15 @@ ${context.join('\n')}
 
                         // SECURITY FIX (CRIT-2): Use spawnSync with argument array instead of execSync
                         // template string to completely eliminate shell injection risk.
-                        const result = spawnSync('python3', [
+                        const args = [
                             pythonScript,
                             '--to', response.to,
                             '--subject', response.subject,
                             '--body', response.body
-                        ], { timeout: 30000, encoding: 'utf-8' });
+                        ];
+                        if (response.from) args.push('--from', response.from);
+
+                        const result = spawnSync('python3', args, { timeout: 30000, encoding: 'utf-8' });
 
                         if (result.error) throw result.error;
                         if (result.status !== 0) throw new Error(result.stderr || 'python3 exited non-zero');

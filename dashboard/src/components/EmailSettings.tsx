@@ -3,7 +3,7 @@ import { Mail, Save, CheckCircle } from 'lucide-react';
 import { apiFetch } from '../lib/apiFetch';
 
 export function EmailSettings() {
-    const [config, setConfig] = useState({ cronResultsTo: '', vendorEmailTo: '' });
+    const [config, setConfig] = useState({ cronResultsTo: '', vendorEmailTo: '', cronFromEmail: '' });
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
@@ -12,7 +12,7 @@ export function EmailSettings() {
     useEffect(() => {
         apiFetch('/api/email/config')
             .then(r => r.json())
-            .then(data => setConfig({ cronResultsTo: data.cronResultsTo || '', vendorEmailTo: data.vendorEmailTo || '' }))
+            .then(data => setConfig({ cronResultsTo: data.cronResultsTo || '', vendorEmailTo: data.vendorEmailTo || '', cronFromEmail: data.cronFromEmail || '' }))
             .catch(e => console.error("Failed to fetch email config", e))
             .finally(() => setIsLoading(false));
     }, []);
@@ -139,6 +139,30 @@ export function EmailSettings() {
                         Default email address used when the agent sends emails to vendors, friends, or external parties.
                     </p>
                 </div>
+            </div>
+
+            {/* Cron From Alias */}
+            <div className="bg-slate-950/50 rounded-2xl border border-violet-800/30 p-6 flex flex-col shadow-inner">
+                <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 rounded-lg border bg-violet-500/10 text-violet-400 border-violet-500/20 flex items-center justify-center">
+                        <Mail className="w-5 h-5" />
+                    </div>
+                    <div>
+                        <h4 className="text-base font-bold text-white">Cron Job Sender Alias</h4>
+                        <p className="text-xs text-slate-500">The "From" address used when the agent sends automated cron emails</p>
+                    </div>
+                </div>
+                <label className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">From: Email Address (Alias)</label>
+                <input
+                    type="email"
+                    placeholder="agent@gmail.com"
+                    value={config.cronFromEmail}
+                    onChange={e => setConfig({ ...config, cronFromEmail: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-lg p-3 text-sm text-slate-200 focus:ring-1 focus:ring-violet-500 focus:border-violet-500 outline-none font-mono"
+                />
+                <p className="text-[10px] text-slate-500 mt-2 leading-snug">
+                    Must be a verified Gmail alias on the sender account. Leave empty to use default sender.
+                </p>
             </div>
         </div>
     );

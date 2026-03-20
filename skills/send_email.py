@@ -250,7 +250,7 @@ def load_credentials():
 
     return creds
 
-def send_email(to_email, subject, body):
+def send_email(to_email, subject, body, from_email=None):
     creds = load_credentials()
     if not creds:
         return False
@@ -265,6 +265,8 @@ def send_email(to_email, subject, body):
         message = MIMEMultipart()
         message['To'] = to_email
         message['Subject'] = subject
+        if from_email:
+            message['From'] = from_email
         msg = MIMEText(styled_html, 'html')
         message.attach(msg)
 
@@ -288,6 +290,7 @@ if __name__ == "__main__":
     parser.add_argument("--to", help="Recipient email address")
     parser.add_argument("--subject", help="Email subject line")
     parser.add_argument("--body", help="Email HTML or Text body")
+    parser.add_argument("--from", dest="from_email", help="Sender email address (must be a verified Gmail alias)")
 
     args = parser.parse_args()
 
@@ -296,6 +299,6 @@ if __name__ == "__main__":
         if creds and creds.valid:
             print("Successfully authenticated and generated token.json!")
     elif args.to and args.subject and args.body:
-        send_email(args.to, args.subject, args.body)
+        send_email(args.to, args.subject, args.body, from_email=args.from_email)
     else:
         print("Error: --to, --subject, and --body are required unless running with --setup")
