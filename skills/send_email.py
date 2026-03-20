@@ -47,12 +47,52 @@ def md_to_html(md_text: str) -> str:
             out += f'<tr{row_bg}>'
             for cell in cells:
                 st = style_header if idx == 0 else style_cell
-                out += f'<{tag} style="{st}">{inline_format(cell)}</{tag}>'
+                # For data rows (not headers), inject weather emojis before inline formatting
+                display_cell = weather_emoji_inject(cell) if idx > 0 else cell
+                out += f'<{tag} style="{st}">{inline_format(display_cell)}</{tag}>'
             out += '</tr>\n'
         out += '</table>\n'
         table_rows = []
         in_table = False
         return out
+
+    # Weather condition keyword → emoji prefix map (order from most specific to least)
+    WEATHER_EMOJI_MAP = [
+        (r'\bThunderstorm(s)?\b',       '⛈️'),
+        (r'\bHeavy Rain\b',             '🌧️'),
+        (r'\bRain (Likely|Showers)\b',  '🌧️'),
+        (r'\bRainy\b',                  '🌧️'),
+        (r'\bRain\b',                   '🌦️'),
+        (r'\bDrizzle\b',               '🌦️'),
+        (r'\bSnow Showers\b',           '🌨️'),
+        (r'\bSnow\b',                   '❄️'),
+        (r'\bBlizzard\b',               '🌨️'),
+        (r'\bSleet\b',                  '🌨️'),
+        (r'\bFog\b',                    '🌫️'),
+        (r'\bHaz[ey]\b',               '🌫️'),
+        (r'\bSmoke\b',                  '🌫️'),
+        (r'\bPartly (Cloudy|Sunny)\b',  '⛅'),
+        (r'\bMostly Cloudy\b',          '🌥️'),
+        (r'\bCloudy\b',                 '☁️'),
+        (r'\bOvercast\b',               '☁️'),
+        (r'\bMostly Sunny\b',           '🌤️'),
+        (r'\bPartly Sunny\b',           '🌤️'),
+        (r'\bSunny\b',                  '☀️'),
+        (r'\bClear\b',                  '🌙'),
+        (r'\bWindy\b',                  '💨'),
+        (r'\bBreezy\b',                 '🌬️'),
+        (r'\bHail\b',                   '🌩️'),
+        (r'\bTornado\b',                '🌪️'),
+    ]
+
+    def weather_emoji_inject(text: str) -> str:
+        """Prepend a weather emoji if the text matches a known weather condition."""
+        for pattern, emoji in WEATHER_EMOJI_MAP:
+            if re.search(pattern, text, re.IGNORECASE):
+                if not text.startswith(emoji):
+                    text = f'{emoji} {text}'
+                break
+        return text
 
     def inline_format(text: str) -> str:
         """Apply inline markdown formatting: bold, italic, links, code, emoji."""
