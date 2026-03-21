@@ -27,6 +27,64 @@ function logBrowserAccess(entry: {
     } catch { /* non-critical */ }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// BROWSER MUTEX
+// Serializes all browser access across concurrent tasks (cron jobs, WhatsApp,
+// dashboard). Only one task can use the browser at a time; others wait in queue.
+// ═══════════════════════════════════════════════════════════════════════════
+class BrowserMutex {
+    private locked = false;
+    private queue: Array<{ resolve: () => void; timer: ReturnType<typeof setTimeout> }> = [];
+    private holder: string = '';
+
+    async acquire(label: string, timeoutMs = 90000): Promise<boolean> {
+        if (!this.locked) {
+            this.locked = true;
+            this.holder = label;
+            console.log(`[BrowserMutex] 🔒 Lock acquired by "${label}"`);
+            return true;
+        }
+
+        console.log(`[BrowserMutex] ⏳ "${label}" waiting for lock (held by "${this.holder}", queue: ${this.queue.length})`);
+
+        return new Promise<boolean>((resolve) => {
+            const timer = setTimeout(() => {
+                // Timeout — remove from queue and reject
+                this.queue = this.queue.filter(q => q.resolve !== onReady);
+                console.warn(`[BrowserMutex] ⏰ "${label}" timed out after ${timeoutMs / 1000}s waiting for browser`);
+                resolve(false);
+            }, timeoutMs);
+
+            const onReady = () => {
+                clearTimeout(timer);
+                this.holder = label;
+                console.log(`[BrowserMutex] 🔒 Lock acquired by "${label}" (was queued)`);
+                resolve(true);
+            };
+
+            this.queue.push({ resolve: onReady, timer });
+        });
+    }
+
+    release() {
+        if (this.queue.length > 0) {
+            const next = this.queue.shift()!;
+            console.log(`[BrowserMutex] 🔓 Lock released by "${this.holder}", passing to next in queue`);
+            next.resolve();
+        } else {
+            console.log(`[BrowserMutex] 🔓 Lock released by "${this.holder}", no waiters`);
+            this.locked = false;
+            this.holder = '';
+        }
+    }
+
+    get currentHolder(): string { return this.holder; }
+    get queueLength(): number { return this.queue.length; }
+}
+
+// Global singleton — shared by all BrowserTool instances across all agents
+const browserMutex = new BrowserMutex();
+
 /**
  * BrowserTool: Agent-friendly wrapper around BrowserManager.
  * Security layers:
@@ -219,8 +277,16 @@ export class BrowserTool {
 
     /**
      * Execute a browser action. Returns a text description of the result.
+     * Serialized via BrowserMutex — only one task can use the browser at a time.
      */
     async execute(action: BrowseAction): Promise<string> {
+        const actionLabel = `${action.action}${action.url ? ':' + action.url.substring(0, 50) : ''}${action.selector ? ':' + action.selector.substring(0, 30) : ''}`;
+
+        const acquired = await browserMutex.acquire(actionLabel);
+        if (!acquired) {
+            return `⚠️ Browser is busy (held by "${browserMutex.currentHolder}", ${browserMutex.queueLength} in queue). Your action "${action.action}" timed out after 90s. Try again later.`;
+        }
+
         try {
             switch (action.action) {
                 case 'navigate':
@@ -248,6 +314,8 @@ export class BrowserTool {
             }
         } catch (e: any) {
             return `Browser action '${action.action}' failed: ${e.message}`;
+        } finally {
+            browserMutex.release();
         }
     }
 
