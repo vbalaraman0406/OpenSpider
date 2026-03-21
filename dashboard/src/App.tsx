@@ -1494,6 +1494,14 @@ function CronView({ agents, logs }: { agents: any[]; logs: LogMessage[] }) {
                         // Extract delivery info from prompt
                         const emails: string[] = [...new Set((job.prompt.match(/[a-zA-Z0-9._%+-]+@(?:gmail|yahoo|hotmail|outlook|icloud|protonmail|aol)\.[a-z]{2,}/gi) || []) as string[])];
                         const whatsappNumbers: string[] = [...new Set((job.prompt.match(/\+?\d{10,15}(?=@s\.whatsapp\.net)/g) || []) as string[])];
+                        // Extract WhatsApp group JIDs (e.g. 120363423852747118@g.us)
+                        const groupJids: string[] = [...new Set((job.prompt.match(/\d+@g\.us/g) || []) as string[])];
+                        // Try to extract group names from prompt like: group "Name" (group JID: xxx@g.us)
+                        const groupNames: Record<string, string> = {};
+                        for (const gid of groupJids) {
+                            const nameMatch = job.prompt.match(new RegExp(`group\\s+["']([^"']+)["']\\s*\\(.*?${gid.replace('.', '\\.')}`, 'i'));
+                            if (nameMatch) groupNames[gid] = nameMatch[1];
+                        }
                         const hasWhatsApp = /whatsapp/i.test(job.prompt);
                         const hasEmail = /email/i.test(job.prompt) || emails.length > 0;
 
@@ -1545,7 +1553,12 @@ function CronView({ agents, logs }: { agents: any[]; logs: LogMessage[] }) {
                                                     💬 +{num}
                                                 </span>
                                             ))}
-                                            {hasWhatsApp && whatsappNumbers.length === 0 && (
+                                            {groupJids.map((gid, i) => (
+                                                <span key={`wag-${i}`} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-teal-500/10 text-teal-400 text-xs font-mono rounded-lg border border-teal-500/20">
+                                                    👥 {groupNames[gid] || gid}
+                                                </span>
+                                            ))}
+                                            {hasWhatsApp && whatsappNumbers.length === 0 && groupJids.length === 0 && (
                                                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500/10 text-emerald-400 text-xs font-mono rounded-lg border border-emerald-500/20">
                                                     💬 WhatsApp (default user)
                                                 </span>
