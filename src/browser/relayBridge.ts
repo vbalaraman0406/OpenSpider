@@ -75,6 +75,21 @@ export function registerRelay(ws: WebSocket): void {
         if (cb) cb();
     }
 
+    // ─── HEARTBEAT: Ping every 25s to prevent TCP idle timeout ───
+    // Without this, the OS kills the connection after ~2min of inactivity
+    // and neither side knows until the next message attempt.
+    const pingInterval = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+            ws.ping();
+        } else {
+            clearInterval(pingInterval);
+        }
+    }, 25000);
+
+    ws.on('pong', () => {
+        // Extension is alive — connection is healthy
+    });
+
     // Listen for CDP responses from the extension
     ws.on('message', (data) => {
         try {
@@ -93,6 +108,7 @@ export function registerRelay(ws: WebSocket): void {
 
     ws.on('close', () => {
         console.log('[RelayBridge] 🔌 Browser relay extension disconnected.');
+        clearInterval(pingInterval);
         relayClient = null;
         for (const [id, pending] of pendingCommands) {
             pending.reject(new Error('Relay disconnected'));

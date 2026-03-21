@@ -3,7 +3,7 @@ let ws = null;
 let attachedTabId = null;
 let agentTabId = null; // Separate tab created for agent navigation
 let reconnectAttempts = 0;
-const MAX_RECONNECT_ATTEMPTS = 30; // 30 attempts × 2s = 60 seconds of retries
+const MAX_RECONNECT_ATTEMPTS = 30; // 30 attempts × 2s = 60 seconds of debugger re-attach retries
 
 // ═══════════════════════════════════════════════════════════
 // SERVICE WORKER KEEPALIVE
@@ -25,8 +25,11 @@ function stopKeepalive() {
 chrome.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === KEEPALIVE_ALARM) {
         // Just touching the service worker keeps it alive
-        // Also check if we should auto-restore a lost connection
-        if (!ws && !attachedTabId) {
+        // Also check if WebSocket dropped and auto-reconnect
+        if (!ws && lastToken && lastPort && lastHost && (attachedTabId || agentTabId)) {
+            console.log('[Relay] Keepalive detected dead WS — triggering reconnect');
+            scheduleWsReconnect();
+        } else if (!ws && !attachedTabId) {
             restoreConnectionFromStorage();
         }
     }
@@ -681,7 +684,7 @@ function sendError(id, message) {
  */
 let wsReconnectTimer = null;
 let wsReconnectCount = 0;
-const MAX_WS_RECONNECTS = 60;
+// No cap — on an always-online Mac Mini, retry forever with backoff
 
 function scheduleWsReconnect() {
     if (wsReconnectTimer) return; // Already scheduled
@@ -697,21 +700,15 @@ function attemptWsReconnect() {
         return;
     }
 
-    if (wsReconnectCount >= MAX_WS_RECONNECTS) {
-        console.error("[Relay] Max WebSocket reconnect attempts reached. Giving up.");
-        chrome.action.setBadgeText({ text: "!" });
-        chrome.action.setBadgeBackgroundColor({ color: "#FF0000" });
-        wsReconnectTimer = null;
-        return;
-    }
-
     if (!lastToken || !lastPort || !lastHost) {
         wsReconnectTimer = null;
         return;
     }
 
     wsReconnectCount++;
-    console.log(`[Relay] WebSocket reconnect attempt ${wsReconnectCount}/${MAX_WS_RECONNECTS}...`);
+    // Exponential backoff: 5s → 10s → 20s → 40s → 60s (max)
+    const backoffMs = Math.min(5000 * Math.pow(2, Math.min(wsReconnectCount - 1, 4)), 60000);
+    console.log(`[Relay] WebSocket reconnect attempt ${wsReconnectCount} (next retry in ${backoffMs / 1000}s)...`);
 
     const wsUrl = `ws://${lastHost}:${lastPort}/?apiKey=${lastToken}`;
     const reconnectWs = new WebSocket(wsUrl);
@@ -734,10 +731,10 @@ function attemptWsReconnect() {
     };
 
     reconnectWs.onclose = () => {
-        // Retry in 5 seconds
+        // Retry with backoff
         wsReconnectTimer = setTimeout(() => {
             wsReconnectTimer = null;
             attemptWsReconnect();
-        }, 5000);
+        }, backoffMs);
     };
 }
