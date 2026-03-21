@@ -358,6 +358,29 @@ export class BrowserTool {
         return this.page!;
     }
 
+    /**
+     * Re-inject cookies from disk into the live browser context.
+     * Called before each headless navigation to ensure exported cookies
+     * from the Chrome extension are always fresh (even if the context
+     * was created before cookies were exported).
+     */
+    private async refreshCookies(): Promise<number> {
+        if (!this.context) return 0;
+        const cookieFile = path.join(process.cwd(), 'workspace', 'browser_cookies.json');
+        try {
+            if (!fs.existsSync(cookieFile)) return 0;
+            const savedCookies = JSON.parse(fs.readFileSync(cookieFile, 'utf-8'));
+            if (Array.isArray(savedCookies) && savedCookies.length > 0) {
+                await this.context.addCookies(savedCookies);
+                console.log(`[BrowserTool] 🍪 Refreshed ${savedCookies.length} cookies into headless context`);
+                return savedCookies.length;
+            }
+        } catch (e) {
+            console.warn('[BrowserTool] Cookie refresh failed:', e);
+        }
+        return 0;
+    }
+
     private async doNavigate(url: string): Promise<string> {
         if (!url) return 'Error: No URL provided for navigate action.';
         const startMs = Date.now();
@@ -414,8 +437,14 @@ export class BrowserTool {
         try {
             console.log(`[BrowserTool] [Headless] Falling back to stealth Playwright: ${url}`);
             const page = await this.ensurePage();
-            const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-            await humanDelay(500, 1500);
+
+            // Re-inject cookies fresh from disk before every navigation
+            // (cookies may have been exported AFTER the context was created)
+            const cookieCount = await this.refreshCookies();
+
+            const response = await page.goto(url, { waitUntil: 'networkidle', timeout: 45000 });
+            // SPAs (n8n, Yahoo) need extra time for JS rendering after network idle
+            await humanDelay(1500, 3000);
 
             // Check for bot protection
             const botCheck = await detectBotProtection(page, response, url);
@@ -436,10 +465,6 @@ export class BrowserTool {
             const content = sanitizePageContent(rawContent);
 
             // Count injected cookies for logging
-            const cookieFile = path.join(process.cwd(), 'workspace', 'browser_cookies.json');
-            let cookieCount = 0;
-            try { cookieCount = JSON.parse(fs.readFileSync(cookieFile, 'utf-8')).length; } catch { }
-
             logBrowserAccess({ action: 'navigate', target: url, path: 'headless', cookies: cookieCount, result: 'ok', ms: Date.now() - startMs });
             return `Navigated to "${title}" (${pageUrl}) [via headless browser — stealth mode, ${cookieCount} cookies loaded]\n\n${content}`;
         } catch (e: any) {
