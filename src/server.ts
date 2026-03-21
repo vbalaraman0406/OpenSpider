@@ -1650,10 +1650,17 @@ Return ONLY the raw Python code.`;
 
             let jobs = readJobsSync();
 
-            // SECURITY: Cap the maximum number of cron jobs to prevent resource exhaustion
-            const MAX_JOBS = 20;
-            if (jobs.length >= MAX_JOBS) {
-                return res.status(429).json({ error: `Maximum of ${MAX_JOBS} cron jobs allowed. Delete an existing job first.` });
+            // Configurable cron job limit (defaults to 50, configurable from dashboard)
+            const cronConfigPath = path.join(process.cwd(), 'workspace', 'cron_config.json');
+            let maxJobs = 50;
+            try {
+                if (fs.existsSync(cronConfigPath)) {
+                    const cfg = JSON.parse(fs.readFileSync(cronConfigPath, 'utf-8'));
+                    if (cfg.maxJobs && typeof cfg.maxJobs === 'number') maxJobs = cfg.maxJobs;
+                }
+            } catch { }
+            if (jobs.length >= maxJobs) {
+                return res.status(429).json({ error: `Maximum of ${maxJobs} cron jobs allowed. You can increase this limit in Dashboard → Cron Jobs → Settings.` });
             }
 
             // SECURITY: Enforce a minimum interval floor to prevent LLM spam attacks
@@ -1690,6 +1697,31 @@ Return ONLY the raw Python code.`;
             res.json({ success: true, job: newJob });
         } catch (e: any) {
             res.status(500).json({ error: 'Internal server error' });
+        }
+    });
+
+    // ─── Cron Config (job limit) — MUST be registered before /api/cron/:id ───
+    const cronConfigPath = path.join(process.cwd(), 'workspace', 'cron_config.json');
+
+    app.get('/api/cron/config', (req, res) => {
+        try {
+            let config = { maxJobs: 50 };
+            if (fs.existsSync(cronConfigPath)) {
+                config = { ...config, ...JSON.parse(fs.readFileSync(cronConfigPath, 'utf-8')) };
+            }
+            res.json(config);
+        } catch { res.json({ maxJobs: 50 }); }
+    });
+
+    app.put('/api/cron/config', (req, res) => {
+        try {
+            const { maxJobs } = req.body;
+            const newMax = Math.max(5, Math.min(200, Number(maxJobs) || 50));
+            const config = { maxJobs: newMax };
+            fs.writeFileSync(cronConfigPath, JSON.stringify(config, null, 2));
+            res.json({ success: true, ...config });
+        } catch (e: any) {
+            res.status(500).json({ error: e.message });
         }
     });
 

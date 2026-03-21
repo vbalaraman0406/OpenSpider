@@ -1283,9 +1283,17 @@ function CronView({ agents, logs }: { agents: any[]; logs: LogMessage[] }) {
     const [waContacts, setWaContacts] = useState<{ groups: any[]; dms: any[] }>({ groups: [], dms: [] });
     const [contactSearch, setContactSearch] = useState('');
     const [showContactDropdown, setShowContactDropdown] = useState(false);
+    const [maxJobs, setMaxJobs] = useState(50);
+    const [showSettings, setShowSettings] = useState(false);
+    const [editMaxJobs, setEditMaxJobs] = useState('50');
 
     useEffect(() => {
         fetchJobs();
+        // Fetch cron config
+        apiFetch('/api/cron/config').then(r => r.json()).then(data => {
+            setMaxJobs(data.maxJobs || 50);
+            setEditMaxJobs(String(data.maxJobs || 50));
+        }).catch(() => {});
     }, []);
 
     const fetchJobs = async () => {
@@ -1412,14 +1420,62 @@ function CronView({ agents, logs }: { agents: any[]; logs: LogMessage[] }) {
                             Deploy tasks that wake up OpenSpider agents at scheduled intervals. Keep your system running 24/7.
                         </p>
                     </div>
-                    <button
-                        onClick={() => setShowModal(true)}
-                        className="flex items-center gap-2 px-5 py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-sm font-semibold transition-all shadow-[0_0_20px_rgba(225,29,72,0.3)] hover:shadow-[0_0_30px_rgba(225,29,72,0.5)] border border-rose-500/50"
-                    >
-                        <Plus className="w-4 h-4" />
-                        Deploy Job
-                    </button>
+                    <div className="flex items-center gap-3">
+                        {/* Job count + settings */}
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs text-slate-500 font-mono">{jobs.length} / {maxJobs} jobs</span>
+                            <button
+                                onClick={() => { setShowSettings(!showSettings); setEditMaxJobs(String(maxJobs)); }}
+                                className="p-1.5 text-slate-500 hover:text-slate-300 hover:bg-slate-800 rounded-lg transition-colors"
+                                title="Cron settings"
+                            >
+                                <Settings className="w-4 h-4" />
+                            </button>
+                        </div>
+                        <button
+                            onClick={() => setShowModal(true)}
+                            className="flex items-center gap-2 px-5 py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-sm font-semibold transition-all shadow-[0_0_20px_rgba(225,29,72,0.3)] hover:shadow-[0_0_30px_rgba(225,29,72,0.5)] border border-rose-500/50"
+                        >
+                            <Plus className="w-4 h-4" />
+                            Deploy Job
+                        </button>
+                    </div>
                 </header>
+
+                {/* Settings panel */}
+                {showSettings && (
+                    <div className="mb-6 bg-slate-900/60 backdrop-blur-xl rounded-2xl border border-white/5 p-5 shadow-xl">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h4 className="text-sm font-bold text-white flex items-center gap-2"><Settings className="w-4 h-4 text-slate-400" /> Cron Settings</h4>
+                                <p className="text-xs text-slate-500 mt-1">Configure the maximum number of concurrent cron jobs.</p>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <label className="text-[10px] uppercase tracking-widest text-slate-500 font-bold">Max Jobs</label>
+                                <input
+                                    type="number" min="5" max="200"
+                                    value={editMaxJobs}
+                                    onChange={e => setEditMaxJobs(e.target.value)}
+                                    className="w-20 bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-slate-200 focus:ring-1 focus:ring-rose-500 outline-none text-center"
+                                />
+                                <button
+                                    onClick={async () => {
+                                        const val = Math.max(5, Math.min(200, Number(editMaxJobs) || 50));
+                                        await apiFetch('/api/cron/config', {
+                                            method: 'PUT',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ maxJobs: val })
+                                        });
+                                        setMaxJobs(val);
+                                        setEditMaxJobs(String(val));
+                                        setShowSettings(false);
+                                    }}
+                                    className="px-4 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-semibold transition-colors"
+                                >Save</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 <div className="space-y-4">
                     {jobs.length === 0 ? (
