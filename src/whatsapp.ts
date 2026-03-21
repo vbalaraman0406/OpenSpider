@@ -1231,7 +1231,7 @@ export async function startWhatsApp() {
                 ) as Buffer;
                 const transcription = await transcribeAudio(audioBuffer, (audioMessage as any).mimetype || 'audio/ogg');
                 if (transcription && !transcription.startsWith('[Voice message received but')) {
-                    textMessage = `[Voice Message] ${transcription}\n\n[SYSTEM: The user sent a voice message. You MUST reply using send_voice tool to send a voice note back. Do NOT reply with text only.]`;
+                    textMessage = `[Voice Message Transcription] ${transcription}\n\n[SYSTEM: The user sent a voice message which has been transcribed above. Reply with a normal TEXT message. Only use the send_voice tool if the user explicitly asks you to reply with an audio/voice message.]`;
                 } else {
                     textMessage = transcription; // Error message passthrough
                 }
@@ -1352,6 +1352,8 @@ export async function startWhatsApp() {
                     sentMessageIds.add(ackMsg.key.id);
                     if (sentMessageIds.size > 1000) sentMessageIds.delete(Array.from(sentMessageIds)[0]!);
                 }
+                // Re-trigger composing after ack message (sending a text clears the typing bubble)
+                await sock.sendPresenceUpdate('composing', replyJid).catch(() => {});
             }
 
             // ── Phase 2: Run the agent ─────────────────────────────────────────────────
