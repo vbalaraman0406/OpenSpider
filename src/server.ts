@@ -1712,6 +1712,12 @@ Return ONLY the raw Python code.`;
             if (jobIndex === -1) return res.status(404).json({ error: 'Job not found' });
 
             jobs[jobIndex] = { ...jobs[jobIndex], ...req.body };
+            
+            // Clean up: empty strings should delete the key (e.g. clearing modelOverride or preferredTime)
+            const updatedJob = jobs[jobIndex]!;
+            if (updatedJob.modelOverride === '') delete updatedJob.modelOverride;
+            if (updatedJob.preferredTime === '') delete updatedJob.preferredTime;
+            
             writeJobsSync(jobs);
             res.json({ success: true, job: jobs[jobIndex] });
         } catch (e: any) {

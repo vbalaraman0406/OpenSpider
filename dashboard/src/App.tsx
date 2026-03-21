@@ -1367,12 +1367,10 @@ function CronView({ agents, logs }: { agents: any[]; logs: LogMessage[] }) {
                 prompt: editFormData.prompt,
                 intervalHours: Number(editFormData.intervalHours) || 24,
             };
-            if (editFormData.preferredTime) {
-                payload.preferredTime = editFormData.preferredTime;
-            } else {
-                payload.preferredTime = undefined;
-            }
-            payload.modelOverride = editFormData.modelOverride || undefined;
+            // Send empty string (not undefined) so JSON.stringify includes them
+            // and the server's spread operator correctly clears old values
+            payload.preferredTime = editFormData.preferredTime || '';
+            payload.modelOverride = editFormData.modelOverride || '';
             await apiFetch(`/api/cron/${editJob.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
@@ -1451,7 +1449,7 @@ function CronView({ agents, logs }: { agents: any[]; logs: LogMessage[] }) {
                                     <div>
                                         <h3 className="text-xl font-bold text-white tracking-tight mb-1">{job.description}</h3>
                                         <div className="text-xs text-slate-500 font-mono flex gap-2">
-                                            <span>{job.preferredTime ? `Daily at ${job.preferredTime}` : `Every ${job.intervalHours}h`}</span>
+                                            <span>{job.preferredTime ? `Daily at ${job.preferredTime}` : job.intervalHours < 1 ? `Every ${Math.round(job.intervalHours * 60)}m` : `Every ${job.intervalHours}h`}</span>
                                             {job.modelOverride && <span className="ml-2 px-1.5 py-0.5 bg-purple-500/10 text-purple-400 text-[10px] font-bold rounded border border-purple-500/20 uppercase">{job.modelOverride}</span>}
                                         </div>
                                     </div>
@@ -1567,8 +1565,20 @@ function CronView({ agents, logs }: { agents: any[]; logs: LogMessage[] }) {
                                 <input type="time" value={formData.preferredTime} onChange={e => setFormData({ ...formData, preferredTime: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm text-slate-200 focus:ring-1 focus:ring-rose-500 focus:border-rose-500 outline-none" />
                             </div>
                             <div>
-                                <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Interval (Hours) — used when no preferred time is set</label>
-                                <input type="number" min="1" max="8760" value={formData.intervalHours} onChange={e => setFormData({ ...formData, intervalHours: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm text-slate-200 focus:ring-1 focus:ring-rose-500 focus:border-rose-500 outline-none" />
+                                <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Interval — used when no preferred time is set</label>
+                                <select value={formData.intervalHours} onChange={e => setFormData({ ...formData, intervalHours: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm text-slate-200 focus:ring-1 focus:ring-rose-500 focus:border-rose-500 outline-none">
+                                    <option value="0.25">Every 15 minutes</option>
+                                    <option value="0.5">Every 30 minutes</option>
+                                    <option value="1">Every 1 hour</option>
+                                    <option value="2">Every 2 hours</option>
+                                    <option value="4">Every 4 hours</option>
+                                    <option value="6">Every 6 hours</option>
+                                    <option value="8">Every 8 hours</option>
+                                    <option value="12">Every 12 hours</option>
+                                    <option value="24">Every 24 hours (daily)</option>
+                                    <option value="48">Every 2 days</option>
+                                    <option value="168">Every 7 days (weekly)</option>
+                                </select>
                             </div>
                             <div>
                                 <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Task Prompt</label>
@@ -1620,8 +1630,20 @@ function CronView({ agents, logs }: { agents: any[]; logs: LogMessage[] }) {
                                 <input type="time" value={editFormData.preferredTime} onChange={e => setEditFormData({ ...editFormData, preferredTime: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm text-slate-200 focus:ring-1 focus:ring-sky-500 focus:border-sky-500 outline-none" />
                             </div>
                             <div>
-                                <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Interval (Hours) — used when no preferred time is set</label>
-                                <input type="number" min="1" max="8760" value={editFormData.intervalHours} onChange={e => setEditFormData({ ...editFormData, intervalHours: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm text-slate-200 focus:ring-1 focus:ring-sky-500 focus:border-sky-500 outline-none" />
+                                <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Interval — used when no preferred time is set</label>
+                                <select value={editFormData.intervalHours} onChange={e => setEditFormData({ ...editFormData, intervalHours: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm text-slate-200 focus:ring-1 focus:ring-sky-500 focus:border-sky-500 outline-none">
+                                    <option value="0.25">Every 15 minutes</option>
+                                    <option value="0.5">Every 30 minutes</option>
+                                    <option value="1">Every 1 hour</option>
+                                    <option value="2">Every 2 hours</option>
+                                    <option value="4">Every 4 hours</option>
+                                    <option value="6">Every 6 hours</option>
+                                    <option value="8">Every 8 hours</option>
+                                    <option value="12">Every 12 hours</option>
+                                    <option value="24">Every 24 hours (daily)</option>
+                                    <option value="48">Every 2 days</option>
+                                    <option value="168">Every 7 days (weekly)</option>
+                                </select>
                             </div>
                             <div>
                                 <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Task Prompt</label>
