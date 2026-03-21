@@ -2,6 +2,30 @@ import { BrowserManager, getManager } from './manager';
 import { Page, BrowserContext, Response } from 'playwright-core';
 import { createCursor, Cursor } from 'ghost-cursor-playwright';
 import * as relayBridge from './relayBridge';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BROWSER ACCESS LOGGER
+// Logs every browser action to workspace/browser_access.log as JSONL.
+// Tracks: timestamp, action, target, path (relay|headless), cookies, result, ms
+// ═══════════════════════════════════════════════════════════════════════════
+const ACCESS_LOG_PATH = path.join(process.cwd(), 'workspace', 'browser_access.log');
+
+function logBrowserAccess(entry: {
+    action: string;
+    target: string;
+    path: 'relay' | 'headless' | 'relay_retry';
+    cookies?: number;
+    result: 'ok' | 'error';
+    ms: number;
+    error?: string;
+}): void {
+    try {
+        const line = JSON.stringify({ ts: new Date().toISOString(), ...entry });
+        fs.appendFileSync(ACCESS_LOG_PATH, line + '\n');
+    } catch { /* non-critical */ }
+}
 
 /**
  * BrowserTool: Agent-friendly wrapper around BrowserManager.
@@ -90,7 +114,7 @@ function sanitizePageContent(content: string): string {
 
 export interface BrowseAction {
     /** The sub-action to perform */
-    action: 'navigate' | 'click' | 'type' | 'read_content' | 'screenshot' | 'wait_for_user' | 'scroll' | 'close' | 'execute_js';
+    action: 'navigate' | 'click' | 'type' | 'read_content' | 'screenshot' | 'wait_for_user' | 'scroll' | 'close' | 'execute_js' | 'list_elements';
     /** URL to navigate to (for 'navigate') */
     url?: string | undefined;
     /** CSS selector for click/type targets */
@@ -217,6 +241,8 @@ export class BrowserTool {
                     return await this.doClose();
                 case 'execute_js':
                     return await this.doExecuteJs(action.script || '');
+                case 'list_elements':
+                    return await this.doListElements();
                 default:
                     return `Unknown browser action: ${action.action}`;
             }
@@ -266,6 +292,7 @@ export class BrowserTool {
 
     private async doNavigate(url: string): Promise<string> {
         if (!url) return 'Error: No URL provided for navigate action.';
+        const startMs = Date.now();
 
         // Add https:// if no protocol specified
         if (!url.startsWith('http://') && !url.startsWith('https://')) {
@@ -273,11 +300,10 @@ export class BrowserTool {
         }
 
         // SANITIZE: Strip garbage characters GPT-4o hallucinates into URLs
-        // e.g., }]}]}, trailing braces, encoded JSON artifacts
-        url = url.replace(/[\{\}\[\]`"'<>\\|]/g, '');  // strip invalid URL chars
-        url = url.replace(/%7[BbDd]/g, '');             // strip encoded { } [ ]
-        url = url.replace(/\)+$/, '');                   // strip trailing parens
-        url = url.replace(/[.,;:!?]+$/, '');             // strip trailing punctuation
+        url = url.replace(/[\{\}\[\]`"'<>\\|]/g, '');
+        url = url.replace(/%7[BbDd]/g, '');
+        url = url.replace(/\)+$/, '');
+        url = url.replace(/[.,;:!?]+$/, '');
 
         // SECURITY: Check URL safety before navigating (SSRF, local file, internal network)
         const safety = checkUrlSafety(url);
@@ -286,78 +312,213 @@ export class BrowserTool {
             return `SECURITY BLOCK: Cannot navigate to "${url}". Reason: ${safety.reason}`;
         }
 
-        // ─── RELAY-ONLY: Headless browser is disabled. Use the attached relay browser. ───
+        // ─── TIER 1: Try Chrome Relay ───
         if (relayBridge.isRelayConnected()) {
             try {
                 console.log(`[BrowserTool] [Relay] Navigating via Chrome relay: ${url}`);
                 const result = await relayBridge.navigateAndRead(url);
                 this.lastNavigatedUrl = result.url;
-                const content = sanitizePageContent(result.content.substring(0, 3000));
+                const content = sanitizePageContent(result.content.substring(0, 4000));
+                logBrowserAccess({ action: 'navigate', target: url, path: 'relay', result: 'ok', ms: Date.now() - startMs });
                 return `Navigated to "${result.title}" (${result.url}) [via Chrome relay]\n\n${content}`;
             } catch (e: any) {
                 console.warn(`[BrowserTool] Relay navigation failed: ${e.message}`);
-                return `⚠️ Browser relay navigation failed: ${e.message}. The Browser Relay extension must be attached in Chrome. No headless fallback is available.`;
+                // Fall through to retry/headless
             }
         }
 
-        return `⚠️ No browser available. The Browser Relay extension is not connected. Please attach the OpenSpider Browser Relay in Chrome before using browser actions.`;
+        // ─── TIER 2: Wait for relay reconnect (15s) ───
+        const reconnected = await relayBridge.waitForRelay(15000);
+        if (reconnected) {
+            try {
+                console.log(`[BrowserTool] [Relay Retry] Navigating after reconnect: ${url}`);
+                const result = await relayBridge.navigateAndRead(url);
+                this.lastNavigatedUrl = result.url;
+                const content = sanitizePageContent(result.content.substring(0, 4000));
+                logBrowserAccess({ action: 'navigate', target: url, path: 'relay_retry', result: 'ok', ms: Date.now() - startMs });
+                return `Navigated to "${result.title}" (${result.url}) [via Chrome relay — reconnected]\n\n${content}`;
+            } catch (e: any) {
+                console.warn(`[BrowserTool] Relay retry navigation also failed: ${e.message}`);
+            }
+        }
+
+        // ─── TIER 3: Headless Playwright with stealth + cookies ───
+        try {
+            console.log(`[BrowserTool] [Headless] Falling back to stealth Playwright: ${url}`);
+            const page = await this.ensurePage();
+            const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+            await humanDelay(500, 1500);
+
+            // Check for bot protection
+            const botCheck = await detectBotProtection(page, response, url);
+            if (botCheck.blocked) {
+                const msg = `⚠️ Headless browser was blocked: ${botCheck.reason}. This site requires the Chrome Relay extension for authenticated access.`;
+                logBrowserAccess({ action: 'navigate', target: url, path: 'headless', result: 'error', ms: Date.now() - startMs, error: botCheck.reason });
+                return msg;
+            }
+
+            const title = await page.title();
+            const pageUrl = page.url();
+            this.lastNavigatedUrl = pageUrl;
+            const rawContent = await page.evaluate(() => {
+                const clone = document.body.cloneNode(true) as HTMLElement;
+                clone.querySelectorAll('script, style, noscript, iframe, svg').forEach(el => el.remove());
+                return (clone.innerText || clone.textContent || '').trim().replace(/\n{3,}/g, '\n\n').replace(/[ \t]+/g, ' ').substring(0, 4000);
+            });
+            const content = sanitizePageContent(rawContent);
+
+            // Count injected cookies for logging
+            const cookieFile = path.join(process.cwd(), 'workspace', 'browser_cookies.json');
+            let cookieCount = 0;
+            try { cookieCount = JSON.parse(fs.readFileSync(cookieFile, 'utf-8')).length; } catch { }
+
+            logBrowserAccess({ action: 'navigate', target: url, path: 'headless', cookies: cookieCount, result: 'ok', ms: Date.now() - startMs });
+            return `Navigated to "${title}" (${pageUrl}) [via headless browser — stealth mode, ${cookieCount} cookies loaded]\n\n${content}`;
+        } catch (e: any) {
+            logBrowserAccess({ action: 'navigate', target: url, path: 'headless', result: 'error', ms: Date.now() - startMs, error: e.message });
+            return `⚠️ All browser paths failed for "${url}". Relay: disconnected. Headless: ${e.message}`;
+        }
     }
 
     private async doClick(selector: string): Promise<string> {
         if (!selector) return 'Error: No selector provided for click action.';
+        const startMs = Date.now();
 
-        // ─── RELAY-ONLY ───
+        // ─── TIER 1: Try Chrome Relay ───
         if (relayBridge.isRelayConnected()) {
             try {
                 const result = await relayBridge.clickElement(selector);
+                logBrowserAccess({ action: 'click', target: selector, path: 'relay', result: 'ok', ms: Date.now() - startMs });
                 return result;
             } catch (e: any) {
                 console.warn(`[BrowserTool] Relay click failed: ${e.message}`);
-                return `⚠️ Relay click failed: ${e.message}. Try a different selector or ensure the Browser Relay is attached.`;
             }
         }
-        return `⚠️ No browser available. The Browser Relay extension is not connected.`;
+
+        // ─── TIER 2: Wait for relay reconnect ───
+        const reconnected = await relayBridge.waitForRelay(15000);
+        if (reconnected) {
+            try {
+                const result = await relayBridge.clickElement(selector);
+                logBrowserAccess({ action: 'click', target: selector, path: 'relay_retry', result: 'ok', ms: Date.now() - startMs });
+                return result;
+            } catch (e: any) {
+                console.warn(`[BrowserTool] Relay retry click failed: ${e.message}`);
+            }
+        }
+
+        // ─── TIER 3: Headless Playwright ───
+        try {
+            const page = await this.ensurePage();
+            await page.click(selector, { timeout: 10000 });
+            await humanDelay(500, 1000);
+            logBrowserAccess({ action: 'click', target: selector, path: 'headless', result: 'ok', ms: Date.now() - startMs });
+            return `Clicked element: ${selector} [via headless browser]`;
+        } catch (e: any) {
+            logBrowserAccess({ action: 'click', target: selector, path: 'headless', result: 'error', ms: Date.now() - startMs, error: e.message });
+            return `⚠️ Click failed on all browser paths. Target: ${selector}. Error: ${e.message}`;
+        }
     }
 
     private async doType(selector: string, text: string): Promise<string> {
         if (!selector) return 'Error: No selector provided for type action.';
         if (!text) return 'Error: No text provided for type action.';
+        const startMs = Date.now();
 
-        // ─── RELAY-ONLY ───
+        // ─── TIER 1: Try Chrome Relay ───
         if (relayBridge.isRelayConnected()) {
             try {
                 const result = await relayBridge.typeText(selector, text);
+                logBrowserAccess({ action: 'type', target: selector, path: 'relay', result: 'ok', ms: Date.now() - startMs });
                 return result;
             } catch (e: any) {
                 console.warn(`[BrowserTool] Relay type failed: ${e.message}`);
-                return `⚠️ Relay type failed: ${e.message}. Try a different selector or ensure the Browser Relay is attached.`;
             }
         }
-        return `⚠️ No browser available. The Browser Relay extension is not connected.`;
+
+        // ─── TIER 2: Wait for relay reconnect ───
+        const reconnected = await relayBridge.waitForRelay(15000);
+        if (reconnected) {
+            try {
+                const result = await relayBridge.typeText(selector, text);
+                logBrowserAccess({ action: 'type', target: selector, path: 'relay_retry', result: 'ok', ms: Date.now() - startMs });
+                return result;
+            } catch (e: any) {
+                console.warn(`[BrowserTool] Relay retry type failed: ${e.message}`);
+            }
+        }
+
+        // ─── TIER 3: Headless Playwright ───
+        try {
+            const page = await this.ensurePage();
+            await page.fill(selector, text, { timeout: 10000 });
+            await humanDelay(300, 600);
+            logBrowserAccess({ action: 'type', target: selector, path: 'headless', result: 'ok', ms: Date.now() - startMs });
+            return `Typed "${text}" into ${selector} [via headless browser]`;
+        } catch (e: any) {
+            logBrowserAccess({ action: 'type', target: selector, path: 'headless', result: 'error', ms: Date.now() - startMs, error: e.message });
+            return `⚠️ Type failed on all browser paths. Target: ${selector}. Error: ${e.message}`;
+        }
     }
 
     private async doReadContent(selector?: string): Promise<string> {
-        // ─── RELAY-ONLY ───
+        const startMs = Date.now();
+
+        // ─── TIER 1: Try Chrome Relay ───
         if (relayBridge.isRelayConnected()) {
             try {
-                // Auto-sync: if relay's page doesn't match last navigation, navigate relay first
                 await this.syncRelayIfNeeded();
-                const result = await relayBridge.readContent();
+                const result = await relayBridge.readContent(selector);
                 let content = result.content;
-                const MAX = 3000;
+                const MAX = 5000;
                 if (content.length > MAX) {
-                    const head = content.substring(0, 2000);
-                    const tail = content.substring(content.length - 1000);
-                    content = `${head}\n\n... [CONTENT TRUNCATED] ...\n\n${tail}`;
+                    const head = content.substring(0, 3500);
+                    const tail = content.substring(content.length - 1500);
+                    content = `${head}\n\n... [CONTENT TRUNCATED — use read_content with a CSS selector like "main" or "table" to get specific data] ...\n\n${tail}`;
                 }
                 content = sanitizePageContent(content);
+                logBrowserAccess({ action: 'read_content', target: selector || '(full page)', path: 'relay', result: 'ok', ms: Date.now() - startMs });
                 return `Page: "${result.title}" (${result.url})\n\n${content}`;
             } catch (e: any) {
                 console.warn(`[BrowserTool] Relay read failed: ${e.message}`);
-                return `⚠️ Relay read failed: ${e.message}. Try again — the page may still be loading.`;
             }
         }
-        return `⚠️ No browser available. The Browser Relay extension is not connected.`;
+
+        // ─── TIER 2: Wait for relay reconnect ───
+        const reconnected = await relayBridge.waitForRelay(15000);
+        if (reconnected) {
+            try {
+                const result = await relayBridge.readContent(selector);
+                let content = result.content;
+                if (content.length > 5000) {
+                    content = content.substring(0, 3500) + '\n\n... [TRUNCATED] ...\n\n' + content.substring(content.length - 1500);
+                }
+                content = sanitizePageContent(content);
+                logBrowserAccess({ action: 'read_content', target: selector || '(full page)', path: 'relay_retry', result: 'ok', ms: Date.now() - startMs });
+                return `Page: "${result.title}" (${result.url})\n\n${content}`;
+            } catch (e: any) {
+                console.warn(`[BrowserTool] Relay retry read failed: ${e.message}`);
+            }
+        }
+
+        // ─── TIER 3: Headless Playwright ───
+        try {
+            const page = await this.ensurePage();
+            const title = await page.title();
+            const pageUrl = page.url();
+            const rawContent = await page.evaluate((sel) => {
+                const root = sel ? (document.querySelector(sel) || document.body) : document.body;
+                const clone = root.cloneNode(true) as HTMLElement;
+                clone.querySelectorAll('script, style, noscript, iframe, svg').forEach(el => el.remove());
+                return (clone.innerText || clone.textContent || '').trim().replace(/\n{3,}/g, '\n\n').replace(/[ \t]+/g, ' ').substring(0, 5000);
+            }, selector || null);
+            const content = sanitizePageContent(rawContent);
+            logBrowserAccess({ action: 'read_content', target: selector || '(full page)', path: 'headless', result: 'ok', ms: Date.now() - startMs });
+            return `Page: "${title}" (${pageUrl}) [via headless browser]\n\n${content}`;
+        } catch (e: any) {
+            logBrowserAccess({ action: 'read_content', target: selector || '(full page)', path: 'headless', result: 'error', ms: Date.now() - startMs, error: e.message });
+            return `⚠️ Read failed on all browser paths. Error: ${e.message}`;
+        }
     }
 
     private async doScreenshot(): Promise<string> {
@@ -401,15 +562,13 @@ export class BrowserTool {
     }
 
     private async doWaitForUser(message: string): Promise<string> {
-        // ─── RELAY-ONLY ───
+        // Wait-for-user only makes sense with the relay (user's real Chrome)
         if (relayBridge.isRelayConnected()) {
             console.log(`\n🔴 [BrowserTool] WAITING FOR USER ACTION (via relay): ${message}`);
             console.log(`   The user's Chrome relay is connected. Waiting 30 seconds for user to complete the action.\n`);
 
-            // Wait for user to complete action in their Chrome browser
             await new Promise(r => setTimeout(r, 30000));
 
-            // Read the relay page state after waiting
             try {
                 const result = await relayBridge.readContent();
                 return `User interaction completed. Page is now: "${result.title}" (${result.url}). You can now proceed with reading content or navigating further.`;
@@ -418,20 +577,48 @@ export class BrowserTool {
             }
         }
 
-        return `⚠️ No browser available. The Browser Relay extension is not connected.`;
+        // In headless mode, we can't wait for user interaction
+        return `⚠️ Wait-for-user requires the Chrome Relay extension (user's real browser). Currently running in headless fallback mode. Try an alternative approach that doesn't require manual user interaction.`;
     }
 
     private async doScroll(direction: 'up' | 'down'): Promise<string> {
-        // ─── RELAY-ONLY ───
+        const startMs = Date.now();
+
+        // ─── TIER 1: Try Chrome Relay ───
         if (relayBridge.isRelayConnected()) {
             try {
-                return await relayBridge.scrollPage(direction);
+                const result = await relayBridge.scrollPage(direction);
+                logBrowserAccess({ action: 'scroll', target: direction, path: 'relay', result: 'ok', ms: Date.now() - startMs });
+                return result;
             } catch (e: any) {
                 console.warn(`[BrowserTool] Relay scroll failed: ${e.message}`);
-                return `⚠️ Relay scroll failed: ${e.message}. Ensure the Browser Relay is attached.`;
             }
         }
-        return `⚠️ No browser available. The Browser Relay extension is not connected.`;
+
+        // ─── TIER 2: Wait for relay reconnect ───
+        const reconnected = await relayBridge.waitForRelay(15000);
+        if (reconnected) {
+            try {
+                const result = await relayBridge.scrollPage(direction);
+                logBrowserAccess({ action: 'scroll', target: direction, path: 'relay_retry', result: 'ok', ms: Date.now() - startMs });
+                return result;
+            } catch (e: any) {
+                console.warn(`[BrowserTool] Relay retry scroll failed: ${e.message}`);
+            }
+        }
+
+        // ─── TIER 3: Headless Playwright ───
+        try {
+            const page = await this.ensurePage();
+            const amount = direction === 'up' ? -500 : 500;
+            await page.evaluate((amt) => window.scrollBy(0, amt), amount);
+            await humanDelay(300, 600);
+            logBrowserAccess({ action: 'scroll', target: direction, path: 'headless', result: 'ok', ms: Date.now() - startMs });
+            return `Scrolled ${direction} [via headless browser]`;
+        } catch (e: any) {
+            logBrowserAccess({ action: 'scroll', target: direction, path: 'headless', result: 'error', ms: Date.now() - startMs, error: e.message });
+            return `⚠️ Scroll failed on all browser paths. Error: ${e.message}`;
+        }
     }
 
     /**
@@ -471,14 +658,24 @@ export class BrowserTool {
 
     private async doExecuteJs(script: string): Promise<string> {
         if (!script) return 'Error: No script provided for execute_js action.';
+
+        // ─── RELAY-FIRST: Use relay if connected ───
+        if (relayBridge.isRelayConnected()) {
+            try {
+                console.log(`[BrowserTool] [Relay] Executing custom JS via relay.`);
+                return await relayBridge.executeJs(script);
+            } catch (e: any) {
+                console.warn(`[BrowserTool] Relay execute_js failed: ${e.message}`);
+                return `⚠️ Relay JS execution failed: ${e.message}. Try again or simplify the script.`;
+            }
+        }
+
+        // Fallback: Playwright (if available)
         const page = await this.ensurePage();
 
         try {
-            console.log(`[BrowserTool] Executing custom JS snippet.`);
-            // Run the script in the page context
+            console.log(`[BrowserTool] Executing custom JS snippet via Playwright.`);
             const result = await page.evaluate(async (scriptContent) => {
-                // If the script contains an explicit return or await, try wrapping it in an async IIFE
-                const isAsync = scriptContent.includes('await');
                 try {
                     const func = new Function(`
                         return (async () => { 
@@ -495,14 +692,69 @@ export class BrowserTool {
                 }
             }, script);
 
-            await humanDelay(300, 800); // Give the DOM a moment to settle if the JS triggered mutations
+            await humanDelay(300, 800);
 
-            // Format the result nicely
             if (result === undefined) return `JavaScript executed successfully with no return value.`;
             if (typeof result === 'object') return `JavaScript executed successfully. Result: ${JSON.stringify(result, null, 2)}`;
             return `JavaScript executed successfully. Result: ${result}`;
         } catch (e: any) {
             return `JavaScript execution failed: ${e.message}`;
+        }
+    }
+
+    private async doListElements(): Promise<string> {
+        const startMs = Date.now();
+
+        // ─── TIER 1: Try Chrome Relay ───
+        if (relayBridge.isRelayConnected()) {
+            try {
+                const result = await relayBridge.listClickableElements();
+                logBrowserAccess({ action: 'list_elements', target: '(page)', path: 'relay', result: 'ok', ms: Date.now() - startMs });
+                return result;
+            } catch (e: any) {
+                console.warn(`[BrowserTool] Relay list_elements failed: ${e.message}`);
+            }
+        }
+
+        // ─── TIER 2: Wait for relay reconnect ───
+        const reconnected = await relayBridge.waitForRelay(15000);
+        if (reconnected) {
+            try {
+                const result = await relayBridge.listClickableElements();
+                logBrowserAccess({ action: 'list_elements', target: '(page)', path: 'relay_retry', result: 'ok', ms: Date.now() - startMs });
+                return result;
+            } catch (e: any) {
+                console.warn(`[BrowserTool] Relay retry list_elements failed: ${e.message}`);
+            }
+        }
+
+        // ─── TIER 3: Headless Playwright ───
+        try {
+            const page = await this.ensurePage();
+            const elements = await page.evaluate(() => {
+                const items: string[] = [];
+                const seen = new Set<string>();
+                const els = document.querySelectorAll('a, button, [role="button"], [role="link"], input[type="submit"]');
+                els.forEach((el, i) => {
+                    if (i > 80) return;
+                    const rect = (el as HTMLElement).getBoundingClientRect();
+                    if (rect.width === 0 || rect.height === 0) return;
+                    let text = (el.textContent || '').trim().replace(/\s+/g, ' ').substring(0, 80);
+                    if (!text) text = el.getAttribute('aria-label') || '';
+                    if (!text) return;
+                    const key = text.toLowerCase().substring(0, 40);
+                    if (seen.has(key)) return;
+                    seen.add(key);
+                    const tag = el.tagName.toLowerCase();
+                    items.push(`[${tag}] "${text}"`);
+                });
+                return items.join('\n');
+            });
+            logBrowserAccess({ action: 'list_elements', target: '(page)', path: 'headless', result: 'ok', ms: Date.now() - startMs });
+            return elements ? `Clickable elements on this page [via headless]:\n${elements}` : 'No clickable elements found.';
+        } catch (e: any) {
+            logBrowserAccess({ action: 'list_elements', target: '(page)', path: 'headless', result: 'error', ms: Date.now() - startMs, error: e.message });
+            return `⚠️ List elements failed on all browser paths. Error: ${e.message}`;
         }
     }
 }

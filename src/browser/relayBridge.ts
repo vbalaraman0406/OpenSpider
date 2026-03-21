@@ -16,12 +16,64 @@ let relayClient: WebSocket | null = null;
 let commandId = 1000;
 const pendingCommands = new Map<number, { resolve: (result: any) => void; reject: (err: Error) => void }>();
 
+// Reconnection event callbacks
+const reconnectCallbacks: Array<() => void> = [];
+
+/**
+ * Wait for the relay to reconnect within a timeout window.
+ * Returns true if relay reconnected, false if timed out.
+ */
+export function waitForRelay(maxMs = 15000, pollMs = 2000): Promise<boolean> {
+    if (isRelayConnected()) return Promise.resolve(true);
+
+    return new Promise<boolean>((resolve) => {
+        const start = Date.now();
+        console.log(`[RelayBridge] ⏳ Waiting up to ${maxMs / 1000}s for relay to reconnect...`);
+
+        // Fast path: listen for reconnect event
+        const onReconnect = () => {
+            clearInterval(poll);
+            clearTimeout(timeout);
+            console.log(`[RelayBridge] ✅ Relay reconnected after ${Date.now() - start}ms`);
+            resolve(true);
+        };
+        reconnectCallbacks.push(onReconnect);
+
+        // Polling fallback
+        const poll = setInterval(() => {
+            if (isRelayConnected()) {
+                clearInterval(poll);
+                clearTimeout(timeout);
+                const idx = reconnectCallbacks.indexOf(onReconnect);
+                if (idx >= 0) reconnectCallbacks.splice(idx, 1);
+                console.log(`[RelayBridge] ✅ Relay reconnected after ${Date.now() - start}ms`);
+                resolve(true);
+            }
+        }, pollMs);
+
+        // Hard timeout
+        const timeout = setTimeout(() => {
+            clearInterval(poll);
+            const idx = reconnectCallbacks.indexOf(onReconnect);
+            if (idx >= 0) reconnectCallbacks.splice(idx, 1);
+            console.log(`[RelayBridge] ⏰ Relay did not reconnect within ${maxMs / 1000}s — falling back to headless`);
+            resolve(false);
+        }, maxMs);
+    });
+}
+
 /**
  * Register a WebSocket client as the browser relay extension.
  */
 export function registerRelay(ws: WebSocket): void {
     relayClient = ws;
     console.log('[RelayBridge] 🔗 Browser relay extension connected.');
+
+    // Fire any pending reconnect waiters
+    while (reconnectCallbacks.length > 0) {
+        const cb = reconnectCallbacks.shift();
+        if (cb) cb();
+    }
 
     // Listen for CDP responses from the extension
     ws.on('message', (data) => {
@@ -80,6 +132,68 @@ export async function sendCommand(method: string, params: Record<string, any> = 
     });
 }
 
+// ─── SMART WAIT UTILITIES ────────────────────────────────────────────────────
+
+/**
+ * Poll the browser until document.readyState === 'complete', then wait
+ * an extra buffer for SPA hydration. Much smarter than a fixed delay.
+ * 
+ * @param maxWaitMs   Hard timeout (default 12s)
+ * @param hydrationMs Extra wait after readyState complete (default 1500ms)
+ * @param pollMs      Polling interval (default 500ms)
+ */
+async function waitForPageReady(maxWaitMs = 12000, hydrationMs = 1500, pollMs = 500): Promise<void> {
+    const start = Date.now();
+    while (Date.now() - start < maxWaitMs) {
+        try {
+            const result = await sendCommand('Runtime.evaluate', {
+                expression: `document.readyState`,
+                returnByValue: true
+            });
+            if (result.result?.value === 'complete') {
+                // Page is loaded — wait a bit more for SPA JS hydration
+                await new Promise(r => setTimeout(r, hydrationMs));
+                return;
+            }
+        } catch {
+            // Eval can fail during navigation — just retry
+        }
+        await new Promise(r => setTimeout(r, pollMs));
+    }
+    // Hard timeout reached — proceed anyway
+    console.warn('[RelayBridge] waitForPageReady hard timeout reached');
+}
+
+/**
+ * Post-click smart wait: detect URL change (navigation) vs in-page SPA update.
+ * 
+ * @param previousUrl  URL before the click
+ */
+async function waitAfterClick(previousUrl: string): Promise<void> {
+    // Short initial settle
+    await new Promise(r => setTimeout(r, 400));
+
+    try {
+        const result = await sendCommand('Runtime.evaluate', {
+            expression: `window.location.href`,
+            returnByValue: true
+        });
+        const currentUrl = result.result?.value || '';
+
+        if (currentUrl !== previousUrl) {
+            // URL changed — full navigation happened. Wait for page ready.
+            console.log(`[RelayBridge] Post-click navigation detected: ${previousUrl} → ${currentUrl}`);
+            await waitForPageReady(8000, 1000);
+        } else {
+            // Same URL — likely an SPA in-page update. Wait for DOM mutations.
+            await new Promise(r => setTimeout(r, 1500));
+        }
+    } catch {
+        // If we can't read URL (page crashed/navigated), just wait
+        await new Promise(r => setTimeout(r, 3000));
+    }
+}
+
 // ─── HIGH-LEVEL BROWSER ACTIONS ──────────────────────────────────────────────
 
 /**
@@ -89,28 +203,79 @@ export async function navigateAndRead(url: string): Promise<{ title: string; url
     await sendCommand('Page.enable');
     await sendCommand('Page.navigate', { url });
 
-    // Wait for SPA content to render. Yahoo Fantasy, Gmail etc. need more time.
-    await new Promise(r => setTimeout(r, 8000));
+    // Smart wait: poll for document.readyState instead of fixed 8s delay
+    await waitForPageReady();
 
     return readContent();
 }
 
 /**
  * Read the current page content from the relay browser.
+ * Optionally accepts a CSS selector to extract only a specific section.
+ * Uses smart content prioritization: tables/data first, nav chrome last.
  */
-export async function readContent(): Promise<{ title: string; url: string; content: string }> {
+export async function readContent(selector?: string): Promise<{ title: string; url: string; content: string }> {
+    const escapedSelector = selector ? selector.replace(/'/g, "\\'") : '';
+    
     const evalResult = await sendCommand('Runtime.evaluate', {
         expression: `JSON.stringify({
             title: document.title,
             url: window.location.href,
             content: (() => {
-                const clone = document.body.cloneNode(true);
-                // Only remove truly non-content elements — keep nav, header, footer, aside
-                // because many dashboards (Yahoo Fantasy, etc.) render user data inside these
+                // If a selector is provided, extract only that section
+                const targetSelector = '${escapedSelector}';
+                let root;
+                if (targetSelector) {
+                    root = document.querySelector(targetSelector);
+                    if (!root) {
+                        // Try common alternatives
+                        root = document.querySelector('main') || document.querySelector('[role="main"]') || document.querySelector('#content') || document.querySelector('.content');
+                    }
+                }
+                if (!root) root = document.body;
+                
+                const clone = root.cloneNode(true);
+                // Remove non-content elements
                 clone.querySelectorAll('script, style, noscript, iframe, svg, [class*="ad-container"], [class*="advertisement"], [class*="sponsored"], [id*="google_ads"]').forEach(el => el.remove());
-                let text = clone.innerText || clone.textContent || '';
+                
+                // SMART CONTENT PRIORITIZATION:
+                // Extract data-rich content first (tables, lists), then general text.
+                // This ensures truncation cuts navigation chrome, not user data.
+                const parts = [];
+                
+                // Priority 1: Tables (most data-dense content)
+                clone.querySelectorAll('table').forEach(table => {
+                    const rows = [];
+                    table.querySelectorAll('tr').forEach(tr => {
+                        const cells = [];
+                        tr.querySelectorAll('th, td').forEach(cell => {
+                            cells.push((cell.textContent || '').trim().replace(/\\s+/g, ' '));
+                        });
+                        if (cells.length > 0) rows.push(cells.join(' | '));
+                    });
+                    if (rows.length > 0) {
+                        parts.push('[TABLE]\\n' + rows.join('\\n'));
+                        table.remove(); // Don't double-count
+                    }
+                });
+                
+                // Priority 2: Main content area
+                const mainEls = clone.querySelectorAll('main, [role="main"], article, .content, #content');
+                mainEls.forEach(el => {
+                    const text = (el.innerText || el.textContent || '').trim();
+                    if (text.length > 50) {
+                        parts.push(text);
+                        el.remove(); // Don't double-count
+                    }
+                });
+                
+                // Priority 3: Everything else (nav, header, footer — lowest priority)
+                const remaining = (clone.innerText || clone.textContent || '').trim();
+                if (remaining.length > 20) parts.push(remaining);
+                
+                let text = parts.join('\\n\\n');
                 text = text.replace(/\\n{3,}/g, '\\n\\n').replace(/[ \\t]+/g, ' ').trim();
-                return text.substring(0, 8000);
+                return text.substring(0, 10000);
             })()
         })`,
         returnByValue: true
@@ -129,9 +294,60 @@ export async function readContent(): Promise<{ title: string; url: string; conte
 }
 
 /**
+ * List all visible clickable elements on the current page.
+ * Returns a structured text list the agent can use to pick click targets.
+ */
+export async function listClickableElements(): Promise<string> {
+    const evalResult = await sendCommand('Runtime.evaluate', {
+        expression: `(() => {
+            const items = [];
+            const seen = new Set();
+            const els = document.querySelectorAll('a, button, [role="button"], [role="link"], [role="tab"], [role="menuitem"], input[type="submit"], input[type="button"], [onclick], [data-click], summary');
+            els.forEach((el, i) => {
+                if (i > 80) return; // Cap to avoid token overflow
+                const rect = el.getBoundingClientRect();
+                // Skip hidden/off-screen elements
+                if (rect.width === 0 || rect.height === 0 || rect.top > window.innerHeight + 500) return;
+                const tag = el.tagName.toLowerCase();
+                let text = (el.textContent || '').trim().replace(/\\s+/g, ' ').substring(0, 80);
+                if (!text) text = el.getAttribute('aria-label') || el.getAttribute('title') || el.getAttribute('alt') || '';
+                if (!text) return; // Skip elements with no discernible text
+                // Deduplicate by text
+                const key = text.toLowerCase().substring(0, 40);
+                if (seen.has(key)) return;
+                seen.add(key);
+                let info = tag;
+                if (tag === 'a') {
+                    const href = el.getAttribute('href') || '';
+                    if (href && href !== '#' && !href.startsWith('javascript:')) {
+                        info += ' href="' + href.substring(0, 60) + '"';
+                    }
+                }
+                items.push('[' + info + '] "' + text + '"');
+            });
+            return items.join('\\n');
+        })()`,
+        returnByValue: true
+    });
+
+    try {
+        const list = evalResult.result?.value || '';
+        if (!list) return 'No clickable elements found on the page.';
+        return `Clickable elements on this page:\\n${list}`;
+    } catch {
+        return 'Failed to list clickable elements.';
+    }
+}
+
+/**
  * Click an element in the relay browser using a CSS selector OR text content.
- * Handles: CSS selectors, comma-separated selectors, jQuery-style :contains(),
- * and plain text matching as progressive fallbacks.
+ * 
+ * CLICK STRATEGY (progressive fallback):
+ *   1. Try CSS selector(s)
+ *   2. Try text-based search on clickable elements
+ *   3. Try aria-label search
+ *   4. For the found element: get its bounding box and use CDP Input.dispatchMouseEvent
+ *   5. If CDP mouse dispatch fails, fall back to el.click()
  */
 export async function clickElement(selector: string): Promise<string> {
     // Pre-process on server side: extract text hints from :contains() patterns
@@ -155,6 +371,7 @@ export async function clickElement(selector: string): Promise<string> {
     const escapedTexts = allTextSearches.map(t => (t || '').replace(/'/g, "\\'").replace(/\\/g, '\\\\')).join('|||');
     const escapedCss = cssSelectors.join('|||');
 
+    // STEP 1: Find the element and get its bounding box coordinates
     const evalResult = await sendCommand('Runtime.evaluate', {
         expression: `(() => {
             let el = null;
@@ -196,21 +413,123 @@ export async function clickElement(selector: string): Promise<string> {
             }
             
             if (!el) return JSON.stringify({ success: false, error: 'Not found. Tried CSS: [${escapedCss}] and text: [${escapedTexts}]' });
+            
+            // Get bounding box for CDP mouse click
             el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            el.click();
-            return JSON.stringify({ success: true, tag: el.tagName, text: (el.textContent || '').substring(0, 100) });
+            const rect = el.getBoundingClientRect();
+            const cx = Math.round(rect.left + rect.width / 2);
+            const cy = Math.round(rect.top + rect.height / 2);
+            const pageUrl = window.location.href;
+            
+            return JSON.stringify({ 
+                success: true, 
+                tag: el.tagName, 
+                text: (el.textContent || '').trim().substring(0, 100),
+                cx: cx,
+                cy: cy,
+                pageUrl: pageUrl,
+                needsCdpClick: true
+            });
         })()`,
         returnByValue: true
     });
 
     try {
         const data = JSON.parse(evalResult.result?.value || '{}');
-        if (!data.success) return `Error: ${data.error}. TIP: Use the EXACT visible text only, e.g. click "Players" not a:contains('Players').`;
-        // Wait for any navigation/page update
-        await new Promise(r => setTimeout(r, 2000));
+        if (!data.success) return `Error: ${data.error}. TIP: Use the EXACT visible text only, e.g. click "Players" not a:contains('Players'). Try list_elements to see all clickable items.`;
+
+        const previousUrl = data.pageUrl || '';
+        let clicked = false;
+
+        // STEP 2: Use CDP Input.dispatchMouseEvent for a real browser-level click
+        // This works on React/Vue/Angular SPAs where el.click() fails
+        if (data.needsCdpClick && data.cx !== undefined && data.cy !== undefined) {
+            try {
+                // Simulate a full mouse click: mousePressed → mouseReleased
+                await sendCommand('Input.dispatchMouseEvent', {
+                    type: 'mousePressed',
+                    x: data.cx,
+                    y: data.cy,
+                    button: 'left',
+                    clickCount: 1
+                });
+                await new Promise(r => setTimeout(r, 50));
+                await sendCommand('Input.dispatchMouseEvent', {
+                    type: 'mouseReleased',
+                    x: data.cx,
+                    y: data.cy,
+                    button: 'left',
+                    clickCount: 1
+                });
+                clicked = true;
+                console.log(`[RelayBridge] CDP mouse click at (${data.cx}, ${data.cy}) on ${data.tag}: "${data.text?.substring(0, 40)}"`);
+            } catch (e: any) {
+                console.warn(`[RelayBridge] CDP mouse click failed: ${e.message}. Falling back to el.click()`);
+            }
+        }
+
+        // STEP 3: Fallback — DOM el.click() if CDP mouse events failed
+        if (!clicked) {
+            await sendCommand('Runtime.evaluate', {
+                expression: `(() => {
+                    let el = null;
+                    const cssSelectors = '${escapedCss}'.split('|||').filter(s => s.length > 0);
+                    for (const sel of cssSelectors) {
+                        try { el = document.querySelector(sel); } catch(e) {}
+                        if (el) break;
+                    }
+                    if (!el) {
+                        const textSearches = '${escapedTexts}'.split('|||').filter(s => s.length > 0);
+                        const candidates = [...document.querySelectorAll('a, button, [role="button"], [role="link"], [role="tab"], [role="menuitem"], li, span')];
+                        for (const searchText of textSearches) {
+                            const st = searchText.toLowerCase().trim();
+                            if (st.includes(':') || st.includes('[') || st.includes('.') || st.includes('#')) continue;
+                            el = candidates.find(c => {
+                                const t = (c.textContent || '').trim().toLowerCase();
+                                return t === st || (st.length > 2 && t.includes(st));
+                            }) || null;
+                            if (el) break;
+                        }
+                    }
+                    if (el) el.click();
+                })()`,
+                returnByValue: true
+            });
+            console.log(`[RelayBridge] DOM fallback click on ${data.tag}: "${data.text?.substring(0, 40)}"`);
+        }
+
+        // STEP 4: Smart post-click wait
+        await waitAfterClick(previousUrl);
+
         return `Clicked ${data.tag}: "${data.text}"`;
     } catch {
         return 'Click action completed';
+    }
+}
+
+/**
+ * Execute arbitrary JavaScript in the relay browser.
+ */
+export async function executeJs(script: string): Promise<string> {
+    const evalResult = await sendCommand('Runtime.evaluate', {
+        expression: `(async () => {
+            try {
+                ${script}
+            } catch(e) {
+                return 'JS Error: ' + e.message;
+            }
+        })()`,
+        returnByValue: true,
+        awaitPromise: true
+    });
+
+    try {
+        const value = evalResult.result?.value;
+        if (value === undefined) return 'JavaScript executed successfully with no return value.';
+        if (typeof value === 'object') return `JavaScript executed successfully. Result: ${JSON.stringify(value, null, 2)}`;
+        return `JavaScript executed successfully. Result: ${value}`;
+    } catch {
+        return 'JavaScript execution completed.';
     }
 }
 
