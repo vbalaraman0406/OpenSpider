@@ -418,12 +418,32 @@ ${context.join('\n')}
                                 );
 
                                 if (existingIndex !== -1) {
-                                    // ─── UPDATE existing job — PRESERVE recipients & schedule ───
+                                    // ─── UPDATE existing job — APPEND, don't replace ───
+                                    // The agent often rewrites the entire prompt from scratch,
+                                    // losing critical details (URLs, site names, check logic).
+                                    // Instead: keep the existing prompt and APPEND new instructions.
                                     const existing = jobs[existingIndex]!;
                                     const oldPrompt = existing.prompt || '';
 
-                                    // Extract delivery instructions from old prompt to preserve them
-                                    // These patterns match the delivery lines that the dashboard/agent embed
+                                    // Determine if this is a FULL rewrite or a PARTIAL update:
+                                    // - If the new prompt is very long (>80% of old), treat as full rewrite
+                                    // - If the new prompt is short (a modification), append it
+                                    const isFullRewrite = taskPrompt.length > oldPrompt.length * 0.8;
+
+                                    let mergedPrompt: string;
+                                    if (isFullRewrite) {
+                                        // Full rewrite — use new prompt but preserve delivery instructions
+                                        mergedPrompt = taskPrompt;
+                                        console.log(`[Worker - ${this.role}] Full prompt rewrite detected (${taskPrompt.length} chars vs ${oldPrompt.length} old).`);
+                                    } else {
+                                        // Partial update — append new instructions to existing prompt
+                                        // Remove any trailing period/whitespace and add the addendum
+                                        const cleanOld = oldPrompt.replace(/\s*$/, '');
+                                        mergedPrompt = `${cleanOld}\n\nADDITIONAL INSTRUCTIONS: ${taskPrompt}`;
+                                        console.log(`[Worker - ${this.role}] Appended modification to existing prompt (kept ${oldPrompt.length} chars, added ${taskPrompt.length} chars).`);
+                                    }
+
+                                    // Extract and preserve delivery instructions from old prompt
                                     const deliveryPatterns = [
                                         /Also send (?:the results |this |)(?:to |via )(?:the )?WhatsApp group\s+"[^"]+"\s*\(group JID:\s*\d+@g\.us\)\./gi,
                                         /Also send via WhatsApp to \d+@s\.whatsapp\.net\./gi,
@@ -431,25 +451,19 @@ ${context.join('\n')}
                                         /(?:Also )?[Ss]end (?:this |the |a |)(?:message |results? |report |update |)(?:to |via )(?:email |)(?:to )?[a-zA-Z0-9._%+-]+@(?:gmail|yahoo|hotmail|outlook|icloud|protonmail|aol)\.[a-z]{2,}/gi,
                                     ];
 
-                                    // Collect delivery instructions from old prompt
                                     const oldDeliveryInstructions: string[] = [];
                                     for (const pattern of deliveryPatterns) {
                                         const matches = oldPrompt.match(pattern);
                                         if (matches) oldDeliveryInstructions.push(...matches);
                                     }
 
-                                    // Check if new prompt already contains delivery instructions
-                                    const newHasGroupJid = /\d+@g\.us/.test(taskPrompt);
-                                    const newHasDmJid = /\d+@s\.whatsapp\.net/.test(taskPrompt);
-                                    const newHasWhatsApp = /whatsapp/i.test(taskPrompt);
-
-                                    // Build updated prompt: new content + preserved delivery instructions
-                                    let mergedPrompt = taskPrompt;
-                                    if (oldDeliveryInstructions.length > 0 && !newHasGroupJid && !newHasDmJid) {
-                                        // Agent didn't include any delivery instructions — preserve old ones
+                                    // Re-append delivery instructions if they're missing from merged prompt
+                                    const hasGroupJid = /\d+@g\.us/.test(mergedPrompt);
+                                    const hasDmJid = /\d+@s\.whatsapp\.net/.test(mergedPrompt);
+                                    if (oldDeliveryInstructions.length > 0 && !hasGroupJid && !hasDmJid) {
                                         const uniqueDelivery = [...new Set(oldDeliveryInstructions)];
-                                        mergedPrompt = taskPrompt.replace(/\.\s*$/, '.') + ' ' + uniqueDelivery.join(' ');
-                                        console.log(`[Worker - ${this.role}] Preserved ${uniqueDelivery.length} delivery instruction(s) from existing job.`);
+                                        mergedPrompt = mergedPrompt.replace(/\s*$/, '') + ' ' + uniqueDelivery.join(' ');
+                                        console.log(`[Worker - ${this.role}] Preserved ${uniqueDelivery.length} delivery instruction(s).`);
                                     }
 
                                     existing.prompt = mergedPrompt;
@@ -469,7 +483,7 @@ ${context.join('\n')}
                                         ? `daily at ${existing.preferredTime}`
                                         : `every ${existing.intervalHours}h`;
                                     console.log(`[Worker - ${this.role}] Updated existing cron job: "${jobName}" → ${scheduleStr}`);
-                                    result = `✅ Successfully updated existing cron job!\n- Name: ${jobName}\n- Schedule: ${scheduleStr} (${scheduleExplicitlyProvided ? 'updated' : 'preserved'})\n- New Task: ${mergedPrompt.substring(0, 100)}...\n- Recipients: ${oldDeliveryInstructions.length > 0 && !newHasGroupJid && !newHasDmJid ? 'preserved from existing job' : 'as specified'}\n- Status: ${existing.status || 'enabled'}\n- ID: ${existing.id}`;
+                                    result = `✅ Successfully updated existing cron job!\n- Name: ${jobName}\n- Schedule: ${scheduleStr} (${scheduleExplicitlyProvided ? 'updated' : 'preserved'})\n- Update type: ${isFullRewrite ? 'full rewrite' : 'appended to existing prompt'}\n- Recipients: ${oldDeliveryInstructions.length > 0 && !hasGroupJid && !hasDmJid ? 'preserved from existing job' : 'as specified'}\n- Status: ${existing.status || 'enabled'}\n- ID: ${existing.id}`;
                                 } else {
                                     // CREATE new job
                                     const cronConfigPath = path.join(process.cwd(), 'workspace', 'cron_config.json');
