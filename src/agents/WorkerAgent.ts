@@ -89,7 +89,7 @@ Available tools you can request in your JSON response:
     - Run JS:   { "action": "browse_web", "command": "execute_js", "content": "return document.querySelector('.score').innerText" }  ← run custom JS to extract specific data
     - Close:    { "action": "browse_web", "command": "close" }
 - wait_for_user: { "message": "Please log in to your account" } (Pause and ask the user to do something in the browser, like logging in. Waits up to 120 seconds.)
-- schedule_task: { "command": "24", "content": "Fetch Vancouver WA weather and send to user via WhatsApp", "filename": "Daily Weather Brief" } (Schedule OR UPDATE a recurring task. If a job with the same "filename" already exists it will be UPDATED in place — use this when the user asks to change/modify an existing job. To create or update an interval-based job: "command" = interval in hours (e.g. "24"). To create or update a time-of-day job (runs once daily at a fixed time): "command" = "preferredTime:HH:MM" (e.g. "preferredTime:07:00"). "content" = the prompt/task to execute, "filename" = short name for the job (must match exactly to update).)
+- schedule_task: { "command": "24", "content": "Fetch Vancouver WA weather and send to user via WhatsApp", "filename": "Daily Weather Brief" } (Schedule OR UPDATE a recurring task. If a job with the same "filename" already exists it will be UPDATED in place — use this when the user asks to change/modify an existing job. IMPORTANT: When updating, existing delivery recipients (WhatsApp numbers, groups, emails) and schedule are automatically PRESERVED — you only need to provide the NEW task content. To create or update an interval-based job: "command" = interval in hours (e.g. "24"). To create or update a time-of-day job: "command" = "preferredTime:HH:MM" (e.g. "preferredTime:07:00"). Only set "command" if you want to CHANGE the schedule. "content" = the prompt/task to execute, "filename" = short name for the job (must match exactly to update).)
 - message_agent: { "target": "Role Name", "message": "Text to send" } (Delegate a sub-task to a specialized sub-agent)
 - send_email: { "to": "user@example.com", "subject": "Hello", "body": "My message here", "from": "optional-alias@gmail.com" } (Send an outbound email natively using OAuth. Use the optional "from" field only when explicitly instructed to send from a specific alias.)
 - read_emails: { "content": "query string", "target": "5" } (Scan the user's Gmail inbox natively. "content" is the search query like 'is:unread' or 'from:boss', and "target" is the max number of results.)
@@ -380,18 +380,27 @@ ${context.join('\n')}
                 } else if (response.action === 'schedule_task') {
                     // command = interval in hours OR "preferredTime:HH:MM" for time-of-day scheduling
                     // content = the prompt, filename = job name (used as upsert key)
-                    const rawCommand = (response.command || '24').trim();
+                    const rawCommand = (response.command || '').trim();
                     const MIN_INTERVAL_HOURS = 0.25; // 15 minutes minimum to prevent LLM spam
 
                     // Parse preferredTime syntax: "preferredTime:07:00"
                     let preferredTime: string | undefined;
-                    let intervalHours = 24;
+                    let intervalHours: number | undefined;
+                    let scheduleExplicitlyProvided = false;
                     const preferredTimeMatch = rawCommand.match(/^preferredTime:(\d{1,2}:\d{2})$/i);
                     if (preferredTimeMatch && preferredTimeMatch[1]) {
                         preferredTime = preferredTimeMatch[1];
-                    } else {
+                        scheduleExplicitlyProvided = true;
+                    } else if (rawCommand && rawCommand !== '24') {
+                        // Only set interval if explicitly provided AND not the default
                         const rawInterval = parseFloat(rawCommand);
-                        intervalHours = (!rawInterval || rawInterval < MIN_INTERVAL_HOURS) ? 24 : rawInterval;
+                        if (!isNaN(rawInterval) && rawInterval >= MIN_INTERVAL_HOURS) {
+                            intervalHours = rawInterval;
+                            scheduleExplicitlyProvided = true;
+                        }
+                    } else if (rawCommand === '24') {
+                        // Default value — only use for NEW jobs, not updates
+                        intervalHours = 24;
                     }
 
                     const taskPrompt = (response.content || response.message || '').substring(0, 2000);
@@ -401,8 +410,6 @@ ${context.join('\n')}
                         toolOutput = 'Error: No task prompt provided for schedule_task. Provide the task description in the "content" field.';
                     } else {
                         try {
-                            // Use mutex-protected withJobs() to prevent race conditions
-                            // with the scheduler's 60s tick and dashboard edits
                             let result = '';
                             await withJobs((jobs: CronJob[]) => {
                                 // Upsert: check for existing job with the same name (case-insensitive)
@@ -411,36 +418,85 @@ ${context.join('\n')}
                                 );
 
                                 if (existingIndex !== -1) {
-                                    // UPDATE existing job in-place
+                                    // ─── UPDATE existing job — PRESERVE recipients & schedule ───
                                     const existing = jobs[existingIndex]!;
-                                    existing.prompt = taskPrompt;
-                                    existing.intervalHours = intervalHours;
-                                    if (preferredTime) {
-                                        existing.preferredTime = preferredTime;
-                                    } else {
-                                        delete existing.preferredTime; // Clear time-of-day if switching back to interval
+                                    const oldPrompt = existing.prompt || '';
+
+                                    // Extract delivery instructions from old prompt to preserve them
+                                    // These patterns match the delivery lines that the dashboard/agent embed
+                                    const deliveryPatterns = [
+                                        /Also send (?:the results |this |)(?:to |via )(?:the )?WhatsApp group\s+"[^"]+"\s*\(group JID:\s*\d+@g\.us\)\./gi,
+                                        /Also send via WhatsApp to \d+@s\.whatsapp\.net\./gi,
+                                        /Send (?:this |the results |)(?:to |via )(?:the )?WhatsApp group\s+"[^"]+"\s*\(group JID:\s*\d+@g\.us\)\./gi,
+                                        /(?:Also )?[Ss]end (?:this |the |a |)(?:message |results? |report |update |)(?:to |via )(?:email |)(?:to )?[a-zA-Z0-9._%+-]+@(?:gmail|yahoo|hotmail|outlook|icloud|protonmail|aol)\.[a-z]{2,}/gi,
+                                    ];
+
+                                    // Collect delivery instructions from old prompt
+                                    const oldDeliveryInstructions: string[] = [];
+                                    for (const pattern of deliveryPatterns) {
+                                        const matches = oldPrompt.match(pattern);
+                                        if (matches) oldDeliveryInstructions.push(...matches);
                                     }
-                                    const scheduleStr = preferredTime ? `daily at ${preferredTime}` : `every ${intervalHours}h`;
+
+                                    // Check if new prompt already contains delivery instructions
+                                    const newHasGroupJid = /\d+@g\.us/.test(taskPrompt);
+                                    const newHasDmJid = /\d+@s\.whatsapp\.net/.test(taskPrompt);
+                                    const newHasWhatsApp = /whatsapp/i.test(taskPrompt);
+
+                                    // Build updated prompt: new content + preserved delivery instructions
+                                    let mergedPrompt = taskPrompt;
+                                    if (oldDeliveryInstructions.length > 0 && !newHasGroupJid && !newHasDmJid) {
+                                        // Agent didn't include any delivery instructions — preserve old ones
+                                        const uniqueDelivery = [...new Set(oldDeliveryInstructions)];
+                                        mergedPrompt = taskPrompt.replace(/\.\s*$/, '.') + ' ' + uniqueDelivery.join(' ');
+                                        console.log(`[Worker - ${this.role}] Preserved ${uniqueDelivery.length} delivery instruction(s) from existing job.`);
+                                    }
+
+                                    existing.prompt = mergedPrompt;
+
+                                    // Only update schedule if explicitly provided — don't overwrite with defaults
+                                    if (scheduleExplicitlyProvided) {
+                                        if (preferredTime) {
+                                            existing.preferredTime = preferredTime;
+                                            existing.intervalHours = 24;
+                                        } else if (intervalHours) {
+                                            existing.intervalHours = intervalHours;
+                                            delete existing.preferredTime;
+                                        }
+                                    }
+
+                                    const scheduleStr = existing.preferredTime
+                                        ? `daily at ${existing.preferredTime}`
+                                        : `every ${existing.intervalHours}h`;
                                     console.log(`[Worker - ${this.role}] Updated existing cron job: "${jobName}" → ${scheduleStr}`);
-                                    result = `✅ Successfully updated existing cron job!\n- Name: ${jobName}\n- Schedule: ${scheduleStr}\n- New Task: ${taskPrompt.substring(0, 100)}...\n- Status: ${existing.status || 'enabled'}\n- ID: ${existing.id}`;
+                                    result = `✅ Successfully updated existing cron job!\n- Name: ${jobName}\n- Schedule: ${scheduleStr} (${scheduleExplicitlyProvided ? 'updated' : 'preserved'})\n- New Task: ${mergedPrompt.substring(0, 100)}...\n- Recipients: ${oldDeliveryInstructions.length > 0 && !newHasGroupJid && !newHasDmJid ? 'preserved from existing job' : 'as specified'}\n- Status: ${existing.status || 'enabled'}\n- ID: ${existing.id}`;
                                 } else {
-                                    // CREATE new job (only if under the cap)
-                                    // SECURITY: Cap at 20 jobs max even from agent-scheduled tasks
-                                    if (jobs.length >= 20) {
-                                        result = 'Error: Maximum of 20 cron jobs reached. Delete an existing job before scheduling a new one.';
+                                    // CREATE new job
+                                    const cronConfigPath = path.join(process.cwd(), 'workspace', 'cron_config.json');
+                                    let maxJobs = 50;
+                                    try {
+                                        if (fs.existsSync(cronConfigPath)) {
+                                            const cfg = JSON.parse(fs.readFileSync(cronConfigPath, 'utf-8'));
+                                            if (cfg.maxJobs && typeof cfg.maxJobs === 'number') maxJobs = cfg.maxJobs;
+                                        }
+                                    } catch { }
+
+                                    if (jobs.length >= maxJobs) {
+                                        result = `Error: Maximum of ${maxJobs} cron jobs reached. Delete an existing job before scheduling a new one.`;
                                     } else {
+                                        const effectiveInterval = intervalHours || 24;
                                         const newJob: any = {
                                             id: 'cron-' + Math.random().toString(36).substr(2, 9),
                                             description: jobName,
                                             prompt: taskPrompt,
-                                            intervalHours,
-                                            lastRunTimestamp: 0, // Run on next heartbeat
+                                            intervalHours: effectiveInterval,
+                                            lastRunTimestamp: 0,
                                             agentId: 'manager',
                                             status: 'enabled'
                                         };
                                         if (preferredTime) newJob.preferredTime = preferredTime;
                                         jobs.push(newJob);
-                                        const scheduleStr = preferredTime ? `daily at ${preferredTime}` : `every ${intervalHours}h`;
+                                        const scheduleStr = preferredTime ? `daily at ${preferredTime}` : `every ${effectiveInterval}h`;
                                         console.log(`[Worker - ${this.role}] Scheduled new recurring task: "${jobName}" ${scheduleStr}`);
                                         result = `✅ Successfully scheduled recurring task!\n- Name: ${jobName}\n- Schedule: ${scheduleStr}\n- Task: ${taskPrompt.substring(0, 100)}...\n- Status: Enabled\n- ID: ${newJob.id}`;
                                     }
