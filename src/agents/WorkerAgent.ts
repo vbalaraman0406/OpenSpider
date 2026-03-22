@@ -670,32 +670,62 @@ ${context.join('\n')}
                             const errs = targetJids.filter(j => j.startsWith('ERROR_NOT_FOUND:')).map(j => j.split(':')[1]);
                             toolOutput = `Error: The requested WhatsApp target(s) [${errs.join(', ')}] were ambiguous or not found in the allowed group list. You MUST ask the user to clarify exactly which group they mean.`;
                         } else {
-                            // Get agent persona name for the header
-                            let agentName = 'OpenSpider';
-                            try {
-                                const persona = new PersonaShell('manager');
-                                const caps = persona.getCapabilities();
-                                if (caps && caps.name) agentName = caps.name;
-                            } catch (e) { }
-
-                            const formattedMsg = `✨ *${agentName}*\n\n${response.message}`;
-
-                            let sentCount = 0;
-                            const failedJids: string[] = [];
-                            for (const jid of targetJids) {
-                                try {
-                                    await sendWhatsAppMessage(jid, formattedMsg);
-                                    sentCount++;
-                                } catch (e: any) {
-                                    console.error(`Failed to send to ${jid}:`, e);
-                                    failedJids.push(`${jid}: ${e.message}`);
+                            // ─── CRON SILENT GATE ───────────────────────────────────────
+                            // Hard code-level filter: If this is a cron job AND the message
+                            // content is a "no issues" report, SUPPRESS the send entirely.
+                            // This is needed because the LLM consistently ignores prompt-level
+                            // instructions to not send "all clear" messages.
+                            if (this.isCron) {
+                                const msgLower = (response.message as string).toLowerCase();
+                                const noActionPatterns = [
+                                    /no\s+(issues?|outages?|problems?|incidents?|alerts?|errors?|disruptions?)\s+(found|detected|reported|observed|noted|to report)/i,
+                                    /no\s+(current|active|ongoing|new|significant)\s+(issues?|outages?|problems?|incidents?)/i,
+                                    /all\s+(systems?|services?)\s+(are\s+)?(operational|running|normal|up|online|stable|healthy)/i,
+                                    /everything\s+(is\s+|looks?\s+)?(normal|fine|good|stable|operational|running\s+smoothly)/i,
+                                    /no\s+(action|notification|message)\s+(needed|required|necessary)/i,
+                                    /status:\s*(ok|normal|green|operational|no\s+issues)/i,
+                                    /nothing\s+(to\s+report|noteworthy|unusual|significant)/i,
+                                    /currently\s+(no|zero)\s+(issues?|outages?|problems?)/i,
+                                    /appears?\s+to\s+be\s+(working|functioning|running)\s+(normally|correctly|fine|properly)/i,
+                                ];
+                                const isNoAction = noActionPatterns.some(p => p.test(response.message as string));
+                                if (isNoAction) {
+                                    console.log(`[Worker - ${this.role}] 🔇 CRON SILENT GATE: Suppressed "no issues" WhatsApp message. Content: "${(response.message as string).substring(0, 100)}..."`);
+                                    toolOutput = `[SILENTLY SUPPRESSED] The "no issues" message was NOT sent to WhatsApp. This is a system-level rule for cron jobs: do not notify users when there is nothing to report. Proceed to final_answer.`;
+                                    // Skip all WhatsApp sending below
+                                    targetJids = [];
                                 }
                             }
+                            // ────────────────────────────────────────────────────────────
 
-                            if (failedJids.length > 0) {
-                                toolOutput = `⚠️ Partial success or complete failure. Sent to ${sentCount} recipient(s). Failed to send to ${failedJids.length} recipient(s): \n${failedJids.join('\n')}`;
-                            } else {
-                                toolOutput = `✅ WhatsApp message sent successfully to ${sentCount} recipient(s): ${targetJids.join(', ')}.`;
+                            if (targetJids.length > 0) {
+                                // Get agent persona name for the header
+                                let agentName = 'OpenSpider';
+                                try {
+                                    const persona = new PersonaShell('manager');
+                                    const caps = persona.getCapabilities();
+                                    if (caps && caps.name) agentName = caps.name;
+                                } catch (e) { }
+
+                                const formattedMsg = `✨ *${agentName}*\n\n${response.message}`;
+
+                                let sentCount = 0;
+                                const failedJids: string[] = [];
+                                for (const jid of targetJids) {
+                                    try {
+                                        await sendWhatsAppMessage(jid, formattedMsg);
+                                        sentCount++;
+                                    } catch (e: any) {
+                                        console.error(`Failed to send to ${jid}:`, e);
+                                        failedJids.push(`${jid}: ${e.message}`);
+                                    }
+                                }
+
+                                if (failedJids.length > 0) {
+                                    toolOutput = `⚠️ Partial success or complete failure. Sent to ${sentCount} recipient(s). Failed to send to ${failedJids.length} recipient(s): \n${failedJids.join('\n')}`;
+                                } else {
+                                    toolOutput = `✅ WhatsApp message sent successfully to ${sentCount} recipient(s): ${targetJids.join(', ')}.`;
+                                }
                             }
                         }
                     } catch (e: any) {
