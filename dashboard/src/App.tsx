@@ -2127,6 +2127,8 @@ function WorkflowsView() {
     const [loading, setLoading] = useState(true);
     const [expanded, setExpanded] = useState<string | null>(null);
     const [runResult, setRunResult] = useState<any | null>(null);
+    const [showCreate, setShowCreate] = useState(false);
+    const [newWf, setNewWf] = useState({ name: '', steps: [{ id: 's1', action: 'agent_task', prompt: '' }] as any[] });
 
     const fetchWorkflows = () => {
         apiFetch('/api/workflows').then(r => r.json()).then(d => {
@@ -2161,6 +2163,33 @@ function WorkflowsView() {
         fetchWorkflows();
     };
 
+    const createWorkflow = async () => {
+        if (!newWf.name) return;
+        const id = newWf.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+        await apiFetch('/api/workflows', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, name: newWf.name, status: 'enabled', trigger: { type: 'manual' }, steps: newWf.steps })
+        });
+        setShowCreate(false);
+        setNewWf({ name: '', steps: [{ id: 's1', action: 'agent_task', prompt: '' }] });
+        fetchWorkflows();
+    };
+
+    const addStep = () => {
+        const num = newWf.steps.length + 1;
+        setNewWf({ ...newWf, steps: [...newWf.steps, { id: `s${num}`, action: 'agent_task', prompt: '' }] });
+    };
+
+    const updateStep = (idx: number, field: string, value: string) => {
+        const steps = [...newWf.steps];
+        steps[idx] = { ...steps[idx], [field]: value };
+        setNewWf({ ...newWf, steps });
+    };
+
+    const removeStep = (idx: number) => {
+        setNewWf({ ...newWf, steps: newWf.steps.filter((_: any, i: number) => i !== idx) });
+    };
+
     return (
         <div className="flex-1 p-8 fade-in overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
@@ -2168,10 +2197,70 @@ function WorkflowsView() {
                     <h2 className="text-2xl font-bold text-white">Workflow Chains</h2>
                     <p className="text-slate-400 text-sm mt-1">Multi-step task pipelines that chain agent actions together.</p>
                 </div>
-                <button onClick={fetchWorkflows} className="flex items-center gap-2 px-4 py-2 bg-slate-700/50 text-slate-300 rounded-lg hover:bg-slate-700 transition">
-                    <RefreshCw className="w-4 h-4" /> Refresh
-                </button>
+                <div className="flex gap-2">
+                    <button onClick={() => setShowCreate(!showCreate)} className="flex items-center gap-2 px-4 py-2 bg-indigo-600/20 text-indigo-400 rounded-lg hover:bg-indigo-600/30 transition ring-1 ring-indigo-500/30">
+                        <Plus className="w-4 h-4" /> Create Workflow
+                    </button>
+                    <button onClick={fetchWorkflows} className="flex items-center gap-2 px-4 py-2 bg-slate-700/50 text-slate-300 rounded-lg hover:bg-slate-700 transition">
+                        <RefreshCw className="w-4 h-4" /> Refresh
+                    </button>
+                </div>
             </div>
+
+            {/* Create Form */}
+            {showCreate && (
+                <div className="bg-slate-800/70 border border-indigo-500/30 rounded-xl p-5 mb-6">
+                    <h3 className="text-sm font-semibold text-indigo-400 mb-4">New Workflow</h3>
+                    <input
+                        type="text" placeholder="Workflow name (e.g. Market Research Pipeline)"
+                        value={newWf.name} onChange={e => setNewWf({ ...newWf, name: e.target.value })}
+                        className="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white mb-4 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    />
+                    <div className="text-xs text-slate-500 uppercase tracking-wider mb-2">Steps</div>
+                    {newWf.steps.map((step: any, i: number) => (
+                        <div key={i} className="flex gap-2 mb-2">
+                            <span className="text-slate-600 text-xs font-mono py-2 w-6">{i + 1}.</span>
+                            <select value={step.action} onChange={e => updateStep(i, 'action', e.target.value)}
+                                className="bg-slate-900/50 border border-slate-700 rounded-lg px-2 py-2 text-xs text-white focus:outline-none">
+                                <option value="agent_task">Agent Task</option>
+                                <option value="deliver">Deliver</option>
+                                <option value="condition">Condition</option>
+                                <option value="skill">Skill</option>
+                            </select>
+                            {step.action === 'agent_task' && (
+                                <input type="text" placeholder="Prompt for the agent..." value={step.prompt || ''}
+                                    onChange={e => updateStep(i, 'prompt', e.target.value)}
+                                    className="flex-1 bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                            )}
+                            {step.action === 'deliver' && (
+                                <>
+                                    <select value={step.channel || 'whatsapp'} onChange={e => updateStep(i, 'channel', e.target.value)}
+                                        className="bg-slate-900/50 border border-slate-700 rounded-lg px-2 py-2 text-xs text-white focus:outline-none">
+                                        <option value="whatsapp">WhatsApp</option>
+                                        <option value="email">Email</option>
+                                    </select>
+                                    <input type="text" placeholder="Target (default, group name, or email)" value={step.target || ''}
+                                        onChange={e => updateStep(i, 'target', e.target.value)}
+                                        className="flex-1 bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none" />
+                                </>
+                            )}
+                            {step.action === 'condition' && (
+                                <input type="text" placeholder="e.g. output.includes('urgent')" value={step.if || ''}
+                                    onChange={e => updateStep(i, 'if', e.target.value)}
+                                    className="flex-1 bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none" />
+                            )}
+                            {newWf.steps.length > 1 && (
+                                <button onClick={() => removeStep(i)} className="text-red-400/50 hover:text-red-400"><X className="w-4 h-4" /></button>
+                            )}
+                        </div>
+                    ))}
+                    <div className="flex gap-2 mt-3">
+                        <button onClick={addStep} className="px-3 py-1.5 bg-slate-700/50 text-slate-400 rounded-lg text-xs hover:bg-slate-700 transition">+ Add Step</button>
+                        <button onClick={createWorkflow} className="px-4 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-medium hover:bg-indigo-700 transition">Create Workflow</button>
+                        <button onClick={() => setShowCreate(false)} className="px-3 py-1.5 text-slate-500 text-xs hover:text-slate-300 transition">Cancel</button>
+                    </div>
+                </div>
+            )}
 
             {/* Stats */}
             <div className="grid grid-cols-3 gap-4 mb-6">
@@ -2296,6 +2385,8 @@ function WorkflowsView() {
 function EventTriggersView() {
     const [triggers, setTriggers] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [showCreate, setShowCreate] = useState(false);
+    const [newTrig, setNewTrig] = useState({ name: '', source: 'gmail', filterKey: 'from', filterValue: '', actionType: 'agent_task', actionPrompt: '', actionWorkflowId: '' });
 
     const fetchTriggers = () => {
         apiFetch('/api/events/triggers').then(r => r.json()).then(d => {
@@ -2326,6 +2417,23 @@ function EventTriggersView() {
         cron_result: 'bg-blue-500/20 text-blue-400',
     };
 
+    const createTrigger = async () => {
+        if (!newTrig.name) return;
+        const id = newTrig.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+        const filter: any = {};
+        if (newTrig.filterKey && newTrig.filterValue) filter[newTrig.filterKey] = newTrig.filterValue;
+        const action: any = newTrig.actionType === 'workflow'
+            ? { type: 'workflow', workflowId: newTrig.actionWorkflowId }
+            : { type: 'agent_task', prompt: newTrig.actionPrompt };
+        await apiFetch('/api/events/triggers', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, name: newTrig.name, source: newTrig.source, status: 'enabled', filter, action })
+        });
+        setShowCreate(false);
+        setNewTrig({ name: '', source: 'gmail', filterKey: 'from', filterValue: '', actionType: 'agent_task', actionPrompt: '', actionWorkflowId: '' });
+        fetchTriggers();
+    };
+
     return (
         <div className="flex-1 p-8 fade-in overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
@@ -2333,10 +2441,77 @@ function EventTriggersView() {
                     <h2 className="text-2xl font-bold text-white">Event Triggers</h2>
                     <p className="text-slate-400 text-sm mt-1">React to real-time events — emails, messages, webhooks, and cron results.</p>
                 </div>
-                <button onClick={fetchTriggers} className="flex items-center gap-2 px-4 py-2 bg-slate-700/50 text-slate-300 rounded-lg hover:bg-slate-700 transition">
-                    <RefreshCw className="w-4 h-4" /> Refresh
-                </button>
+                <div className="flex gap-2">
+                    <button onClick={() => setShowCreate(!showCreate)} className="flex items-center gap-2 px-4 py-2 bg-amber-600/20 text-amber-400 rounded-lg hover:bg-amber-600/30 transition ring-1 ring-amber-500/30">
+                        <Plus className="w-4 h-4" /> Create Trigger
+                    </button>
+                    <button onClick={fetchTriggers} className="flex items-center gap-2 px-4 py-2 bg-slate-700/50 text-slate-300 rounded-lg hover:bg-slate-700 transition">
+                        <RefreshCw className="w-4 h-4" /> Refresh
+                    </button>
+                </div>
             </div>
+
+            {/* Create Form */}
+            {showCreate && (
+                <div className="bg-slate-800/70 border border-amber-500/30 rounded-xl p-5 mb-6">
+                    <h3 className="text-sm font-semibold text-amber-400 mb-4">New Event Trigger</h3>
+                    <input
+                        type="text" placeholder="Trigger name (e.g. Urgent Email Handler)"
+                        value={newTrig.name} onChange={e => setNewTrig({ ...newTrig, name: e.target.value })}
+                        className="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white mb-4 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                    />
+                    <div className="grid grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <div className="text-xs text-slate-500 uppercase tracking-wider mb-1">Event Source</div>
+                            <select value={newTrig.source} onChange={e => setNewTrig({ ...newTrig, source: e.target.value })}
+                                className="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none">
+                                <option value="gmail">Gmail</option>
+                                <option value="whatsapp">WhatsApp</option>
+                                <option value="webhook">Webhook</option>
+                                <option value="cron_result">Cron Result</option>
+                            </select>
+                        </div>
+                        <div>
+                            <div className="text-xs text-slate-500 uppercase tracking-wider mb-1">Filter</div>
+                            <div className="flex gap-2">
+                                <select value={newTrig.filterKey} onChange={e => setNewTrig({ ...newTrig, filterKey: e.target.value })}
+                                    className="bg-slate-900/50 border border-slate-700 rounded-lg px-2 py-2 text-xs text-white focus:outline-none">
+                                    <option value="from">from</option>
+                                    <option value="subject_contains">subject_contains</option>
+                                    <option value="body_contains">body_contains</option>
+                                    <option value="topic">topic</option>
+                                </select>
+                                <input type="text" placeholder="e.g. *@google.com" value={newTrig.filterValue}
+                                    onChange={e => setNewTrig({ ...newTrig, filterValue: e.target.value })}
+                                    className="flex-1 bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none" />
+                            </div>
+                        </div>
+                    </div>
+                    <div className="mb-4">
+                        <div className="text-xs text-slate-500 uppercase tracking-wider mb-1">Action</div>
+                        <div className="flex gap-2 mb-2">
+                            <select value={newTrig.actionType} onChange={e => setNewTrig({ ...newTrig, actionType: e.target.value })}
+                                className="bg-slate-900/50 border border-slate-700 rounded-lg px-2 py-2 text-xs text-white focus:outline-none">
+                                <option value="agent_task">Agent Task</option>
+                                <option value="workflow">Run Workflow</option>
+                            </select>
+                            {newTrig.actionType === 'agent_task' ? (
+                                <input type="text" placeholder="Prompt for the agent..." value={newTrig.actionPrompt}
+                                    onChange={e => setNewTrig({ ...newTrig, actionPrompt: e.target.value })}
+                                    className="flex-1 bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none" />
+                            ) : (
+                                <input type="text" placeholder="Workflow ID (e.g. breaking-news-alert)" value={newTrig.actionWorkflowId}
+                                    onChange={e => setNewTrig({ ...newTrig, actionWorkflowId: e.target.value })}
+                                    className="flex-1 bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none" />
+                            )}
+                        </div>
+                    </div>
+                    <div className="flex gap-2">
+                        <button onClick={createTrigger} className="px-4 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-medium hover:bg-amber-700 transition">Create Trigger</button>
+                        <button onClick={() => setShowCreate(false)} className="px-3 py-1.5 text-slate-500 text-xs hover:text-slate-300 transition">Cancel</button>
+                    </div>
+                </div>
+            )}
 
             {/* Stats */}
             <div className="grid grid-cols-4 gap-4 mb-6">

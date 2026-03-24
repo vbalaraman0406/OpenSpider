@@ -78,6 +78,8 @@ Available tools you can request in your JSON response:
 - write_script: { "filename": "test.py", "content": "print('hello')" } (Write a code script to disk)
 - execute_script: { "filename": "test.py", "args": "" } (Execute a dynamically written script)
 - search_skills: { "content": "stock market" } (Search the skills catalog for existing curated scripts by keyword. ALWAYS search before writing a new script — reuse existing skills when possible!)
+- create_workflow: { "filename": "my-workflow-id", "content": "My Workflow Name", "args": "JSON steps array" } (Create a reusable multi-step workflow pipeline. "filename" = unique id, "content" = display name, "args" = JSON stringified array of step objects. Each step: { "id": "step1", "action": "agent_task"|"condition"|"deliver"|"skill", "prompt": "...", "channel": "whatsapp"|"email", "target": "...", "template": "{{prev.output}}" }. Steps run in order with output chaining via {{stepId.output}}. Example: [{"id":"s1","action":"agent_task","prompt":"Research X"},{"id":"s2","action":"deliver","channel":"whatsapp","target":"default","template":"{{s1.output}}"}])
+- create_event_trigger: { "filename": "my-trigger-id", "content": "My Trigger Name", "args": "JSON config" } (Create an event trigger that fires when matching events occur. "filename" = unique id, "content" = display name, "args" = JSON config with: { "source": "gmail"|"whatsapp"|"webhook"|"cron_result", "filter": { "from": "*@domain.com", "subject_contains": "...", "body_contains": "..." }, "action": { "type": "workflow"|"agent_task", "workflowId": "...", "prompt": "..." } })
 - browse_web: Open a REAL browser. ALWAYS prefer this over Python scripts for web searches.
   To use browse_web, set "command" to the sub-action and use other fields:
     - Navigate: { "action": "browse_web", "command": "navigate", "filename": "https://google.com" }
@@ -253,7 +255,7 @@ ${context.join('\n')}
             let response;
             try {
                 response = await this.llm.generateStructuredOutputs<{
-                    action: 'run_command' | 'write_script' | 'execute_script' | 'search_skills' | 'browse_web' | 'wait_for_user' | 'schedule_task' | 'message_agent' | 'send_email' | 'read_emails' | 'send_whatsapp' | 'send_voice' | 'update_whatsapp_whitelist' | 'final_answer';
+                    action: 'run_command' | 'write_script' | 'execute_script' | 'search_skills' | 'create_workflow' | 'create_event_trigger' | 'browse_web' | 'wait_for_user' | 'schedule_task' | 'message_agent' | 'send_email' | 'read_emails' | 'send_whatsapp' | 'send_voice' | 'update_whatsapp_whitelist' | 'final_answer';
                     command?: string;
                     filename?: string;
                     content?: string;
@@ -337,6 +339,42 @@ ${context.join('\n')}
                         toolOutput = `Found ${results.length} curated skill(s):\n` + results.map(s =>
                             `• ${s.name} (${s.language}) — ${s.description}\n  Usage: ${s.instructions}`
                         ).join('\n');
+                    }
+                } else if (response.action === 'create_workflow' && response.filename && response.content && response.args) {
+                    console.log(`[Worker - ${this.role}] Creating workflow: ${response.content}`);
+                    try {
+                        const { WorkflowEngine } = await import('../WorkflowEngine');
+                        const steps = JSON.parse(response.args);
+                        const workflow = WorkflowEngine.saveWorkflow({
+                            id: response.filename,
+                            name: response.content,
+                            status: 'enabled',
+                            trigger: { type: 'manual' },
+                            steps: steps,
+                            createdAt: new Date().toISOString()
+                        });
+                        toolOutput = `Workflow "${workflow.name}" created successfully with ${workflow.steps.length} steps. ID: ${workflow.id}. View it in the Dashboard → Workflows tab.`;
+                    } catch (err: any) {
+                        toolOutput = `Failed to create workflow: ${err.message}`;
+                    }
+                } else if (response.action === 'create_event_trigger' && response.filename && response.content && response.args) {
+                    console.log(`[Worker - ${this.role}] Creating event trigger: ${response.content}`);
+                    try {
+                        const { EventBus } = await import('../EventBus');
+                        const config = JSON.parse(response.args);
+                        const trigger = EventBus.saveTrigger({
+                            id: response.filename,
+                            name: response.content,
+                            status: 'enabled',
+                            source: config.source,
+                            filter: config.filter || {},
+                            action: config.action,
+                            createdAt: new Date().toISOString(),
+                            fireCount: 0
+                        });
+                        toolOutput = `Event trigger "${trigger.name}" created successfully. Source: ${trigger.source}, Action: ${trigger.action.type}. View it in the Dashboard → Event Triggers tab.`;
+                    } catch (err: any) {
+                        toolOutput = `Failed to create event trigger: ${err.message}`;
                     }
                 } else if (response.action === 'message_agent' && response.target && response.message) {
                     console.log(`[Worker - ${this.role}] Delegating sub-task via message_agent to peer ${response.target}...`);
