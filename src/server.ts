@@ -1984,5 +1984,12 @@ Return ONLY the raw Python code.`;
     server.listen(PORT, () => {
         console.log(`[Server] OpenSpider API & WebSocket running on http://localhost:${PORT}`);
         initScheduler();
+
+        // Start Gmail poller for event triggers (since Pub/Sub can't push to localhost)
+        import('./GmailPoller').then(({ startGmailPoller }) => {
+            startGmailPoller();
+        }).catch(err => {
+            console.log('[Server] GmailPoller not available:', err.message);
+        });
     });
 }
