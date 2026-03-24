@@ -82,152 +82,111 @@ function generateBezierPath(
 
 // ─── Visual Ghost Cursor Overlay ─────────────────────────────────────────────
 // CDP Input.dispatchMouseEvent doesn't move the OS cursor visually.
-// This injects a visible cursor element that tracks our Bézier movements.
+// Injects a cursor + animation engine, then batch-sends Bézier paths
+// in ONE Runtime.evaluate. Animation runs entirely client-side.
 
 let ghostCursorInjected = false;
 
 /**
- * Inject a visible ghost cursor SVG overlay into the relay browser page.
- * The cursor element follows our CDP mouse dispatches so the user can see
- * the human-like movement path.
+ * Inject the ghost cursor system. Creates: SVG cursor, canvas trail,
+ * animation engine, click effects, and hides the native OS cursor.
  */
 async function injectGhostCursor(): Promise<void> {
     try {
-        await sendCommand('Runtime.evaluate', {
-            expression: `(() => {
-                // Remove any existing ghost cursor
-                const existing = document.getElementById('__openspider_ghost_cursor');
-                if (existing) existing.remove();
-                const existingTrail = document.getElementById('__openspider_cursor_trail');
-                if (existingTrail) existingTrail.remove();
-
-                // Create cursor trail canvas (draws a fading red dot trail)
-                const trail = document.createElement('canvas');
-                trail.id = '__openspider_cursor_trail';
-                trail.width = window.innerWidth;
-                trail.height = window.innerHeight;
-                Object.assign(trail.style, {
-                    position: 'fixed', top: '0', left: '0',
-                    width: '100vw', height: '100vh',
-                    pointerEvents: 'none', zIndex: '2147483645',
-                    opacity: '0.6'
-                });
-                document.documentElement.appendChild(trail);
-
-                // Create the cursor arrow (SVG pointer)
-                const cursor = document.createElement('div');
-                cursor.id = '__openspider_ghost_cursor';
-                cursor.innerHTML = \`<svg width="24" height="28" viewBox="0 0 24 28" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M5 2L5 22L9.5 17.5L13.5 25L16.5 23.5L12.5 15.5L19 15.5L5 2Z" 
-                          fill="rgba(255,60,60,0.9)" stroke="white" stroke-width="1.5"/>
-                </svg>\`;
-                Object.assign(cursor.style, {
-                    position: 'fixed', top: '0', left: '0',
-                    pointerEvents: 'none', zIndex: '2147483646',
-                    transform: 'translate(-2px, -2px)',
-                    filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))',
-                    transition: 'none'
-                });
-                document.documentElement.appendChild(cursor);
-
-                // Store trail points for drawing
-                window.__openspider_trail_points = [];
-                window.__openspider_trail_ctx = trail.getContext('2d');
-
-                // Handle window resize
-                window.addEventListener('resize', () => {
-                    trail.width = window.innerWidth;
-                    trail.height = window.innerHeight;
-                });
-
-                return 'Ghost cursor injected';
-            })()`,
-            returnByValue: true
-        });
+        const js = [
+            '(function(){',
+            'if(document.getElementById("__os_cursor"))return"exists";',
+            // Hide native cursor
+            'var s=document.createElement("style");s.id="__os_hide";',
+            's.textContent="*{cursor:none!important}";document.head.appendChild(s);',
+            // Trail canvas
+            'var t=document.createElement("canvas");t.id="__os_trail";',
+            't.width=window.innerWidth;t.height=window.innerHeight;',
+            'Object.assign(t.style,{position:"fixed",top:"0",left:"0",',
+            'width:"100vw",height:"100vh",pointerEvents:"none",zIndex:"2147483645",opacity:"0.5"});',
+            'document.documentElement.appendChild(t);',
+            // SVG cursor
+            'var c=document.createElement("div");c.id="__os_cursor";',
+            'c.innerHTML=\'<svg width="20" height="24" viewBox="0 0 20 24"><path d="M4 1L4 19L7.5 15.5L11 21.5L13.5 20.5L10 14L15.5 13.5L4 1Z" fill="rgba(255,50,50,0.95)" stroke="white" stroke-width="1.2"/></svg>\';',
+            'Object.assign(c.style,{position:"fixed",left:"-50px",top:"-50px",',
+            'pointerEvents:"none",zIndex:"2147483646",',
+            'filter:"drop-shadow(0 2px 6px rgba(0,0,0,0.4))",willChange:"left,top"});',
+            'document.documentElement.appendChild(c);',
+            // Click style
+            'var rs=document.createElement("style");rs.id="__os_rstyle";',
+            'rs.textContent="@keyframes __osr{0%{transform:scale(0.3);opacity:1}100%{transform:scale(2.5);opacity:0}}@keyframes __osrr{0%{transform:scale(0.5);opacity:0.8}100%{transform:scale(3);opacity:0}}";',
+            'document.head.appendChild(rs);',
+            // Resize
+            'window.addEventListener("resize",function(){t.width=innerWidth;t.height=innerHeight});',
+            // Animation engine
+            'window.__os_anim=function(pts,dly,cb){var cur=document.getElementById("__os_cursor"),',
+            'tr=document.getElementById("__os_trail"),ctx=tr?tr.getContext("2d"):null,tp=[],i=0;',
+            'function go(){if(i>=pts.length){if(cb)cb();return}',
+            'var p=pts[i];if(cur){cur.style.left=p.x+"px";cur.style.top=p.y+"px"}',
+            'if(ctx){tp.push({x:p.x+4,y:p.y+4});if(tp.length>50)tp.shift();',
+            'ctx.clearRect(0,0,ctx.canvas.width,ctx.canvas.height);',
+            'for(var j=0;j<tp.length;j++){var a=j/tp.length;ctx.beginPath();',
+            'ctx.arc(tp[j].x,tp[j].y,1.5+a*2.5,0,Math.PI*2);',
+            'ctx.fillStyle="rgba(255,50,50,"+(a*0.6)+")";ctx.fill()}}',
+            'i++;setTimeout(go,dly[i-1]||15)}go()};',
+            // Click effect
+            'window.__os_click=function(x,y){',
+            'var d=document.createElement("div");',
+            'Object.assign(d.style,{position:"fixed",left:(x-6)+"px",top:(y-6)+"px",',
+            'width:"12px",height:"12px",borderRadius:"50%",',
+            'background:"rgba(255,50,50,0.9)",pointerEvents:"none",',
+            'zIndex:"2147483647",animation:"__osr 0.4s ease-out forwards"});',
+            'document.documentElement.appendChild(d);',
+            'var r=document.createElement("div");',
+            'Object.assign(r.style,{position:"fixed",left:(x-15)+"px",top:(y-15)+"px",',
+            'width:"30px",height:"30px",borderRadius:"50%",',
+            'border:"2px solid rgba(255,50,50,0.6)",pointerEvents:"none",',
+            'zIndex:"2147483647",animation:"__osrr 0.5s ease-out forwards"});',
+            'document.documentElement.appendChild(r);',
+            'setTimeout(function(){d.remove();r.remove()},600)};',
+            'return"injected"})()'
+        ].join('\n');
+        await sendCommand('Runtime.evaluate', { expression: js, returnByValue: true });
         ghostCursorInjected = true;
-        console.log('[RelayBridge] 👆 Visual ghost cursor injected');
+        console.log('[RelayBridge] \uD83D\uDC46 Ghost cursor injected (client-side animation engine)');
     } catch (e: any) {
         console.warn('[RelayBridge] Ghost cursor injection failed:', e.message);
     }
 }
 
 /**
- * Move the visible ghost cursor to a position and optionally draw a trail dot.
+ * Animate the ghost cursor along a B\u00e9zier path entirely client-side.
+ * Sends all points + timing in ONE Runtime.evaluate call.
+ * Then waits server-side for the animation to complete before returning.
  */
-async function moveGhostCursor(x: number, y: number, drawTrail = true): Promise<void> {
-    if (!ghostCursorInjected) return;
+async function animateGhostCursor(points: Array<{ x: number; y: number }>): Promise<void> {
+    if (!ghostCursorInjected || points.length === 0) return;
+    const delays: number[] = [];
+    for (let i = 0; i < points.length; i++) {
+        const progress = i / points.length;
+        const speedFactor = 1 - 4 * Math.pow(progress - 0.5, 2);
+        delays.push(Math.floor(10 + (1 - speedFactor) * 20 + Math.random() * 5));
+    }
+    const totalMs = delays.reduce((a, b) => a + b, 0);
+    const pj = JSON.stringify(points.map(p => ({ x: Math.round(p.x), y: Math.round(p.y) })));
+    const dj = JSON.stringify(delays);
     try {
         await sendCommand('Runtime.evaluate', {
-            expression: `(() => {
-                const cursor = document.getElementById('__openspider_ghost_cursor');
-                if (cursor) {
-                    cursor.style.left = '${Math.round(x)}px';
-                    cursor.style.top = '${Math.round(y)}px';
-                }
-                ${drawTrail ? `
-                const ctx = window.__openspider_trail_ctx;
-                if (ctx) {
-                    // Draw a fading trail dot
-                    const pts = window.__openspider_trail_points || [];
-                    pts.push({ x: ${Math.round(x)}, y: ${Math.round(y)}, t: Date.now() });
-                    // Keep only last 40 points
-                    while (pts.length > 40) pts.shift();
-                    window.__openspider_trail_points = pts;
-
-                    // Redraw trail
-                    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-                    for (let i = 0; i < pts.length; i++) {
-                        const p = pts[i];
-                        const age = (i / pts.length); // 0 = oldest, 1 = newest
-                        ctx.beginPath();
-                        ctx.arc(p.x, p.y, 2 + age * 2, 0, Math.PI * 2);
-                        ctx.fillStyle = 'rgba(255, 60, 60, ' + (age * 0.7) + ')';
-                        ctx.fill();
-                    }
-                }` : ''}
-            })()`,
+            expression: `window.__os_anim && window.__os_anim(${pj}, ${dj})`,
             returnByValue: true
         });
-    } catch {
-        // Non-critical — page may have navigated
-    }
+        await new Promise(r => setTimeout(r, totalMs + 50));
+    } catch { }
 }
 
 /**
- * Show a click ripple effect at the cursor position.
+ * Show a click effect at the given position.
  */
 async function showClickEffect(x: number, y: number): Promise<void> {
     if (!ghostCursorInjected) return;
     try {
         await sendCommand('Runtime.evaluate', {
-            expression: `(() => {
-                const ripple = document.createElement('div');
-                Object.assign(ripple.style, {
-                    position: 'fixed',
-                    left: '${Math.round(x) - 15}px',
-                    top: '${Math.round(y) - 15}px',
-                    width: '30px', height: '30px',
-                    borderRadius: '50%',
-                    border: '2px solid rgba(255, 60, 60, 0.8)',
-                    pointerEvents: 'none',
-                    zIndex: '2147483647',
-                    animation: 'openspider-click-ripple 0.5s ease-out forwards'
-                });
-                // Add animation keyframes if not already present
-                if (!document.getElementById('__openspider_click_style')) {
-                    const style = document.createElement('style');
-                    style.id = '__openspider_click_style';
-                    style.textContent = \`
-                        @keyframes openspider-click-ripple {
-                            0% { transform: scale(0.5); opacity: 1; }
-                            100% { transform: scale(2.5); opacity: 0; }
-                        }
-                    \`;
-                    document.head.appendChild(style);
-                }
-                document.documentElement.appendChild(ripple);
-                setTimeout(() => ripple.remove(), 600);
-            })()`,
+            expression: `window.__os_click && window.__os_click(${Math.round(x)}, ${Math.round(y)})`,
             returnByValue: true
         });
     } catch { }
@@ -541,12 +500,14 @@ async function solveCloudflareCheckbox(): Promise<boolean> {
         const startY = lastMouseY ?? (Math.random() * 200 + 100);
         const points = generateBezierPath(startX, startY, checkboxX, checkboxY);
 
+        // Fire visual animation client-side
+        animateGhostCursor(points);
+
         for (let i = 0; i < points.length; i++) {
             const p = points[i]!;
             await sendCommand('Input.dispatchMouseEvent', {
                 type: 'mouseMoved', x: Math.round(p.x), y: Math.round(p.y), button: 'none'
             });
-            await moveGhostCursor(p.x, p.y);
             const progress = i / points.length;
             const speedFactor = 1 - 4 * Math.pow(progress - 0.5, 2);
             await new Promise(r => setTimeout(r, Math.floor(8 + (1 - speedFactor) * 17 + Math.random() * 5)));
@@ -881,6 +842,9 @@ export async function clickElement(selector: string): Promise<string> {
                 // Generate human-like Bézier curve control points with overshoot
                 const points = generateBezierPath(startX, startY, targetX, targetY);
 
+                // Fire the visual animation on the page (runs entirely client-side)
+                animateGhostCursor(points);
+
                 // Dispatch mouseMoved events along the curve with variable timing
                 for (let i = 0; i < points.length; i++) {
                     const p = points[i]!;
@@ -890,8 +854,6 @@ export async function clickElement(selector: string): Promise<string> {
                         y: Math.round(p.y),
                         button: 'none'
                     });
-                    // Move the visual ghost cursor in sync
-                    await moveGhostCursor(p.x, p.y);
                     // Variable delay: faster in the middle, slower at start/end (like a real hand)
                     const progress = i / points.length;
                     const speedFactor = 1 - 4 * Math.pow(progress - 0.5, 2); // Bell curve
