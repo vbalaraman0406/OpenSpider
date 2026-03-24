@@ -276,8 +276,154 @@ async function waitAfterClick(previousUrl: string): Promise<void> {
 
 // ─── HIGH-LEVEL BROWSER ACTIONS ──────────────────────────────────────────────
 
+// ─── Cloudflare Challenge Detection & Solving (CDP-based) ──────────────────
+
+interface ChallengeResult {
+    blocked: boolean;
+    type?: 'js_challenge' | 'turnstile' | 'checkbox' | 'unknown';
+    reason: string;
+}
+
+/**
+ * Detect if the current page is a Cloudflare challenge page.
+ */
+async function detectCloudflareChallenge(): Promise<ChallengeResult> {
+    try {
+        const result = await sendCommand('Runtime.evaluate', {
+            expression: `(() => {
+                const body = (document.body?.innerText || '').toLowerCase();
+                const title = (document.title || '').toLowerCase();
+                
+                // Cloudflare JS challenge ("Just a moment...")
+                if ((body.includes('just a moment') && body.includes('checking')) ||
+                    title.includes('just a moment') ||
+                    (body.includes('verify you are human') && body.length < 2000) ||
+                    (body.includes('ray id') && body.includes('cloudflare') && body.length < 3000)) {
+                    
+                    // Check for Turnstile iframe
+                    const iframes = document.querySelectorAll('iframe');
+                    for (const iframe of iframes) {
+                        const src = (iframe.src || '').toLowerCase();
+                        if (src.includes('challenges.cloudflare.com') || src.includes('turnstile')) {
+                            return JSON.stringify({ blocked: true, type: 'turnstile', reason: 'Cloudflare Turnstile checkbox' });
+                        }
+                    }
+                    
+                    // Check for cf-turnstile container
+                    const checkbox = document.querySelector('.cf-turnstile, [data-sitekey], #challenge-form');
+                    if (checkbox) {
+                        return JSON.stringify({ blocked: true, type: 'turnstile', reason: 'Cloudflare Turnstile widget' });
+                    }
+                    
+                    return JSON.stringify({ blocked: true, type: 'js_challenge', reason: 'Cloudflare JS challenge' });
+                }
+                
+                // Challenge spinner
+                if (document.querySelector('#challenge-running, #challenge-spinner, .cf-challenge-page')) {
+                    return JSON.stringify({ blocked: true, type: 'js_challenge', reason: 'Cloudflare challenge spinner' });
+                }
+                
+                // Access denied
+                if ((title.includes('access denied') || title.includes('attention required')) && body.length < 2000) {
+                    return JSON.stringify({ blocked: true, type: 'unknown', reason: 'Cloudflare access denied' });
+                }
+
+                return JSON.stringify({ blocked: false, reason: '' });
+            })()`,
+            returnByValue: true
+        });
+        return JSON.parse(result.result?.value || '{"blocked":false,"reason":""}');
+    } catch {
+        return { blocked: false, reason: '' };
+    }
+}
+
+/**
+ * Click the Cloudflare Turnstile checkbox using CDP + Bézier mouse movement.
+ */
+async function solveCloudflareCheckbox(): Promise<boolean> {
+    try {
+        // Find the Turnstile iframe bounding box
+        const findResult = await sendCommand('Runtime.evaluate', {
+            expression: `(() => {
+                const iframes = document.querySelectorAll('iframe');
+                for (const iframe of iframes) {
+                    const src = (iframe.src || '').toLowerCase();
+                    if (src.includes('challenges.cloudflare.com') || src.includes('turnstile')) {
+                        const rect = iframe.getBoundingClientRect();
+                        if (rect.width > 0 && rect.height > 0) {
+                            return JSON.stringify({ found: true, x: rect.x, y: rect.y, w: rect.width, h: rect.height });
+                        }
+                    }
+                }
+                // Search for cf-turnstile container
+                const ct = document.querySelector('.cf-turnstile, [data-sitekey]');
+                if (ct) {
+                    const r = ct.getBoundingClientRect();
+                    if (r.width > 0) return JSON.stringify({ found: true, x: r.x, y: r.y, w: r.width, h: r.height });
+                }
+                return JSON.stringify({ found: false });
+            })()`,
+            returnByValue: true
+        });
+
+        const data = JSON.parse(findResult.result?.value || '{"found":false}');
+        if (!data.found) {
+            console.log('  [RelayBridge] No Turnstile iframe found');
+            return false;
+        }
+
+        // Turnstile checkbox is ~30px from left, vertically centered in iframe
+        const checkboxX = data.x + Math.min(35, data.w * 0.12);
+        const checkboxY = data.y + data.h / 2;
+
+        console.log(`  [RelayBridge] Turnstile at (${Math.round(data.x)}, ${Math.round(data.y)}) ${Math.round(data.w)}x${Math.round(data.h)}, clicking (${Math.round(checkboxX)}, ${Math.round(checkboxY)})`);
+
+        // Bézier mouse path to checkbox
+        const startX = lastMouseX ?? (Math.random() * 300 + 200);
+        const startY = lastMouseY ?? (Math.random() * 200 + 100);
+        const points = generateBezierPath(startX, startY, checkboxX, checkboxY);
+
+        for (let i = 0; i < points.length; i++) {
+            const p = points[i]!;
+            await sendCommand('Input.dispatchMouseEvent', {
+                type: 'mouseMoved', x: Math.round(p.x), y: Math.round(p.y), button: 'none'
+            });
+            const progress = i / points.length;
+            const speedFactor = 1 - 4 * Math.pow(progress - 0.5, 2);
+            await new Promise(r => setTimeout(r, Math.floor(8 + (1 - speedFactor) * 17 + Math.random() * 5)));
+        }
+
+        // Extra hover pause for Turnstile (they monitor hover duration)
+        await new Promise(r => setTimeout(r, 200 + Math.floor(Math.random() * 400)));
+
+        // Click with jitter
+        const jX = checkboxX + (Math.random() * 4 - 2);
+        const jY = checkboxY + (Math.random() * 4 - 2);
+
+        await sendCommand('Input.dispatchMouseEvent', {
+            type: 'mousePressed', x: Math.round(jX), y: Math.round(jY), button: 'left', clickCount: 1
+        });
+        await new Promise(r => setTimeout(r, 60 + Math.floor(Math.random() * 100)));
+        await sendCommand('Input.dispatchMouseEvent', {
+            type: 'mouseReleased', x: Math.round(jX), y: Math.round(jY), button: 'left', clickCount: 1
+        });
+
+        lastMouseX = checkboxX;
+        lastMouseY = checkboxY;
+
+        console.log(`  🖱️ [RelayBridge] Bézier-clicked Turnstile checkbox`);
+        return true;
+    } catch (err: any) {
+        console.error(`  [RelayBridge] Turnstile solve error: ${err.message}`);
+        return false;
+    }
+}
+
+
 /**
  * Navigate to a URL in the relay browser and return page content.
+ * After loading, detects Cloudflare challenges and auto-solves them.
  */
 export async function navigateAndRead(url: string): Promise<{ title: string; url: string; content: string }> {
     await sendCommand('Page.enable');
@@ -285,6 +431,39 @@ export async function navigateAndRead(url: string): Promise<{ title: string; url
 
     // Smart wait: poll for document.readyState instead of fixed 8s delay
     await waitForPageReady();
+
+    // ─── Cloudflare / CAPTCHA Detection & Auto-Solve ────────────────
+    const MAX_CAPTCHA_ATTEMPTS = 3;
+    for (let attempt = 1; attempt <= MAX_CAPTCHA_ATTEMPTS; attempt++) {
+        const challenge = await detectCloudflareChallenge();
+        if (!challenge.blocked) break;
+
+        console.log(`\n🧩 [RelayBridge] Cloudflare challenge detected: "${challenge.reason}" (attempt ${attempt}/${MAX_CAPTCHA_ATTEMPTS})`);
+
+        if (challenge.type === 'js_challenge') {
+            // JS challenge auto-solves — just wait longer
+            console.log('  [RelayBridge] Cloudflare JS challenge — waiting for auto-solve...');
+            await new Promise(r => setTimeout(r, 6000 + Math.floor(Math.random() * 4000)));
+            await waitForPageReady(8000);
+            continue;
+        }
+
+        if (challenge.type === 'turnstile' || challenge.type === 'checkbox') {
+            const solved = await solveCloudflareCheckbox();
+            if (solved) {
+                console.log('  ✅ [RelayBridge] Cloudflare Turnstile checkbox clicked!');
+                // Wait for challenge to process and page to load
+                await new Promise(r => setTimeout(r, 3000 + Math.floor(Math.random() * 3000)));
+                await waitForPageReady(10000, 2000);
+                continue; // Check again in case there's another challenge
+            } else {
+                console.log('  ⚠️ [RelayBridge] Could not click Turnstile checkbox');
+            }
+        }
+
+        // Brief pause between attempts
+        await new Promise(r => setTimeout(r, 2000 + Math.floor(Math.random() * 2000)));
+    }
 
     return readContent();
 }
