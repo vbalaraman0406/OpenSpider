@@ -169,6 +169,28 @@ async function checkAndExecuteJobs() {
                     result: result,
                     timestamp: new Date().toISOString()
                 }));
+
+                // ─── EventBus + Workflow Chain Integration ───
+                // Emit cron_result event for any registered triggers
+                import('./EventBus').then(({ EventBus }) => {
+                    EventBus.emit('cron_result', {
+                        source: 'cron_result',
+                        jobId: job.id,
+                        jobName: job.description,
+                        body: result,
+                    }).catch(err => console.error('[Scheduler] EventBus emit failed:', err));
+                });
+
+                // Fire any workflows chained to this cron job
+                import('./WorkflowEngine').then(({ WorkflowEngine }) => {
+                    const chained = WorkflowEngine.getWorkflowsForCron(job.id);
+                    for (const wf of chained) {
+                        console.log(`🔗 [Scheduler] Triggering chained workflow: "${wf.name}"`);
+                        WorkflowEngine.executeWorkflow(wf.id, `Cron job "${job.description}" completed.\n\nResult:\n${result}`)
+                            .catch(err => console.error(`[Scheduler] Workflow "${wf.name}" failed:`, err));
+                    }
+                });
+
             }).catch(err => {
                 activeCronJobs--;
                 console.error(`[Scheduler] Job "${job.description}" failed:`, err);

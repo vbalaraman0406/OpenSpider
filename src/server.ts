@@ -1411,6 +1411,124 @@ Return ONLY the raw Python code.`;
         }
     });
 
+    // ─── Workflow Engine API ────────────────────────────────────────────────
+
+    const { WorkflowEngine } = require('./WorkflowEngine');
+    const { EventBus } = require('./EventBus');
+
+    // List all workflows
+    app.get('/api/workflows', (req, res) => {
+        try {
+            const workflows = WorkflowEngine.getWorkflows();
+            res.json({ workflows });
+        } catch (e: any) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    // Create workflow
+    app.post('/api/workflows', (req, res) => {
+        try {
+            const workflow = req.body;
+            if (!workflow.id || !workflow.name || !workflow.steps) {
+                return res.status(400).json({ error: 'id, name, and steps are required' });
+            }
+            workflow.status = workflow.status || 'enabled';
+            workflow.trigger = workflow.trigger || { type: 'manual' };
+            const saved = WorkflowEngine.saveWorkflow(workflow);
+            res.json({ success: true, workflow: saved });
+        } catch (e: any) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    // Update workflow
+    app.put('/api/workflows/:id', (req, res) => {
+        try {
+            const existing = WorkflowEngine.getWorkflow(req.params.id);
+            if (!existing) return res.status(404).json({ error: 'Workflow not found' });
+            const updated = { ...existing, ...req.body, id: req.params.id };
+            const saved = WorkflowEngine.saveWorkflow(updated);
+            res.json({ success: true, workflow: saved });
+        } catch (e: any) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    // Delete workflow
+    app.delete('/api/workflows/:id', (req, res) => {
+        try {
+            const deleted = WorkflowEngine.deleteWorkflow(req.params.id);
+            if (!deleted) return res.status(404).json({ error: 'Workflow not found' });
+            res.json({ success: true });
+        } catch (e: any) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    // Manually trigger a workflow
+    app.post('/api/workflows/:id/run', async (req, res) => {
+        try {
+            const result = await WorkflowEngine.executeWorkflow(req.params.id, req.body.context || undefined);
+            res.json({ success: true, result });
+        } catch (e: any) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    // ─── Event Triggers API ─────────────────────────────────────────────────
+
+    // List all event triggers
+    app.get('/api/events/triggers', (req, res) => {
+        try {
+            const triggers = EventBus.getTriggers();
+            res.json({ triggers });
+        } catch (e: any) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    // Create/update event trigger
+    app.post('/api/events/triggers', (req, res) => {
+        try {
+            const trigger = req.body;
+            if (!trigger.id || !trigger.name || !trigger.source || !trigger.action) {
+                return res.status(400).json({ error: 'id, name, source, and action are required' });
+            }
+            trigger.status = trigger.status || 'enabled';
+            trigger.filter = trigger.filter || {};
+            const saved = EventBus.saveTrigger(trigger);
+            res.json({ success: true, trigger: saved });
+        } catch (e: any) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    // Delete event trigger
+    app.delete('/api/events/triggers/:id', (req, res) => {
+        try {
+            const deleted = EventBus.deleteTrigger(req.params.id);
+            if (!deleted) return res.status(404).json({ error: 'Trigger not found' });
+            res.json({ success: true });
+        } catch (e: any) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    // ─── Generic Webhook Inbound ────────────────────────────────────────────
+
+    // External services can POST here to fire event triggers
+    app.post('/api/webhooks/trigger', async (req, res) => {
+        try {
+            const { source, ...payload } = req.body;
+            if (!source) return res.status(400).json({ error: 'source is required' });
+            const matched = await EventBus.emit(source, { source, ...payload });
+            res.json({ success: true, triggersMatched: matched });
+        } catch (e: any) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
     // Helper for agents DB
     const getAgents = () => {
         const { PersonaShell } = require('./agents/PersonaShell');
