@@ -22,6 +22,103 @@ let lastMouseX: number | null = null;
 let lastMouseY: number | null = null;
 
 /**
+ * Auto-dismiss common cookie consent, GDPR, and overlay dialogs.
+ * Runs ONE Runtime.evaluate call that scans for known consent patterns
+ * and clicks Accept/OK/Close buttons. ~50ms, zero API cost.
+ */
+async function autoDismissOverlays(): Promise<void> {
+    try {
+        const result = await sendCommand('Runtime.evaluate', {
+            expression: [
+                '(function(){',
+                'var clicked="";',
+                // --- Strategy 1: Known consent framework selectors ---
+                'var selectors=[',
+                // OneTrust
+                '"#onetrust-accept-btn-handler",',
+                '"button.onetrust-close-btn-handler",',
+                // CookieBot
+                '"#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll",',
+                '"a#CybotCookiebotDialogBodyLevelButtonAccept",',
+                // TrustArc / TrustE
+                '".trustarc-agree-btn",',
+                '"#truste-consent-button",',
+                // Quantcast
+                '".qc-cmp2-summary-buttons button[mode=primary]",',
+                '"button.css-47sehv",',
+                // Didomi
+                '"#didomi-notice-agree-button",',
+                // Usercentrics
+                '"button[data-testid=uc-accept-all-button]",',
+                // Osano
+                '".osano-cm-accept-all",',
+                // Common generic patterns
+                '"button.accept-all",',
+                '"button.cookie-accept",',
+                '"button.consent-accept",',
+                '"button[data-action=accept]",',
+                '".cc-accept",',
+                '".cc-dismiss",',
+                '"[aria-label*=Accept][aria-label*=cookie]",',
+                '"[aria-label*=Accept][aria-label*=all]",',
+                '"[data-testid*=accept]",',
+                '"[data-testid*=cookie-accept]",',
+                '];',
+                'for(var i=0;i<selectors.length;i++){',
+                '  try{var el=document.querySelector(selectors[i]);',
+                '  if(el&&el.offsetParent!==null){el.click();clicked=selectors[i];break;}}catch(e){}',
+                '}',
+                // --- Strategy 2: Text content matching ---
+                'if(!clicked){',
+                '  var btns=document.querySelectorAll("button,a[role=button],[role=button]");',
+                '  var acceptTexts=["accept all","accept cookies","accept & close",',
+                '    "i agree","agree","allow all","allow cookies","ok","got it",',
+                '    "i accept","consent","accept all cookies","agree and continue",',
+                '    "accept and close","accept & continue"];',
+                '  for(var j=0;j<btns.length;j++){',
+                '    var txt=(btns[j].textContent||"").trim().toLowerCase();',
+                '    if(txt.length>50)continue;',
+                '    for(var k=0;k<acceptTexts.length;k++){',
+                '      if(txt===acceptTexts[k]||txt.indexOf(acceptTexts[k])===0){',
+                '        if(btns[j].offsetParent!==null){btns[j].click();clicked=txt;break;}',
+                '      }',
+                '    }',
+                '    if(clicked)break;',
+                '  }',
+                '}',
+                // --- Strategy 3: Shadow DOM consent banners ---
+                'if(!clicked){',
+                '  var shadows=document.querySelectorAll("[class*=consent],[class*=cookie],[id*=consent],[id*=cookie]");',
+                '  for(var s=0;s<shadows.length;s++){',
+                '    if(shadows[s].shadowRoot){',
+                '      var sb=shadows[s].shadowRoot.querySelectorAll("button");',
+                '      for(var sb_i=0;sb_i<sb.length;sb_i++){',
+                '        var st=(sb[sb_i].textContent||"").trim().toLowerCase();',
+                '        if(st.indexOf("accept")>=0||st.indexOf("agree")>=0){',
+                '          sb[sb_i].click();clicked="shadow:"+st;break;',
+                '        }',
+                '      }',
+                '      if(clicked)break;',
+                '    }',
+                '  }',
+                '}',
+                'return clicked||"none"',
+                '})()'
+            ].join('\n'),
+            returnByValue: true
+        });
+        const dismissed = result.result?.value;
+        if (dismissed && dismissed !== 'none') {
+            console.log(`[RelayBridge] \uD83C\uDF6A Auto-dismissed overlay: "${dismissed}"`);
+            // Wait for dialog to close
+            await new Promise(r => setTimeout(r, 500 + Math.floor(Math.random() * 500)));
+        }
+    } catch {
+        // Non-critical
+    }
+}
+
+/**
  * Generate a cubic Bézier curve path between two points with human-like
  * randomization. Mimics ghost-cursor / Google Antigravity IDE style movements.
  * 
@@ -590,6 +687,9 @@ export async function navigateAndRead(url: string): Promise<{ title: string; url
         await new Promise(r => setTimeout(r, 2000 + Math.floor(Math.random() * 2000)));
     }
 
+    // ─── Auto-Dismiss Cookie Consent / Overlay Dialogs ────────────────
+    await autoDismissOverlays();
+
     return readContent();
 }
 
@@ -968,30 +1068,80 @@ export async function executeJs(script: string): Promise<string> {
  * Type text into an element in the relay browser.
  */
 export async function typeText(selector: string, text: string): Promise<string> {
-    const escapedText = text.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n');
     const escapedSelector = selector.replace(/'/g, "\\'");
 
-    const evalResult = await sendCommand('Runtime.evaluate', {
+    // Step 1: Find element, scroll, focus, and get its position
+    const findResult = await sendCommand('Runtime.evaluate', {
         expression: `(() => {
             const el = document.querySelector('${escapedSelector}');
             if (!el) return JSON.stringify({ success: false, error: 'Element not found: ${escapedSelector}' });
             el.scrollIntoView({ behavior: 'smooth', block: 'center' });
             el.focus();
-            el.value = '${escapedText}';
+            // Clear existing value
+            el.value = '';
             el.dispatchEvent(new Event('input', { bubbles: true }));
-            el.dispatchEvent(new Event('change', { bubbles: true }));
-            return JSON.stringify({ success: true, tag: el.tagName });
+            const rect = el.getBoundingClientRect();
+            return JSON.stringify({
+                success: true,
+                tag: el.tagName,
+                cx: Math.round(rect.left + rect.width / 2),
+                cy: Math.round(rect.top + rect.height / 2)
+            });
         })()`,
         returnByValue: true
     });
 
-    try {
-        const data = JSON.parse(evalResult.result?.value || '{}');
-        if (!data.success) return `Error: ${data.error}`;
-        return `Typed "${text}" into ${data.tag}`;
-    } catch {
-        return 'Type action completed';
+    const data = JSON.parse(findResult.result?.value || '{}');
+    if (!data.success) return `Error: ${data.error}`;
+
+    // Step 2: Bézier-move ghost cursor to the input field and click it
+    if (data.cx && data.cy) {
+        const startX = lastMouseX ?? (Math.random() * 300 + 100);
+        const startY = lastMouseY ?? (Math.random() * 200 + 100);
+        const points = generateBezierPath(startX, startY, data.cx, data.cy);
+        if (!ghostCursorInjected) await injectGhostCursor();
+        animateGhostCursor(points);
+
+        // CDP mouse movement + click on the field
+        for (const p of points) {
+            await sendCommand('Input.dispatchMouseEvent', {
+                type: 'mouseMoved', x: Math.round(p.x), y: Math.round(p.y), button: 'none'
+            });
+            await new Promise(r => setTimeout(r, 10 + Math.floor(Math.random() * 8)));
+        }
+        await new Promise(r => setTimeout(r, 100 + Math.floor(Math.random() * 150)));
+        await sendCommand('Input.dispatchMouseEvent', {
+            type: 'mousePressed', x: data.cx, y: data.cy, button: 'left', clickCount: 1
+        });
+        await new Promise(r => setTimeout(r, 50 + Math.floor(Math.random() * 60)));
+        await sendCommand('Input.dispatchMouseEvent', {
+            type: 'mouseReleased', x: data.cx, y: data.cy, button: 'left', clickCount: 1
+        });
+        await showClickEffect(data.cx, data.cy);
+        lastMouseX = data.cx;
+        lastMouseY = data.cy;
+        await new Promise(r => setTimeout(r, 200 + Math.floor(Math.random() * 200)));
     }
+
+    // Step 3: Type character-by-character via CDP Input.dispatchKeyEvent
+    for (const char of text) {
+        if (char === '\n') {
+            await sendCommand('Input.dispatchKeyEvent', {
+                type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13
+            });
+            await sendCommand('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter' });
+        } else {
+            await sendCommand('Input.dispatchKeyEvent', {
+                type: 'keyDown', key: char, text: char, unmodifiedText: char
+            });
+            await sendCommand('Input.dispatchKeyEvent', { type: 'keyUp', key: char });
+        }
+        // Variable typing delay: average human is 50-150ms per key
+        await new Promise(r => setTimeout(r, 50 + Math.floor(Math.random() * 100)));
+    }
+
+    console.log(`[RelayBridge] \u2328\uFE0F Typed ${text.length} chars into ${data.tag} (char-by-char CDP)`);
+    return `Typed "${text}" into ${data.tag} [character-by-character]`;
 }
 
 /**
