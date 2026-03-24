@@ -418,6 +418,9 @@ async function waitAfterClick(previousUrl: string): Promise<void> {
             // URL changed — full navigation happened. Wait for page ready.
             console.log(`[RelayBridge] Post-click navigation detected: ${previousUrl} → ${currentUrl}`);
             await waitForPageReady(8000, 1000);
+            // Ghost cursor was destroyed by page navigation — reset and re-inject
+            ghostCursorInjected = false;
+            await injectGhostCursor();
         } else {
             // Same URL — likely an SPA in-page update. Wait for DOM mutations.
             await new Promise(r => setTimeout(r, 1500));
@@ -864,6 +867,8 @@ export async function clickElement(selector: string): Promise<string> {
         // STEP 2: Human-like mouse movement + CDP click (Bézier curve path)
         // Mimics Google Antigravity / ghost-cursor style mouse pointer movement
         if (data.needsCdpClick && data.cx !== undefined && data.cy !== undefined) {
+            // Ensure ghost cursor is injected on the current page
+            if (!ghostCursorInjected) await injectGhostCursor();
             try {
                 const targetX = data.cx;
                 const targetY = data.cy;
