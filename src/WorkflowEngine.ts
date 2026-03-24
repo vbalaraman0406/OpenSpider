@@ -262,9 +262,40 @@ export class WorkflowEngine {
 
                         if (step.channel === 'whatsapp' && step.target) {
                             try {
+                                let targetJid = step.target;
+
+                                // Resolve special targets to actual WhatsApp JIDs
+                                if (targetJid === 'default' || targetJid === 'admin' || targetJid === 'me') {
+                                    // Read the first allowed DM from whatsapp_config.json
+                                    const waConfigPath = path.join(process.cwd(), 'workspace', 'whatsapp_config.json');
+                                    if (fs.existsSync(waConfigPath)) {
+                                        const waConfig = JSON.parse(fs.readFileSync(waConfigPath, 'utf-8'));
+                                        // Try adminJid first, then first allowedDM
+                                        if (waConfig.adminJid) {
+                                            targetJid = waConfig.adminJid;
+                                        } else if (waConfig.allowedDMs && waConfig.allowedDMs.length > 0) {
+                                            const firstDM = waConfig.allowedDMs[0];
+                                            const number = typeof firstDM === 'string' ? firstDM : firstDM.number;
+                                            if (number) {
+                                                targetJid = `${number.replace(/\D/g, '')}@s.whatsapp.net`;
+                                            }
+                                        }
+                                    }
+
+                                    if (targetJid === 'default' || targetJid === 'admin' || targetJid === 'me') {
+                                        throw new Error('Could not resolve WhatsApp target — no adminJid or allowedDMs configured in whatsapp_config.json');
+                                    }
+                                    console.log(`  [WorkflowEngine] Resolved target "${step.target}" → ${targetJid}`);
+                                }
+
+                                // Ensure JID format
+                                if (!targetJid.includes('@')) {
+                                    targetJid = `${targetJid.replace(/\D/g, '')}@s.whatsapp.net`;
+                                }
+
                                 const { sendWhatsAppMessage } = require('./whatsapp');
-                                await sendWhatsAppMessage(step.target, message);
-                                result = { stepId: step.id, action: 'deliver', output: `Delivered to WhatsApp: ${step.target}`, status: 'success', durationMs: Date.now() - stepStart };
+                                await sendWhatsAppMessage(targetJid, message);
+                                result = { stepId: step.id, action: 'deliver', output: `Delivered to WhatsApp: ${targetJid}`, status: 'success', durationMs: Date.now() - stepStart };
                             } catch (err: any) {
                                 result = { stepId: step.id, action: 'deliver', output: `WhatsApp delivery failed: ${err.message}`, status: 'failed', durationMs: Date.now() - stepStart };
                             }
