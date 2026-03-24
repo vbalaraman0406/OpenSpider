@@ -1395,7 +1395,7 @@ function CronView({ agents, logs }: { agents: any[]; logs: LogMessage[] }) {
     const [showModal, setShowModal] = useState(false);
     const [formData, setFormData] = useState({ description: '', prompt: '', intervalHours: '24', agentId: 'gateway', status: 'enabled', preferredTime: '', modelOverride: '' });
     const [editJob, setEditJob] = useState<any>(null);
-    const [editFormData, setEditFormData] = useState({ description: '', prompt: '', intervalHours: '24', preferredTime: '', modelOverride: '' });
+    const [editFormData, setEditFormData] = useState({ description: '', prompt: '', intervalHours: '24', preferredTime: '', modelOverride: '', agentId: 'manager' });
     const [expandedPrompts, setExpandedPrompts] = useState<Set<string>>(new Set());
     const [waContacts, setWaContacts] = useState<{ groups: any[]; dms: any[] }>({ groups: [], dms: [] });
     const [contactSearch, setContactSearch] = useState('');
@@ -1473,6 +1473,7 @@ function CronView({ agents, logs }: { agents: any[]; logs: LogMessage[] }) {
             intervalHours: String(job.intervalHours || 24),
             preferredTime: job.preferredTime || '',
             modelOverride: job.modelOverride || '',
+            agentId: job.agentId || 'manager',
         });
         setContactSearch('');
         setShowContactDropdown(false);
@@ -1496,6 +1497,7 @@ function CronView({ agents, logs }: { agents: any[]; logs: LogMessage[] }) {
             // and the server's spread operator correctly clears old values
             payload.preferredTime = editFormData.preferredTime || '';
             payload.modelOverride = editFormData.modelOverride || '';
+            payload.agentId = editFormData.agentId || 'manager';
             await apiFetch(`/api/cron/${editJob.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
@@ -1810,6 +1812,14 @@ function CronView({ agents, logs }: { agents: any[]; logs: LogMessage[] }) {
                             <div>
                                 <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Description</label>
                                 <input required type="text" value={editFormData.description} onChange={e => setEditFormData({ ...editFormData, description: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm text-slate-200 focus:ring-1 focus:ring-sky-500 focus:border-sky-500 outline-none" />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Assigned Agent</label>
+                                <select value={editFormData.agentId} onChange={e => setEditFormData({ ...editFormData, agentId: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm text-slate-200 focus:ring-1 focus:ring-sky-500 focus:border-sky-500 outline-none">
+                                    <option value="gateway">Gateway Architect (Default Routing)</option>
+                                    <option value="manager">Manager</option>
+                                    {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                                </select>
                             </div>
                             <div>
                                 <label className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Preferred Time (e.g. 07:00) — leave blank for interval-based</label>
