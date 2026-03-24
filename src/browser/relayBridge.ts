@@ -80,6 +80,160 @@ function generateBezierPath(
     return points;
 }
 
+// ─── Visual Ghost Cursor Overlay ─────────────────────────────────────────────
+// CDP Input.dispatchMouseEvent doesn't move the OS cursor visually.
+// This injects a visible cursor element that tracks our Bézier movements.
+
+let ghostCursorInjected = false;
+
+/**
+ * Inject a visible ghost cursor SVG overlay into the relay browser page.
+ * The cursor element follows our CDP mouse dispatches so the user can see
+ * the human-like movement path.
+ */
+async function injectGhostCursor(): Promise<void> {
+    try {
+        await sendCommand('Runtime.evaluate', {
+            expression: `(() => {
+                // Remove any existing ghost cursor
+                const existing = document.getElementById('__openspider_ghost_cursor');
+                if (existing) existing.remove();
+                const existingTrail = document.getElementById('__openspider_cursor_trail');
+                if (existingTrail) existingTrail.remove();
+
+                // Create cursor trail canvas (draws a fading red dot trail)
+                const trail = document.createElement('canvas');
+                trail.id = '__openspider_cursor_trail';
+                trail.width = window.innerWidth;
+                trail.height = window.innerHeight;
+                Object.assign(trail.style, {
+                    position: 'fixed', top: '0', left: '0',
+                    width: '100vw', height: '100vh',
+                    pointerEvents: 'none', zIndex: '2147483645',
+                    opacity: '0.6'
+                });
+                document.documentElement.appendChild(trail);
+
+                // Create the cursor arrow (SVG pointer)
+                const cursor = document.createElement('div');
+                cursor.id = '__openspider_ghost_cursor';
+                cursor.innerHTML = \`<svg width="24" height="28" viewBox="0 0 24 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M5 2L5 22L9.5 17.5L13.5 25L16.5 23.5L12.5 15.5L19 15.5L5 2Z" 
+                          fill="rgba(255,60,60,0.9)" stroke="white" stroke-width="1.5"/>
+                </svg>\`;
+                Object.assign(cursor.style, {
+                    position: 'fixed', top: '0', left: '0',
+                    pointerEvents: 'none', zIndex: '2147483646',
+                    transform: 'translate(-2px, -2px)',
+                    filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))',
+                    transition: 'none'
+                });
+                document.documentElement.appendChild(cursor);
+
+                // Store trail points for drawing
+                window.__openspider_trail_points = [];
+                window.__openspider_trail_ctx = trail.getContext('2d');
+
+                // Handle window resize
+                window.addEventListener('resize', () => {
+                    trail.width = window.innerWidth;
+                    trail.height = window.innerHeight;
+                });
+
+                return 'Ghost cursor injected';
+            })()`,
+            returnByValue: true
+        });
+        ghostCursorInjected = true;
+        console.log('[RelayBridge] 👆 Visual ghost cursor injected');
+    } catch (e: any) {
+        console.warn('[RelayBridge] Ghost cursor injection failed:', e.message);
+    }
+}
+
+/**
+ * Move the visible ghost cursor to a position and optionally draw a trail dot.
+ */
+async function moveGhostCursor(x: number, y: number, drawTrail = true): Promise<void> {
+    if (!ghostCursorInjected) return;
+    try {
+        await sendCommand('Runtime.evaluate', {
+            expression: `(() => {
+                const cursor = document.getElementById('__openspider_ghost_cursor');
+                if (cursor) {
+                    cursor.style.left = '${Math.round(x)}px';
+                    cursor.style.top = '${Math.round(y)}px';
+                }
+                ${drawTrail ? `
+                const ctx = window.__openspider_trail_ctx;
+                if (ctx) {
+                    // Draw a fading trail dot
+                    const pts = window.__openspider_trail_points || [];
+                    pts.push({ x: ${Math.round(x)}, y: ${Math.round(y)}, t: Date.now() });
+                    // Keep only last 40 points
+                    while (pts.length > 40) pts.shift();
+                    window.__openspider_trail_points = pts;
+
+                    // Redraw trail
+                    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+                    for (let i = 0; i < pts.length; i++) {
+                        const p = pts[i];
+                        const age = (i / pts.length); // 0 = oldest, 1 = newest
+                        ctx.beginPath();
+                        ctx.arc(p.x, p.y, 2 + age * 2, 0, Math.PI * 2);
+                        ctx.fillStyle = 'rgba(255, 60, 60, ' + (age * 0.7) + ')';
+                        ctx.fill();
+                    }
+                }` : ''}
+            })()`,
+            returnByValue: true
+        });
+    } catch {
+        // Non-critical — page may have navigated
+    }
+}
+
+/**
+ * Show a click ripple effect at the cursor position.
+ */
+async function showClickEffect(x: number, y: number): Promise<void> {
+    if (!ghostCursorInjected) return;
+    try {
+        await sendCommand('Runtime.evaluate', {
+            expression: `(() => {
+                const ripple = document.createElement('div');
+                Object.assign(ripple.style, {
+                    position: 'fixed',
+                    left: '${Math.round(x) - 15}px',
+                    top: '${Math.round(y) - 15}px',
+                    width: '30px', height: '30px',
+                    borderRadius: '50%',
+                    border: '2px solid rgba(255, 60, 60, 0.8)',
+                    pointerEvents: 'none',
+                    zIndex: '2147483647',
+                    animation: 'openspider-click-ripple 0.5s ease-out forwards'
+                });
+                // Add animation keyframes if not already present
+                if (!document.getElementById('__openspider_click_style')) {
+                    const style = document.createElement('style');
+                    style.id = '__openspider_click_style';
+                    style.textContent = \`
+                        @keyframes openspider-click-ripple {
+                            0% { transform: scale(0.5); opacity: 1; }
+                            100% { transform: scale(2.5); opacity: 0; }
+                        }
+                    \`;
+                    document.head.appendChild(style);
+                }
+                document.documentElement.appendChild(ripple);
+                setTimeout(() => ripple.remove(), 600);
+            })()`,
+            returnByValue: true
+        });
+    } catch { }
+}
+
+
 // Reconnection event callbacks
 const reconnectCallbacks: Array<() => void> = [];
 
@@ -389,6 +543,7 @@ async function solveCloudflareCheckbox(): Promise<boolean> {
             await sendCommand('Input.dispatchMouseEvent', {
                 type: 'mouseMoved', x: Math.round(p.x), y: Math.round(p.y), button: 'none'
             });
+            await moveGhostCursor(p.x, p.y);
             const progress = i / points.length;
             const speedFactor = 1 - 4 * Math.pow(progress - 0.5, 2);
             await new Promise(r => setTimeout(r, Math.floor(8 + (1 - speedFactor) * 17 + Math.random() * 5)));
@@ -408,6 +563,8 @@ async function solveCloudflareCheckbox(): Promise<boolean> {
         await sendCommand('Input.dispatchMouseEvent', {
             type: 'mouseReleased', x: Math.round(jX), y: Math.round(jY), button: 'left', clickCount: 1
         });
+
+        await showClickEffect(jX, jY);
 
         lastMouseX = checkboxX;
         lastMouseY = checkboxY;
@@ -431,6 +588,10 @@ export async function navigateAndRead(url: string): Promise<{ title: string; url
 
     // Smart wait: poll for document.readyState instead of fixed 8s delay
     await waitForPageReady();
+
+    // Inject visual ghost cursor on the new page
+    ghostCursorInjected = false;
+    await injectGhostCursor();
 
     // ─── Cloudflare / CAPTCHA Detection & Auto-Solve ────────────────
     const MAX_CAPTCHA_ATTEMPTS = 3;
@@ -724,6 +885,8 @@ export async function clickElement(selector: string): Promise<string> {
                         y: Math.round(p.y),
                         button: 'none'
                     });
+                    // Move the visual ghost cursor in sync
+                    await moveGhostCursor(p.x, p.y);
                     // Variable delay: faster in the middle, slower at start/end (like a real hand)
                     const progress = i / points.length;
                     const speedFactor = 1 - 4 * Math.pow(progress - 0.5, 2); // Bell curve
@@ -754,6 +917,9 @@ export async function clickElement(selector: string): Promise<string> {
                     button: 'left',
                     clickCount: 1
                 });
+
+                // Show visual click ripple effect
+                await showClickEffect(jitterX, jitterY);
 
                 // Track last mouse position for the next movement
                 lastMouseX = targetX;
