@@ -53,6 +53,8 @@ export interface Workflow {
     status: 'enabled' | 'disabled';
     trigger: WorkflowTrigger;
     steps: WorkflowStep[];
+    /** LLM provider override for agent_task steps (e.g. 'antigravity', 'openai', 'ollama') */
+    model?: string;
     createdAt: string;
     lastRunAt?: string;
     lastRunStatus?: 'success' | 'failed' | 'running';
@@ -221,7 +223,7 @@ export class WorkflowEngine {
                         }
                         prompt = interpolate(prompt, stepResults, prevStepId);
 
-                        const manager = new ManagerAgent();
+                        const manager = new ManagerAgent(workflow.model || undefined);
                         try {
                             const output = await manager.processUserRequest(
                                 `[SYSTEM WORKFLOW STEP] Execute this step of an automated workflow pipeline. Do not ask for permission. Just do it and summarize results.\n\n${prompt}`

@@ -2139,7 +2139,7 @@ function WorkflowsView() {
     const [runResult, setRunResult] = useState<any | null>(null);
     const [showCreate, setShowCreate] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
-    const [newWf, setNewWf] = useState({ name: '', steps: [{ id: 's1', action: 'agent_task', prompt: '' }] as any[] });
+    const [newWf, setNewWf] = useState({ name: '', model: '', steps: [{ id: 's1', action: 'agent_task', prompt: '' }] as any[] });
 
     const fetchWorkflows = () => {
         apiFetch('/api/workflows').then(r => r.json()).then(d => {
@@ -2181,24 +2181,24 @@ function WorkflowsView() {
             const existing = workflows.find(w => w.id === editingId);
             await apiFetch(`/api/workflows/${editingId}`, {
                 method: 'PUT', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ...existing, name: newWf.name, steps: newWf.steps })
+                body: JSON.stringify({ ...existing, name: newWf.name, model: newWf.model || undefined, steps: newWf.steps })
             });
         } else {
             // Create new
             const id = newWf.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
             await apiFetch('/api/workflows', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id, name: newWf.name, status: 'enabled', trigger: { type: 'manual' }, steps: newWf.steps })
+                body: JSON.stringify({ id, name: newWf.name, model: newWf.model || undefined, status: 'enabled', trigger: { type: 'manual' }, steps: newWf.steps })
             });
         }
         setShowCreate(false);
         setEditingId(null);
-        setNewWf({ name: '', steps: [{ id: 's1', action: 'agent_task', prompt: '' }] });
+        setNewWf({ name: '', model: '', steps: [{ id: 's1', action: 'agent_task', prompt: '' }] });
         fetchWorkflows();
     };
 
     const editWorkflow = (wf: any) => {
-        setNewWf({ name: wf.name, steps: wf.steps || [] });
+        setNewWf({ name: wf.name, model: wf.model || '', steps: wf.steps || [] });
         setEditingId(wf.id);
         setShowCreate(true);
         setExpanded(null);
@@ -2227,7 +2227,7 @@ function WorkflowsView() {
                     <p className="text-slate-400 text-sm mt-1">Multi-step task pipelines that chain agent actions together.</p>
                 </div>
                 <div className="flex gap-2">
-                    <button onClick={() => { setShowCreate(!showCreate); setEditingId(null); setNewWf({ name: '', steps: [{ id: 's1', action: 'agent_task', prompt: '' }] }); }} className="flex items-center gap-2 px-4 py-2 bg-indigo-600/20 text-indigo-400 rounded-lg hover:bg-indigo-600/30 transition ring-1 ring-indigo-500/30">
+                    <button onClick={() => { setShowCreate(!showCreate); setEditingId(null); setNewWf({ name: '', model: '', steps: [{ id: 's1', action: 'agent_task', prompt: '' }] }); }} className="flex items-center gap-2 px-4 py-2 bg-indigo-600/20 text-indigo-400 rounded-lg hover:bg-indigo-600/30 transition ring-1 ring-indigo-500/30">
                         <Plus className="w-4 h-4" /> Create Workflow
                     </button>
                     <button onClick={fetchWorkflows} className="flex items-center gap-2 px-4 py-2 bg-slate-700/50 text-slate-300 rounded-lg hover:bg-slate-700 transition">
@@ -2245,6 +2245,24 @@ function WorkflowsView() {
                         value={newWf.name} onChange={e => setNewWf({ ...newWf, name: e.target.value })}
                         className="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white mb-4 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                     />
+                    <div className="flex gap-3 items-center mb-4">
+                        <div className="flex-1">
+                            <label className="text-xs text-slate-500 uppercase tracking-wider block mb-1">LLM Model</label>
+                            <select value={newWf.model} onChange={e => setNewWf({ ...newWf, model: e.target.value })}
+                                className="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                                <option value="">System Default</option>
+                                <option value="antigravity-internal">Gemini (Internal)</option>
+                                <option value="antigravity">Gemini (API)</option>
+                                <option value="openai">OpenAI GPT</option>
+                                <option value="anthropic">Anthropic Claude</option>
+                                <option value="ollama">Ollama (Local)</option>
+                                <option value="deepseek">DeepSeek</option>
+                                <option value="nvidia-1">NVIDIA NIM 1</option>
+                                <option value="nvidia-2">NVIDIA NIM 2</option>
+                                <option value="custom">Custom OpenAI-Compatible</option>
+                            </select>
+                        </div>
+                    </div>
                     <div className="text-xs text-slate-500 uppercase tracking-wider mb-2">Steps</div>
                     {newWf.steps.map((step: any, i: number) => (
                         <div key={i} className="flex gap-2 mb-2">
