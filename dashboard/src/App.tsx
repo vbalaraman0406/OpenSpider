@@ -2128,6 +2128,7 @@ function WorkflowsView() {
     const [expanded, setExpanded] = useState<string | null>(null);
     const [runResult, setRunResult] = useState<any | null>(null);
     const [showCreate, setShowCreate] = useState(false);
+    const [editingId, setEditingId] = useState<string | null>(null);
     const [newWf, setNewWf] = useState({ name: '', steps: [{ id: 's1', action: 'agent_task', prompt: '' }] as any[] });
 
     const fetchWorkflows = () => {
@@ -2165,14 +2166,32 @@ function WorkflowsView() {
 
     const createWorkflow = async () => {
         if (!newWf.name) return;
-        const id = newWf.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-        await apiFetch('/api/workflows', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id, name: newWf.name, status: 'enabled', trigger: { type: 'manual' }, steps: newWf.steps })
-        });
+        if (editingId) {
+            // Update existing
+            const existing = workflows.find(w => w.id === editingId);
+            await apiFetch(`/api/workflows/${editingId}`, {
+                method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ...existing, name: newWf.name, steps: newWf.steps })
+            });
+        } else {
+            // Create new
+            const id = newWf.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+            await apiFetch('/api/workflows', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id, name: newWf.name, status: 'enabled', trigger: { type: 'manual' }, steps: newWf.steps })
+            });
+        }
         setShowCreate(false);
+        setEditingId(null);
         setNewWf({ name: '', steps: [{ id: 's1', action: 'agent_task', prompt: '' }] });
         fetchWorkflows();
+    };
+
+    const editWorkflow = (wf: any) => {
+        setNewWf({ name: wf.name, steps: wf.steps || [] });
+        setEditingId(wf.id);
+        setShowCreate(true);
+        setExpanded(null);
     };
 
     const addStep = () => {
@@ -2198,7 +2217,7 @@ function WorkflowsView() {
                     <p className="text-slate-400 text-sm mt-1">Multi-step task pipelines that chain agent actions together.</p>
                 </div>
                 <div className="flex gap-2">
-                    <button onClick={() => setShowCreate(!showCreate)} className="flex items-center gap-2 px-4 py-2 bg-indigo-600/20 text-indigo-400 rounded-lg hover:bg-indigo-600/30 transition ring-1 ring-indigo-500/30">
+                    <button onClick={() => { setShowCreate(!showCreate); setEditingId(null); setNewWf({ name: '', steps: [{ id: 's1', action: 'agent_task', prompt: '' }] }); }} className="flex items-center gap-2 px-4 py-2 bg-indigo-600/20 text-indigo-400 rounded-lg hover:bg-indigo-600/30 transition ring-1 ring-indigo-500/30">
                         <Plus className="w-4 h-4" /> Create Workflow
                     </button>
                     <button onClick={fetchWorkflows} className="flex items-center gap-2 px-4 py-2 bg-slate-700/50 text-slate-300 rounded-lg hover:bg-slate-700 transition">
@@ -2209,8 +2228,8 @@ function WorkflowsView() {
 
             {/* Create Form */}
             {showCreate && (
-                <div className="bg-slate-800/70 border border-indigo-500/30 rounded-xl p-5 mb-6">
-                    <h3 className="text-sm font-semibold text-indigo-400 mb-4">New Workflow</h3>
+                <div className={`bg-slate-800/70 border ${editingId ? 'border-cyan-500/30' : 'border-indigo-500/30'} rounded-xl p-5 mb-6`}>
+                    <h3 className={`text-sm font-semibold ${editingId ? 'text-cyan-400' : 'text-indigo-400'} mb-4`}>{editingId ? `Editing: ${newWf.name}` : 'New Workflow'}</h3>
                     <input
                         type="text" placeholder="Workflow name (e.g. Market Research Pipeline)"
                         value={newWf.name} onChange={e => setNewWf({ ...newWf, name: e.target.value })}
@@ -2256,8 +2275,8 @@ function WorkflowsView() {
                     ))}
                     <div className="flex gap-2 mt-3">
                         <button onClick={addStep} className="px-3 py-1.5 bg-slate-700/50 text-slate-400 rounded-lg text-xs hover:bg-slate-700 transition">+ Add Step</button>
-                        <button onClick={createWorkflow} className="px-4 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-medium hover:bg-indigo-700 transition">Create Workflow</button>
-                        <button onClick={() => setShowCreate(false)} className="px-3 py-1.5 text-slate-500 text-xs hover:text-slate-300 transition">Cancel</button>
+                        <button onClick={createWorkflow} className={`px-4 py-1.5 ${editingId ? 'bg-cyan-600 hover:bg-cyan-700' : 'bg-indigo-600 hover:bg-indigo-700'} text-white rounded-lg text-xs font-medium transition`}>{editingId ? 'Save Changes' : 'Create Workflow'}</button>
+                        <button onClick={() => { setShowCreate(false); setEditingId(null); }} className="px-3 py-1.5 text-slate-500 text-xs hover:text-slate-300 transition">Cancel</button>
                     </div>
                 </div>
             )}
@@ -2333,6 +2352,9 @@ function WorkflowsView() {
                                         <button onClick={() => runWorkflow(wf.id)} className="px-3 py-1.5 bg-indigo-600/20 text-indigo-400 rounded-lg text-xs font-medium hover:bg-indigo-600/30 transition flex items-center gap-1">
                                             <Play className="w-3 h-3" /> Run Now
                                         </button>
+                                        <button onClick={() => editWorkflow(wf)} className="px-3 py-1.5 bg-cyan-600/20 text-cyan-400 rounded-lg text-xs font-medium hover:bg-cyan-600/30 transition flex items-center gap-1">
+                                            <Settings className="w-3 h-3" /> Edit
+                                        </button>
                                         <button onClick={() => toggleStatus(wf)} className="px-3 py-1.5 bg-slate-700/50 text-slate-400 rounded-lg text-xs font-medium hover:bg-slate-700 transition">
                                             {wf.status === 'enabled' ? 'Disable' : 'Enable'}
                                         </button>
@@ -2386,6 +2408,7 @@ function EventTriggersView() {
     const [triggers, setTriggers] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [showCreate, setShowCreate] = useState(false);
+    const [editingId, setEditingId] = useState<string | null>(null);
     const [newTrig, setNewTrig] = useState({ name: '', source: 'gmail', filterKey: 'from', filterValue: '', actionType: 'agent_task', actionPrompt: '', actionWorkflowId: '' });
 
     const fetchTriggers = () => {
@@ -2419,19 +2442,47 @@ function EventTriggersView() {
 
     const createTrigger = async () => {
         if (!newTrig.name) return;
-        const id = newTrig.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
         const filter: any = {};
         if (newTrig.filterKey && newTrig.filterValue) filter[newTrig.filterKey] = newTrig.filterValue;
         const action: any = newTrig.actionType === 'workflow'
             ? { type: 'workflow', workflowId: newTrig.actionWorkflowId }
             : { type: 'agent_task', prompt: newTrig.actionPrompt };
-        await apiFetch('/api/events/triggers', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id, name: newTrig.name, source: newTrig.source, status: 'enabled', filter, action })
-        });
+        if (editingId) {
+            // Update existing
+            const existing = triggers.find(t => t.id === editingId);
+            await apiFetch('/api/events/triggers', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ...existing, name: newTrig.name, source: newTrig.source, filter, action })
+            });
+        } else {
+            // Create new
+            const id = newTrig.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+            await apiFetch('/api/events/triggers', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id, name: newTrig.name, source: newTrig.source, status: 'enabled', filter, action })
+            });
+        }
         setShowCreate(false);
+        setEditingId(null);
         setNewTrig({ name: '', source: 'gmail', filterKey: 'from', filterValue: '', actionType: 'agent_task', actionPrompt: '', actionWorkflowId: '' });
         fetchTriggers();
+    };
+
+    const editTrigger = (t: any) => {
+        const filterEntries = Object.entries(t.filter || {});
+        const fKey = filterEntries.length > 0 ? filterEntries[0][0] as string : 'from';
+        const fVal = filterEntries.length > 0 ? filterEntries[0][1] as string : '';
+        setNewTrig({
+            name: t.name,
+            source: t.source || 'gmail',
+            filterKey: fKey,
+            filterValue: fVal,
+            actionType: t.action?.type || 'agent_task',
+            actionPrompt: t.action?.prompt || '',
+            actionWorkflowId: t.action?.workflowId || ''
+        });
+        setEditingId(t.id);
+        setShowCreate(true);
     };
 
     return (
@@ -2442,7 +2493,7 @@ function EventTriggersView() {
                     <p className="text-slate-400 text-sm mt-1">React to real-time events — emails, messages, webhooks, and cron results.</p>
                 </div>
                 <div className="flex gap-2">
-                    <button onClick={() => setShowCreate(!showCreate)} className="flex items-center gap-2 px-4 py-2 bg-amber-600/20 text-amber-400 rounded-lg hover:bg-amber-600/30 transition ring-1 ring-amber-500/30">
+                    <button onClick={() => { setShowCreate(!showCreate); setEditingId(null); setNewTrig({ name: '', source: 'gmail', filterKey: 'from', filterValue: '', actionType: 'agent_task', actionPrompt: '', actionWorkflowId: '' }); }} className="flex items-center gap-2 px-4 py-2 bg-amber-600/20 text-amber-400 rounded-lg hover:bg-amber-600/30 transition ring-1 ring-amber-500/30">
                         <Plus className="w-4 h-4" /> Create Trigger
                     </button>
                     <button onClick={fetchTriggers} className="flex items-center gap-2 px-4 py-2 bg-slate-700/50 text-slate-300 rounded-lg hover:bg-slate-700 transition">
@@ -2453,8 +2504,8 @@ function EventTriggersView() {
 
             {/* Create Form */}
             {showCreate && (
-                <div className="bg-slate-800/70 border border-amber-500/30 rounded-xl p-5 mb-6">
-                    <h3 className="text-sm font-semibold text-amber-400 mb-4">New Event Trigger</h3>
+                <div className={`bg-slate-800/70 border ${editingId ? 'border-cyan-500/30' : 'border-amber-500/30'} rounded-xl p-5 mb-6`}>
+                    <h3 className={`text-sm font-semibold ${editingId ? 'text-cyan-400' : 'text-amber-400'} mb-4`}>{editingId ? `Editing: ${newTrig.name}` : 'New Event Trigger'}</h3>
                     <input
                         type="text" placeholder="Trigger name (e.g. Urgent Email Handler)"
                         value={newTrig.name} onChange={e => setNewTrig({ ...newTrig, name: e.target.value })}
@@ -2507,8 +2558,8 @@ function EventTriggersView() {
                         </div>
                     </div>
                     <div className="flex gap-2">
-                        <button onClick={createTrigger} className="px-4 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-medium hover:bg-amber-700 transition">Create Trigger</button>
-                        <button onClick={() => setShowCreate(false)} className="px-3 py-1.5 text-slate-500 text-xs hover:text-slate-300 transition">Cancel</button>
+                        <button onClick={createTrigger} className={`px-4 py-1.5 ${editingId ? 'bg-cyan-600 hover:bg-cyan-700' : 'bg-amber-600 hover:bg-amber-700'} text-white rounded-lg text-xs font-medium transition`}>{editingId ? 'Save Changes' : 'Create Trigger'}</button>
+                        <button onClick={() => { setShowCreate(false); setEditingId(null); }} className="px-3 py-1.5 text-slate-500 text-xs hover:text-slate-300 transition">Cancel</button>
                     </div>
                 </div>
             )}
@@ -2580,9 +2631,14 @@ function EventTriggersView() {
                                         </button>
                                     </td>
                                     <td className="p-3 text-right">
-                                        <button onClick={() => deleteTrigger(t.id)} className="text-red-400/60 hover:text-red-400 transition">
-                                            <Trash className="w-4 h-4" />
-                                        </button>
+                                        <div className="flex items-center gap-2 justify-end">
+                                            <button onClick={() => editTrigger(t)} className="text-cyan-400/60 hover:text-cyan-400 transition">
+                                                <Settings className="w-4 h-4" />
+                                            </button>
+                                            <button onClick={() => deleteTrigger(t.id)} className="text-red-400/60 hover:text-red-400 transition">
+                                                <Trash className="w-4 h-4" />
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             ))}
