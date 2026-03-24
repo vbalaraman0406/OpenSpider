@@ -102,7 +102,11 @@ function matchFilter(filter: EventFilter, payload: EventPayload): boolean {
         if (!pattern) continue;
 
         if (key === 'from') {
-            if (!globMatch(pattern, payload.from || '')) return false;
+            // Extract bare email from "Display Name <email@domain.com>" format
+            let fromAddr = payload.from || '';
+            const angleBracketMatch = fromAddr.match(/<([^>]+)>/);
+            if (angleBracketMatch && angleBracketMatch[1]) fromAddr = angleBracketMatch[1];
+            if (!globMatch(pattern, fromAddr)) return false;
         } else if (key === 'subject_contains') {
             if (!(payload.subject || '').toLowerCase().includes(pattern.toLowerCase())) return false;
         } else if (key === 'body_contains') {
