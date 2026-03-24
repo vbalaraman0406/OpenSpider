@@ -157,7 +157,13 @@ async function checkAndExecuteJobs() {
             }
 
             const manager = new ManagerAgent(job.modelOverride || undefined);
-            const cronPrompt = `[SYSTEM CRON TRIGGER] Wake up and execute your scheduled background task. Do not ask me for permission. Just do it and summarize the results.${cronFromNote}\n\nTask: ${job.prompt}`;
+
+            // Inject agent routing directive so ManagerAgent delegates to the correct worker
+            const agentDirective = (job.agentId && job.agentId !== 'manager')
+                ? `\n\n[MANDATORY AGENT ROUTING] You MUST delegate this task to the "${job.agentId}" agent. Do NOT pick any other agent. This is a system-level directive from the scheduler.`
+                : '';
+
+            const cronPrompt = `[SYSTEM CRON TRIGGER] Wake up and execute your scheduled background task. Do not ask me for permission. Just do it and summarize the results.${cronFromNote}${agentDirective}\n\nTask: ${job.prompt}`;
 
             activeCronJobs++;
             manager.processUserRequest(cronPrompt).then(result => {
@@ -222,7 +228,13 @@ export async function runJobForcefully(jobId: string) {
     const manager = new ManagerAgent(job.modelOverride || undefined);
     const cronFrom = getCronEmailFromAddress();
     const cronFromNote = cronFrom ? `\n\n[CRON EMAIL SENDER RULE] IMPORTANT: When sending any emails as part of this automated task, you MUST always set the "from" field to "${cronFrom}" in your send_email tool call. This is a system-level requirement for all cron job emails.` : '';
-    const cronPrompt = `[SYSTEM MANUAL TRIGGER] Wake up and execute your background task manually requested by the user. Do not ask me for permission. Just do it and summarize the results.${cronFromNote}\n\nTask: ${job.prompt}`;
+
+    // Inject agent routing directive for manual runs too
+    const agentDirective = (job.agentId && job.agentId !== 'manager')
+        ? `\n\n[MANDATORY AGENT ROUTING] You MUST delegate this task to the "${job.agentId}" agent. Do NOT pick any other agent. This is a system-level directive from the scheduler.`
+        : '';
+
+    const cronPrompt = `[SYSTEM MANUAL TRIGGER] Wake up and execute your background task manually requested by the user. Do not ask me for permission. Just do it and summarize the results.${cronFromNote}${agentDirective}\n\nTask: ${job.prompt}`;
 
     // Fire and forget
     activeCronJobs++;
