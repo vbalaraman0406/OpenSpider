@@ -120,6 +120,42 @@ async function checkAndExecuteJobs() {
         const cronFromNote = cronFrom ? `\n\n[CRON EMAIL SENDER RULE] IMPORTANT: When sending any emails as part of this automated task, you MUST always set the "from" field to "${cronFrom}" in your send_email tool call. This is a system-level requirement for all cron job emails.` : '';
 
         for (const job of jobsToRun) {
+            // Digest-type jobs use DigestEngine instead of ManagerAgent
+            if (job.type === 'digest') {
+                activeCronJobs++;
+                import('./DigestEngine').then(async ({ DigestEngine }) => {
+                    try {
+                        const digest = await DigestEngine.compileDigest();
+                        const config = DigestEngine.getConfig();
+
+                        // Deliver via configured channels
+                        if (config.channels.includes('whatsapp') && config.whatsappTargets.length > 0) {
+                            try {
+                                const { sendWhatsAppMessage } = require('./whatsapp');
+                                for (const target of config.whatsappTargets) {
+                                    await sendWhatsAppMessage(target, digest);
+                                }
+                            } catch (waErr: any) {
+                                console.error(`[Scheduler] Digest WhatsApp delivery failed:`, waErr.message);
+                            }
+                        }
+
+                        activeCronJobs--;
+                        console.log(`[Scheduler] Digest "${job.description}" compiled successfully.`);
+                        console.log(JSON.stringify({
+                            type: 'cron_result',
+                            jobName: job.description,
+                            result: digest,
+                            timestamp: new Date().toISOString()
+                        }));
+                    } catch (err: any) {
+                        activeCronJobs--;
+                        console.error(`[Scheduler] Digest "${job.description}" failed:`, err);
+                    }
+                });
+                continue;
+            }
+
             const manager = new ManagerAgent(job.modelOverride || undefined);
             const cronPrompt = `[SYSTEM CRON TRIGGER] Wake up and execute your scheduled background task. Do not ask me for permission. Just do it and summarize the results.${cronFromNote}\n\nTask: ${job.prompt}`;
 

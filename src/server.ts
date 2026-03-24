@@ -19,6 +19,8 @@ import gmailWebhookRouter from './webhooks/gmail';
 import { apiKeyAuth, validateWsConnection } from './middleware/auth';
 import { getManager } from './browser/manager';
 import { registerRelay } from './browser/relayBridge';
+import { SkillsCatalog } from './skills/SkillsCatalog';
+import { DigestEngine } from './DigestEngine';
 
 export function startServer() {
     const app = express();
@@ -1254,16 +1256,54 @@ Return ONLY the raw Python code.`;
     // API Route to fetch active agents/skills
     app.get('/api/skills', (req, res) => {
         try {
-            const skillsDir = path.join(process.cwd(), 'skills');
-            if (!fs.existsSync(skillsDir)) return res.json({ skills: [] });
-
-            const files = fs.readdirSync(skillsDir)
-                .filter(file => file.endsWith('.json') && file !== 'package.json')
-                // Strip the .json so the frontend just gets the plain skill names
-                .map(file => file.replace('.json', ''));
-            res.json({ skills: files });
+            const catalog = new SkillsCatalog();
+            const registry = catalog.scan();
+            res.json(registry);
         } catch (e: any) {
             res.status(500).json({ error: e.message });
+        }
+    });
+
+    // IMPORTANT: Static /api/skills/* routes MUST be registered BEFORE /api/skills/:name
+    // to prevent Express from matching "search", "archive", "promote" as a :name param.
+
+    // Search skills by query
+    app.get('/api/skills/search', (req, res) => {
+        try {
+            const query = (req.query.q as string) || '';
+            if (!query) return res.json({ results: [] });
+            const catalog = new SkillsCatalog();
+            const results = catalog.search(query);
+            res.json({ results });
+        } catch (e: any) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    // Archive stale temp scripts (moves to skills/_archive/)
+    app.post('/api/skills/archive', (req, res) => {
+        try {
+            const daysOld = req.body.daysOld || 7;
+            const catalog = new SkillsCatalog();
+            const result = catalog.archiveStale(daysOld);
+            res.json(result);
+        } catch (e: any) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    // Promote a temp script to curated by creating metadata
+    app.post('/api/skills/promote', (req, res) => {
+        try {
+            const { filename, name, description, instructions } = req.body;
+            if (!filename || !name || !description) {
+                return res.status(400).json({ error: 'filename, name, and description are required.' });
+            }
+            const catalog = new SkillsCatalog();
+            catalog.promote(filename, { name, description, instructions });
+            res.json({ success: true, message: `Promoted ${filename} to curated skill: ${name}` });
+        } catch (e: any) {
+            res.status(400).json({ error: e.message });
         }
     });
 
@@ -1334,6 +1374,38 @@ Return ONLY the raw Python code.`;
             }
 
             res.json({ success: true, message: `Skill ${skillName} deleted successfully.` });
+        } catch (e: any) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    // ═══════════════════════════════════════════════════════════════
+    // DIGEST API — Smart Daily Digest configuration and preview
+    // ═══════════════════════════════════════════════════════════════
+
+    app.get('/api/digest/config', (req, res) => {
+        try {
+            const config = DigestEngine.getConfig();
+            res.json(config);
+        } catch (e: any) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    app.put('/api/digest/config', (req, res) => {
+        try {
+            const config = DigestEngine.saveConfig(req.body);
+            res.json({ success: true, config });
+        } catch (e: any) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    app.post('/api/digest/preview', async (req, res) => {
+        try {
+            const hoursBack = req.body.hoursBack || 24;
+            const digest = await DigestEngine.compileDigest(hoursBack);
+            res.json({ digest, generatedAt: new Date().toISOString() });
         } catch (e: any) {
             res.status(500).json({ error: e.message });
         }

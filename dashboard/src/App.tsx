@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Activity, Terminal, CheckCircle2, Server, Key, Bot, Send, MessageSquare, Radio, Smartphone, MessagesSquare, Users, Globe, Play, Square, Settings, RefreshCw, LayoutDashboard, ListTree, FolderGit2, Wrench, FileText, Search, Download, X, Trash, GitMerge, Timer, Plus, Clock, AlertTriangle, Paperclip, Image as ImageIcon, Sun, Moon, Monitor, Heart } from 'lucide-react';
+import { Activity, Terminal, CheckCircle2, Server, Key, Bot, Send, MessageSquare, Radio, Smartphone, MessagesSquare, Users, Globe, Play, Square, Settings, RefreshCw, LayoutDashboard, ListTree, FolderGit2, Wrench, FileText, FileCode, Search, Download, X, Trash, GitMerge, Timer, Plus, Clock, AlertTriangle, Paperclip, Image as ImageIcon, Sun, Moon, Monitor, Heart } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import AgentFlowGraph, { AgentFlowEvent } from './components/AgentFlowGraph';
@@ -792,20 +792,24 @@ function AgentsView({ agents, onRefresh, provider, skills }: { agents: any[], on
 
 interface SkillsViewProps {
     skills: string[];
+    catalog: any;
     onRefresh: () => Promise<void> | void;
     isGenerating: boolean;
     setIsGenerating: (generating: boolean) => void;
 }
 
-function SkillsView({ skills, onRefresh, isGenerating, setIsGenerating }: SkillsViewProps) {
+function SkillsView({ skills, catalog, onRefresh, isGenerating, setIsGenerating }: SkillsViewProps) {
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [skillName, setSkillName] = useState('');
     const [skillDesc, setSkillDesc] = useState('');
     const [skillInstruct, setSkillInstruct] = useState('');
     const [skillToDelete, setSkillToDelete] = useState<string | null>(null);
-
     const [detailsModalSkill, setDetailsModalSkill] = useState<{ name: string, content: string } | null>(null);
     const [isFetchingDetails, setIsFetchingDetails] = useState(false);
+    const [isArchiving, setIsArchiving] = useState(false);
+    const [archiveResult, setArchiveResult] = useState<any>(null);
+    const [filterQuery, setFilterQuery] = useState('');
+    const [viewMode, setViewMode] = useState<'curated' | 'temp'>('curated');
 
     const handleViewDetails = async (name: string) => {
         setIsFetchingDetails(true);
@@ -814,7 +818,6 @@ function SkillsView({ skills, onRefresh, isGenerating, setIsGenerating }: Skills
                 setDetailsModalSkill({ name, content: "# Built-in System Skill\n\nThis skill is natively provided by the OpenSpider runtime and proxy-forwards search queries to an external provider." });
                 return;
             }
-
             const res = await apiFetch(`/api/skills/${name}`);
             const data = await res.json();
             if (data.content) {
@@ -831,14 +834,11 @@ function SkillsView({ skills, onRefresh, isGenerating, setIsGenerating }: Skills
 
     const handleSaveSkill = async () => {
         if (!skillName || !skillInstruct) return alert('Name and instructions are required');
-
-        // Optimistic UI update: Close modal immediately, don't trap the user
         setIsAddModalOpen(false);
         setSkillName('');
         setSkillDesc('');
         setSkillInstruct('');
         setIsGenerating(true);
-
         try {
             const res = await apiFetch('/api/skills/generate', {
                 method: 'POST',
@@ -846,13 +846,11 @@ function SkillsView({ skills, onRefresh, isGenerating, setIsGenerating }: Skills
                 body: JSON.stringify({ name: skillName, description: skillDesc, instructions: skillInstruct })
             });
             const data = await res.json();
-            if (!data.success) {
-                alert(`Error: ${data.error}`);
-            }
+            if (!data.success) alert(`Error: ${data.error}`);
         } catch (e: any) {
             alert(`Error: ${e.message}`);
         } finally {
-            await onRefresh(); // Explicitly await refresh so UI re-renders BEFORE dropping banner
+            await onRefresh();
             setIsGenerating(false);
         }
     };
@@ -873,28 +871,56 @@ function SkillsView({ skills, onRefresh, isGenerating, setIsGenerating }: Skills
             } else {
                 alert(`Error deleting skill: ${data.error}`);
             }
+        } catch (e: any) { alert(`Error: ${e.message}`); }
+    };
+
+    const handleArchive = async () => {
+        setIsArchiving(true);
+        setArchiveResult(null);
+        try {
+            const res = await apiFetch('/api/skills/archive', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ daysOld: 7 })
+            });
+            const data = await res.json();
+            setArchiveResult(data);
+            onRefresh();
         } catch (e: any) {
-            alert(`Error: ${e.message}`);
+            alert(`Archive failed: ${e.message}`);
+        } finally {
+            setIsArchiving(false);
         }
     };
 
     const formatSkillName = (name: string) =>
         name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()).replace(/\bF1\b/gi, 'F1').replace(/\bS P\b/gi, 'S&P');
 
+    const stats = catalog?.stats || { curatedCount: 0, tempCount: 0, tempTotalSizeKB: 0, archivedCount: 0 };
+    const curatedSkills = catalog?.curated || [];
+    const tempScripts = catalog?.temp || [];
+
+    const filteredCurated = filterQuery
+        ? curatedSkills.filter((s: any) => s.name.toLowerCase().includes(filterQuery.toLowerCase()) || s.description.toLowerCase().includes(filterQuery.toLowerCase()))
+        : curatedSkills;
+    const filteredTemp = filterQuery
+        ? tempScripts.filter((s: any) => s.filename.toLowerCase().includes(filterQuery.toLowerCase()))
+        : tempScripts;
+
     return (
         <div className="flex-1 p-10 overflow-y-auto fade-in relative">
             <div className="w-full h-full flex flex-col">
-                <header className="mb-8 flex justify-between items-end shrink-0">
+                <header className="mb-6 flex justify-between items-end shrink-0">
                     <div>
-                        <h2 className="text-3xl font-bold text-white tracking-tight">Dynamic Skills</h2>
+                        <h2 className="text-3xl font-bold text-white tracking-tight">Skills Catalog</h2>
                         <p className="text-slate-400 mt-2 text-sm max-w-2xl leading-relaxed">
-                            View and manage functional capabilities loaded into the agent context windows.
+                            Manage curated agent skills and temporary scripts generated during task execution.
                         </p>
                     </div>
                     <div className="flex items-center gap-4">
                         <div className="relative">
                             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                            <input type="text" placeholder="Filter skills..." className="w-64 bg-slate-900/50 border border-slate-800 rounded-lg pl-9 pr-4 py-2 text-sm text-slate-300 focus:outline-none focus:ring-1 focus:ring-cyan-500/50" />
+                            <input type="text" placeholder="Search skills..." value={filterQuery} onChange={e => setFilterQuery(e.target.value)} className="w-64 bg-slate-900/50 border border-slate-800 rounded-lg pl-9 pr-4 py-2 text-sm text-slate-300 focus:outline-none focus:ring-1 focus:ring-cyan-500/50" />
                         </div>
                         <button className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-cyan-900/20" onClick={() => setIsAddModalOpen(true)}>
                             + Add Skill
@@ -902,9 +928,39 @@ function SkillsView({ skills, onRefresh, isGenerating, setIsGenerating }: Skills
                     </div>
                 </header>
 
-                {/* Show a global loading indicator if background generation is happening */}
+                {/* Stats Dashboard */}
+                <div className="grid grid-cols-4 gap-4 mb-6 shrink-0">
+                    <div className="bg-slate-900/60 backdrop-blur-xl rounded-xl border border-cyan-500/20 p-4">
+                        <div className="text-2xl font-bold text-cyan-400">{stats.curatedCount}</div>
+                        <div className="text-xs text-slate-400 mt-1 uppercase tracking-wider font-semibold">Curated Skills</div>
+                    </div>
+                    <div className="bg-slate-900/60 backdrop-blur-xl rounded-xl border border-amber-500/20 p-4">
+                        <div className="text-2xl font-bold text-amber-400">{stats.tempCount}</div>
+                        <div className="text-xs text-slate-400 mt-1 uppercase tracking-wider font-semibold">Temp Scripts</div>
+                    </div>
+                    <div className="bg-slate-900/60 backdrop-blur-xl rounded-xl border border-slate-700 p-4">
+                        <div className="text-2xl font-bold text-slate-300">{stats.tempTotalSizeKB} KB</div>
+                        <div className="text-xs text-slate-400 mt-1 uppercase tracking-wider font-semibold">Temp Disk Usage</div>
+                    </div>
+                    <div className="bg-slate-900/60 backdrop-blur-xl rounded-xl border border-purple-500/20 p-4">
+                        <div className="text-2xl font-bold text-purple-400">{stats.archivedCount}</div>
+                        <div className="text-xs text-slate-400 mt-1 uppercase tracking-wider font-semibold">Archived</div>
+                    </div>
+                </div>
+
+                {/* Archive Result Banner */}
+                {archiveResult && (
+                    <div className="mb-4 bg-emerald-900/30 border border-emerald-800/50 rounded-xl p-4 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <span className="text-emerald-400 text-lg">✅</span>
+                            <span className="text-sm text-emerald-200">Archived {archiveResult.archived} stale scripts ({archiveResult.freedKB} KB freed)</span>
+                        </div>
+                        <button className="text-xs text-slate-400 hover:text-white" onClick={() => setArchiveResult(null)}>Dismiss</button>
+                    </div>
+                )}
+
                 {isGenerating && (
-                    <div className="mb-6 bg-cyan-900/30 border border-cyan-800/50 rounded-xl p-4 flex items-center gap-4 animate-pulse">
+                    <div className="mb-4 bg-cyan-900/30 border border-cyan-800/50 rounded-xl p-4 flex items-center gap-4 animate-pulse">
                         <div className="w-8 h-8 rounded-full bg-cyan-500/20 flex items-center justify-center">
                             <Bot className="w-4 h-4 text-cyan-400 animate-bounce" />
                         </div>
@@ -915,44 +971,105 @@ function SkillsView({ skills, onRefresh, isGenerating, setIsGenerating }: Skills
                     </div>
                 )}
 
+                {/* Tab Toggle */}
+                <div className="flex gap-2 mb-4 shrink-0">
+                    <button onClick={() => setViewMode('curated')} className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-colors ${viewMode === 'curated' ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' : 'text-slate-500 hover:text-slate-300 border border-transparent'}`}>
+                        Curated ({stats.curatedCount})
+                    </button>
+                    <button onClick={() => setViewMode('temp')} className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-colors ${viewMode === 'temp' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'text-slate-500 hover:text-slate-300 border border-transparent'}`}>
+                        Temp Scripts ({stats.tempCount})
+                    </button>
+                    {viewMode === 'temp' && stats.tempCount > 0 && (
+                        <button onClick={handleArchive} disabled={isArchiving} className="ml-auto px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 transition-colors disabled:opacity-50">
+                            {isArchiving ? 'Archiving...' : '🗄️ Archive Stale (>7 days)'}
+                        </button>
+                    )}
+                </div>
+
                 <div className="flex-1 min-h-0 overflow-y-auto pb-10">
                     <div className="bg-slate-900/40 backdrop-blur-xl rounded-2xl border border-white/5 shadow-xl overflow-hidden">
-                        <div className="grid grid-cols-[auto_1fr_auto_auto] items-center px-5 py-3 border-b border-slate-800/60 text-[11px] uppercase tracking-widest text-slate-500 font-bold">
-                            <span className="w-8"></span>
-                            <span>Skill Name</span>
-                            <span className="text-center px-4">Type</span>
-                            <span className="text-right pr-1">Actions</span>
-                        </div>
-                        {skills.map(skillName => (
-                            <div key={skillName} className="grid grid-cols-[auto_1fr_auto_auto] items-center px-5 py-3.5 border-b border-slate-800/30 hover:bg-slate-800/30 transition-colors group">
-                                <div className="p-1.5 rounded-lg bg-cyan-500/10 text-cyan-400 mr-4">
-                                    <Terminal className="w-4 h-4" />
+                        {viewMode === 'curated' ? (
+                            <>
+                                <div className="grid grid-cols-[auto_1fr_auto_auto_auto] items-center px-5 py-3 border-b border-slate-800/60 text-[11px] uppercase tracking-widest text-slate-500 font-bold">
+                                    <span className="w-8"></span>
+                                    <span>Skill Name</span>
+                                    <span className="text-center px-4">Agent</span>
+                                    <span className="text-center px-4">Lang</span>
+                                    <span className="text-right pr-1">Actions</span>
                                 </div>
-                                <span className="text-sm font-medium text-white truncate pr-4">{formatSkillName(skillName)}</span>
-                                <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold bg-slate-950/50 px-2.5 py-1 rounded border border-slate-800/60 mx-4 whitespace-nowrap">Local File</span>
-                                <div className="flex items-center gap-4">
-                                    <button className="text-xs font-semibold text-slate-500 hover:text-cyan-400 transition-colors" onClick={() => handleViewDetails(skillName)}>
-                                        {isFetchingDetails ? '...' : 'Details'}
-                                    </button>
-                                    <button className="text-xs font-semibold text-rose-500/60 hover:text-rose-400 transition-colors opacity-0 group-hover:opacity-100" onClick={(e) => handleDeleteSkill(e, skillName)}>
-                                        Delete
-                                    </button>
+                                {filteredCurated.map((skill: any) => (
+                                    <div key={skill.name} className="grid grid-cols-[auto_1fr_auto_auto_auto] items-center px-5 py-3.5 border-b border-slate-800/30 hover:bg-slate-800/30 transition-colors group">
+                                        <div className="p-1.5 rounded-lg bg-cyan-500/10 text-cyan-400 mr-4">
+                                            <Terminal className="w-4 h-4" />
+                                        </div>
+                                        <div className="truncate pr-4">
+                                            <span className="text-sm font-medium text-white">{formatSkillName(skill.name)}</span>
+                                            <p className="text-xs text-slate-500 truncate">{skill.description}</p>
+                                        </div>
+                                        <span className="text-[10px] uppercase tracking-widest text-slate-400 font-bold bg-slate-950/50 px-2.5 py-1 rounded border border-slate-800/60 mx-4 whitespace-nowrap">
+                                            {skill.ownerAgent || 'Unassigned'}
+                                        </span>
+                                        <span className="text-[10px] uppercase tracking-widest text-emerald-400 font-bold bg-slate-950/50 px-2.5 py-1 rounded border border-emerald-800/40 mx-4 whitespace-nowrap">
+                                            {skill.language}
+                                        </span>
+                                        <div className="flex items-center gap-4">
+                                            <button className="text-xs font-semibold text-slate-500 hover:text-cyan-400 transition-colors" onClick={() => handleViewDetails(skill.name)}>
+                                                {isFetchingDetails ? '...' : 'Details'}
+                                            </button>
+                                            <button className="text-xs font-semibold text-rose-500/60 hover:text-rose-400 transition-colors opacity-0 group-hover:opacity-100" onClick={(e) => handleDeleteSkill(e, skill.name)}>
+                                                Delete
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                                {/* Built-in core skill */}
+                                <div className="grid grid-cols-[auto_1fr_auto_auto_auto] items-center px-5 py-3.5 hover:bg-slate-800/30 transition-colors group">
+                                    <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 mr-4">
+                                        <Globe className="w-4 h-4" />
+                                    </div>
+                                    <div className="truncate pr-4">
+                                        <span className="text-sm font-medium text-white">Web Search</span>
+                                        <p className="text-xs text-slate-500">Built-in system search capability</p>
+                                    </div>
+                                    <span className="text-[10px] uppercase tracking-widest text-emerald-400 font-bold bg-slate-950/50 px-2.5 py-1 rounded border border-emerald-800/40 mx-4 whitespace-nowrap">System</span>
+                                    <span className="text-[10px] uppercase tracking-widest text-emerald-400 font-bold bg-slate-950/50 px-2.5 py-1 rounded border border-emerald-800/40 mx-4 whitespace-nowrap">Built-in</span>
+                                    <div className="flex items-center gap-4">
+                                        <button className="text-xs font-semibold text-slate-500 hover:text-cyan-400 transition-colors" onClick={() => handleViewDetails('web_search')}>Details</button>
+                                        <span className="text-xs text-transparent pointer-events-none">Delete</span>
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
-
-                        {/* Built-in core skill */}
-                        <div className="grid grid-cols-[auto_1fr_auto_auto] items-center px-5 py-3.5 hover:bg-slate-800/30 transition-colors group">
-                            <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 mr-4">
-                                <Globe className="w-4 h-4" />
-                            </div>
-                            <span className="text-sm font-medium text-white truncate pr-4">{formatSkillName('web_search')}</span>
-                            <span className="text-[10px] uppercase tracking-widest text-emerald-400 font-bold bg-slate-950/50 px-2.5 py-1 rounded border border-emerald-800/40 mx-4 whitespace-nowrap">System</span>
-                            <div className="flex items-center gap-4">
-                                <button className="text-xs font-semibold text-slate-500 hover:text-cyan-400 transition-colors" onClick={() => handleViewDetails('web_search')}>Details</button>
-                                <span className="text-xs text-transparent pointer-events-none">Delete</span>
-                            </div>
-                        </div>
+                            </>
+                        ) : (
+                            <>
+                                <div className="grid grid-cols-[auto_1fr_auto_auto_auto] items-center px-5 py-3 border-b border-slate-800/60 text-[11px] uppercase tracking-widest text-slate-500 font-bold">
+                                    <span className="w-8"></span>
+                                    <span>Filename</span>
+                                    <span className="text-center px-4">Size</span>
+                                    <span className="text-center px-4">Age</span>
+                                    <span className="text-right pr-1">Type</span>
+                                </div>
+                                {filteredTemp.length === 0 && (
+                                    <div className="px-5 py-8 text-center text-slate-500 text-sm">
+                                        No temp scripts found. The skills directory is clean! 🎉
+                                    </div>
+                                )}
+                                {filteredTemp.map((script: any) => (
+                                    <div key={script.filename} className="grid grid-cols-[auto_1fr_auto_auto_auto] items-center px-5 py-3 border-b border-slate-800/30 hover:bg-slate-800/30 transition-colors group">
+                                        <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-400 mr-4">
+                                            <FileCode className="w-4 h-4" />
+                                        </div>
+                                        <span className="text-sm font-mono text-slate-300 truncate pr-4">{script.filename}</span>
+                                        <span className="text-xs text-slate-500 font-mono mx-4 whitespace-nowrap">{(script.sizeBytes / 1024).toFixed(1)} KB</span>
+                                        <span className={`text-xs font-bold mx-4 whitespace-nowrap ${script.ageDays > 7 ? 'text-red-400' : script.ageDays > 3 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                                            {script.ageDays}d ago
+                                        </span>
+                                        <span className="text-[10px] uppercase tracking-widest text-amber-400 font-bold bg-slate-950/50 px-2.5 py-1 rounded border border-amber-800/40 whitespace-nowrap">
+                                            {script.extension}
+                                        </span>
+                                    </div>
+                                ))}
+                            </>
+                        )}
                     </div>
                 </div>
             </div>
@@ -2023,6 +2140,7 @@ export default function App() {
     const [flowEvents, setFlowEvents] = useState<AgentFlowEvent[]>([]);
     const [config, setConfig] = useState({ provider: 'Loading...', status: 'connecting' });
     const [skills, setSkills] = useState<string[]>([]);
+    const [catalog, setCatalog] = useState<any>(null);
     const [agents, setAgents] = useState<any[]>([]);
     const [alerts, setAlerts] = useState<{ id: number, message: string }[]>([]);
     const [chatInput, setChatInput] = useState('');
@@ -2127,7 +2245,10 @@ export default function App() {
 
         apiFetch('/api/skills')
             .then(r => r.json())
-            .then(data => setSkills(data.skills))
+            .then(data => {
+                setCatalog(data);
+                setSkills((data.curated || []).map((s: any) => s.name));
+            })
             .catch(e => console.error("Could not fetch skills API", e));
 
         // Fetch persisted cron execution logs so they survive dashboard refresh
@@ -3030,10 +3151,13 @@ export default function App() {
                 }
                 {activeTab === 'agents' && <AgentsView agents={agents} onRefresh={fetchAgents} provider={config.provider} skills={skills} />}
                 {
-                    activeTab === 'skills' && <SkillsView skills={skills} onRefresh={() => {
+                    activeTab === 'skills' && <SkillsView skills={skills} catalog={catalog} onRefresh={() => {
                         return apiFetch('/api/skills')
                             .then(r => r.json())
-                            .then(data => setSkills(data.skills))
+                            .then(data => {
+                                setCatalog(data);
+                                setSkills((data.curated || []).map((s: any) => s.name));
+                            })
                             .catch(e => console.error("Could not refresh skills API", e));
                     }} isGenerating={isGenerating} setIsGenerating={setIsGenerating} />
                 }

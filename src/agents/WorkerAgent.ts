@@ -77,6 +77,7 @@ Available tools you can request in your JSON response:
 - run_command: { "command": "echo hello" } (Run a bash command within the project environment)
 - write_script: { "filename": "test.py", "content": "print('hello')" } (Write a code script to disk)
 - execute_script: { "filename": "test.py", "args": "" } (Execute a dynamically written script)
+- search_skills: { "content": "stock market" } (Search the skills catalog for existing curated scripts by keyword. ALWAYS search before writing a new script — reuse existing skills when possible!)
 - browse_web: Open a REAL browser. ALWAYS prefer this over Python scripts for web searches.
   To use browse_web, set "command" to the sub-action and use other fields:
     - Navigate: { "action": "browse_web", "command": "navigate", "filename": "https://google.com" }
@@ -252,7 +253,7 @@ ${context.join('\n')}
             let response;
             try {
                 response = await this.llm.generateStructuredOutputs<{
-                    action: 'run_command' | 'write_script' | 'execute_script' | 'browse_web' | 'wait_for_user' | 'schedule_task' | 'message_agent' | 'send_email' | 'read_emails' | 'send_whatsapp' | 'send_voice' | 'update_whatsapp_whitelist' | 'final_answer';
+                    action: 'run_command' | 'write_script' | 'execute_script' | 'search_skills' | 'browse_web' | 'wait_for_user' | 'schedule_task' | 'message_agent' | 'send_email' | 'read_emails' | 'send_whatsapp' | 'send_voice' | 'update_whatsapp_whitelist' | 'final_answer';
                     command?: string;
                     filename?: string;
                     content?: string;
@@ -269,7 +270,7 @@ ${context.join('\n')}
                 }>(messages, {
                     type: "object",
                     properties: {
-                        action: { type: "string", enum: ["run_command", "write_script", "execute_script", "browse_web", "wait_for_user", "schedule_task", "message_agent", "send_email", "read_emails", "send_whatsapp", "send_voice", "update_whatsapp_whitelist", "final_answer"] },
+                        action: { type: "string", enum: ["run_command", "write_script", "execute_script", "search_skills", "browse_web", "wait_for_user", "schedule_task", "message_agent", "send_email", "read_emails", "send_whatsapp", "send_voice", "update_whatsapp_whitelist", "final_answer"] },
                         thought: { type: "string" },
                         summary_of_findings: { type: "string", description: "A highly compressed, 1-2 sentence memory of what you learned in this step. Retained forever even if thoughts are pruned." },
                         command: { type: "string" },
@@ -325,6 +326,18 @@ ${context.join('\n')}
                     console.log(`[Worker - ${this.role}] Executing script: ${response.filename}`);
                     const res = await this.executor.executeScript(response.filename, response.args);
                     toolOutput = `stdout: ${res.stdout}\nstderr: ${res.stderr}\nerror: ${res.error || 'none'}`;
+                } else if (response.action === 'search_skills' && response.content) {
+                    console.log(`[Worker - ${this.role}] Searching skills catalog: ${response.content}`);
+                    const { SkillsCatalog } = await import('../skills/SkillsCatalog');
+                    const catalog = new SkillsCatalog();
+                    const results = catalog.search(response.content);
+                    if (results.length === 0) {
+                        toolOutput = `No curated skills found matching "${response.content}". You may write a new script.`;
+                    } else {
+                        toolOutput = `Found ${results.length} curated skill(s):\n` + results.map(s =>
+                            `• ${s.name} (${s.language}) — ${s.description}\n  Usage: ${s.instructions}`
+                        ).join('\n');
+                    }
                 } else if (response.action === 'message_agent' && response.target && response.message) {
                     console.log(`[Worker - ${this.role}] Delegating sub-task via message_agent to peer ${response.target}...`);
                     console.log(JSON.stringify({
