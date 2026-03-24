@@ -16,6 +16,70 @@ let relayClient: WebSocket | null = null;
 let commandId = 1000;
 const pendingCommands = new Map<number, { resolve: (result: any) => void; reject: (err: Error) => void }>();
 
+// ─── Human-like Mouse Movement State ─────────────────────────────────────────
+// Track last known mouse position for continuous Bézier paths between clicks
+let lastMouseX: number | null = null;
+let lastMouseY: number | null = null;
+
+/**
+ * Generate a cubic Bézier curve path between two points with human-like
+ * randomization. Mimics ghost-cursor / Google Antigravity IDE style movements.
+ * 
+ * - Random control points create natural curved paths (not straight lines)
+ * - Per-point noise simulates hand tremor (±1.5px)
+ * - Variable number of points (15-25) for natural density
+ */
+function generateBezierPath(
+    startX: number, startY: number,
+    endX: number, endY: number
+): Array<{ x: number; y: number }> {
+    const distance = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2));
+    const numPoints = Math.min(30, Math.max(15, Math.floor(distance / 20) + Math.floor(Math.random() * 8)));
+
+    // Random control points — offset perpendicular to the straight line
+    // This creates a natural curve, not a straight-line movement
+    const midX = (startX + endX) / 2;
+    const midY = (startY + endY) / 2;
+    const perpX = -(endY - startY); // Perpendicular vector
+    const perpY = (endX - startX);
+    const perpLen = Math.sqrt(perpX * perpX + perpY * perpY) || 1;
+
+    // Control point 1: ±30-50% offset from midpoint along perpendicular
+    const spread1 = (0.3 + Math.random() * 0.2) * (Math.random() > 0.5 ? 1 : -1);
+    const cp1x = midX + perpX / perpLen * distance * spread1 * 0.3 + (Math.random() - 0.5) * 30;
+    const cp1y = midY + perpY / perpLen * distance * spread1 * 0.3 + (Math.random() - 0.5) * 30;
+
+    // Control point 2: slight overshoot bias toward the target
+    const spread2 = (0.1 + Math.random() * 0.15) * (Math.random() > 0.5 ? 1 : -1);
+    const cp2x = endX + (endX - startX) * 0.05 + perpX / perpLen * distance * spread2 * 0.2;
+    const cp2y = endY + (endY - startY) * 0.05 + perpY / perpLen * distance * spread2 * 0.2;
+
+    const points: Array<{ x: number; y: number }> = [];
+    for (let i = 0; i <= numPoints; i++) {
+        const t = i / numPoints;
+        const u = 1 - t;
+
+        // Cubic Bézier formula: B(t) = (1-t)³P₀ + 3(1-t)²tP₁ + 3(1-t)t²P₂ + t³P₃
+        const x = u * u * u * startX
+                + 3 * u * u * t * cp1x
+                + 3 * u * t * t * cp2x
+                + t * t * t * endX;
+        const y = u * u * u * startY
+                + 3 * u * u * t * cp1y
+                + 3 * u * t * t * cp2y
+                + t * t * t * endY;
+
+        // Add micro-jitter to simulate hand tremor (±1.5px, decreasing near target)
+        const noise = (1 - t) * 1.5;
+        points.push({
+            x: x + (Math.random() - 0.5) * noise * 2,
+            y: y + (Math.random() - 0.5) * noise * 2
+        });
+    }
+
+    return points;
+}
+
 // Reconnection event callbacks
 const reconnectCallbacks: Array<() => void> = [];
 
@@ -457,28 +521,67 @@ export async function clickElement(selector: string): Promise<string> {
         const previousUrl = data.pageUrl || '';
         let clicked = false;
 
-        // STEP 2: Use CDP Input.dispatchMouseEvent for a real browser-level click
-        // This works on React/Vue/Angular SPAs where el.click() fails
+        // STEP 2: Human-like mouse movement + CDP click (Bézier curve path)
+        // Mimics Google Antigravity / ghost-cursor style mouse pointer movement
         if (data.needsCdpClick && data.cx !== undefined && data.cy !== undefined) {
             try {
-                // Simulate a full mouse click: mousePressed → mouseReleased
+                const targetX = data.cx;
+                const targetY = data.cy;
+
+                // Generate a Bézier curve path from a random start point to the target
+                // Start from a random edge position (simulates cursor coming from elsewhere)
+                const startX = lastMouseX ?? (Math.random() * 400 + 100);
+                const startY = lastMouseY ?? (Math.random() * 300 + 100);
+
+                // Generate human-like Bézier curve control points with overshoot
+                const points = generateBezierPath(startX, startY, targetX, targetY);
+
+                // Dispatch mouseMoved events along the curve with variable timing
+                for (let i = 0; i < points.length; i++) {
+                    const p = points[i]!;
+                    await sendCommand('Input.dispatchMouseEvent', {
+                        type: 'mouseMoved',
+                        x: Math.round(p.x),
+                        y: Math.round(p.y),
+                        button: 'none'
+                    });
+                    // Variable delay: faster in the middle, slower at start/end (like a real hand)
+                    const progress = i / points.length;
+                    const speedFactor = 1 - 4 * Math.pow(progress - 0.5, 2); // Bell curve
+                    const delay = Math.floor(8 + (1 - speedFactor) * 17 + Math.random() * 5);
+                    await new Promise(r => setTimeout(r, delay));
+                }
+
+                // Brief hover pause before clicking (120-350ms, like a human aiming)
+                await new Promise(r => setTimeout(r, 120 + Math.floor(Math.random() * 230)));
+
+                // Click with slight jitter (±2px, humans can't click the exact center)
+                const jitterX = targetX + (Math.random() * 4 - 2);
+                const jitterY = targetY + (Math.random() * 4 - 2);
+
                 await sendCommand('Input.dispatchMouseEvent', {
                     type: 'mousePressed',
-                    x: data.cx,
-                    y: data.cy,
+                    x: Math.round(jitterX),
+                    y: Math.round(jitterY),
                     button: 'left',
                     clickCount: 1
                 });
-                await new Promise(r => setTimeout(r, 50));
+                // Random click-hold duration (40-120ms, humans don't release instantly)
+                await new Promise(r => setTimeout(r, 40 + Math.floor(Math.random() * 80)));
                 await sendCommand('Input.dispatchMouseEvent', {
                     type: 'mouseReleased',
-                    x: data.cx,
-                    y: data.cy,
+                    x: Math.round(jitterX),
+                    y: Math.round(jitterY),
                     button: 'left',
                     clickCount: 1
                 });
+
+                // Track last mouse position for the next movement
+                lastMouseX = targetX;
+                lastMouseY = targetY;
+
                 clicked = true;
-                console.log(`[RelayBridge] CDP mouse click at (${data.cx}, ${data.cy}) on ${data.tag}: "${data.text?.substring(0, 40)}"`);
+                console.log(`[RelayBridge] 🖱️ Human-like Bézier click at (${targetX}, ${targetY}) on ${data.tag}: "${data.text?.substring(0, 40)}"`);
             } catch (e: any) {
                 console.warn(`[RelayBridge] CDP mouse click failed: ${e.message}. Falling back to el.click()`);
             }
