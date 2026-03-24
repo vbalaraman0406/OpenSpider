@@ -119,6 +119,114 @@ export class BrowserManager {
             permissions: ['geolocation', 'notifications'],
         });
 
+        // ─── Fingerprint Spoofing ────────────────────────────────────────
+        // Override browser properties that fingerprinting scripts check
+        // to distinguish headless/automated browsers from real ones.
+        await context.addInitScript(() => {
+            // WebGL vendor/renderer — match real Chrome on macOS
+            const getParameter = WebGLRenderingContext.prototype.getParameter;
+            WebGLRenderingContext.prototype.getParameter = function(parameter: number) {
+                if (parameter === 0x9245) return 'Google Inc. (Apple)'; // UNMASKED_VENDOR_WEBGL
+                if (parameter === 0x9246) return 'ANGLE (Apple, Apple M1 Pro, OpenGL 4.1)'; // UNMASKED_RENDERER_WEBGL
+                return getParameter.call(this, parameter);
+            };
+
+            // Also patch WebGL2
+            if (typeof WebGL2RenderingContext !== 'undefined') {
+                const getParameter2 = WebGL2RenderingContext.prototype.getParameter;
+                WebGL2RenderingContext.prototype.getParameter = function(parameter: number) {
+                    if (parameter === 0x9245) return 'Google Inc. (Apple)';
+                    if (parameter === 0x9246) return 'ANGLE (Apple, Apple M1 Pro, OpenGL 4.1)';
+                    return getParameter2.call(this, parameter);
+                };
+            }
+
+            // Hardware concurrency — real Macs have 8-10 cores
+            Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 10 });
+
+            // Device memory — real devices report 8GB
+            Object.defineProperty(navigator, 'deviceMemory', { get: () => 8 });
+
+            // Platform — ensure macOS even on Linux runners
+            Object.defineProperty(navigator, 'platform', { get: () => 'MacIntel' });
+
+            // Battery API — prevent detection of missing battery (headless indicator)
+            Object.defineProperty(navigator, 'getBattery', {
+                value: () => Promise.resolve({
+                    charging: true,
+                    chargingTime: 0,
+                    dischargingTime: Infinity,
+                    level: 0.97,
+                    addEventListener: () => {},
+                })
+            });
+
+            // Connection API — mimic real network info
+            Object.defineProperty(navigator, 'connection', {
+                get: () => ({
+                    effectiveType: '4g',
+                    rtt: 50,
+                    downlink: 10,
+                    saveData: false,
+                })
+            });
+
+            // Plugins — headless Chrome has empty plugins array (detection signal)
+            Object.defineProperty(navigator, 'plugins', {
+                get: () => {
+                    const fakePlugins = [
+                        { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer', description: 'Portable Document Format' },
+                        { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: '' },
+                        { name: 'Native Client', filename: 'internal-nacl-plugin', description: '' },
+                    ];
+                    const arr = Object.create(PluginArray.prototype);
+                    fakePlugins.forEach((p, i) => {
+                        arr[i] = Object.create(Plugin.prototype, {
+                            name: { value: p.name },
+                            filename: { value: p.filename },
+                            description: { value: p.description },
+                            length: { value: 0 },
+                        });
+                    });
+                    Object.defineProperty(arr, 'length', { value: fakePlugins.length });
+                    return arr;
+                }
+            });
+
+            // MimeTypes — match plugins
+            Object.defineProperty(navigator, 'mimeTypes', {
+                get: () => {
+                    const arr = Object.create(MimeTypeArray.prototype);
+                    Object.defineProperty(arr, 'length', { value: 2 });
+                    return arr;
+                }
+            });
+
+            // Languages — ensure realistic array (not just ['en'])
+            Object.defineProperty(navigator, 'languages', {
+                get: () => ['en-US', 'en']
+            });
+
+            // Chrome object — headless Chrome sometimes lacks this
+            if (!(window as any).chrome) {
+                (window as any).chrome = {
+                    runtime: {},
+                    loadTimes: function() { return {}; },
+                    csi: function() { return {}; },
+                    app: { isInstalled: false },
+                };
+            }
+
+            // Permissions API — prevent detection of automation-specific permission states
+            const originalQuery = Permissions.prototype.query;
+            Permissions.prototype.query = async function(desc: any): Promise<PermissionStatus> {
+                if (desc.name === 'notifications') {
+                    return { state: 'prompt', onchange: null, addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => true } as any;
+                }
+                return originalQuery.call(this, desc);
+            };
+        });
+
         if (pConfig.color) {
             await context.addInitScript((color: string) => {
                 window.addEventListener('DOMContentLoaded', () => {

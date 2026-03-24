@@ -449,9 +449,27 @@ export class BrowserTool {
             // Check for bot protection
             const botCheck = await detectBotProtection(page, response, url);
             if (botCheck.blocked) {
-                const msg = `⚠️ Headless browser was blocked: ${botCheck.reason}. This site requires the Chrome Relay extension for authenticated access.`;
-                logBrowserAccess({ action: 'navigate', target: url, path: 'headless', result: 'error', ms: Date.now() - startMs, error: botCheck.reason });
-                return msg;
+                // ─── CAPTCHA Solver: Attempt AI vision solve before giving up ───
+                const isCaptcha = ['captcha', 'verification', 'cloudflare'].some(k => botCheck.reason.includes(k));
+                if (isCaptcha) {
+                    console.log(`[BrowserTool] CAPTCHA detected: "${botCheck.reason}". Invoking AI vision solver...`);
+                    const { CaptchaSolver } = await import('./CaptchaSolver');
+                    const solved = await CaptchaSolver.solve(page, botCheck.reason, this.cursor);
+                    if (solved) {
+                        // CAPTCHA solved — continue with content extraction
+                        console.log('[BrowserTool] ✅ CAPTCHA solved! Continuing navigation...');
+                        // Re-read the page content after solving
+                        await humanDelay(1000, 2000);
+                    } else {
+                        const msg = `⚠️ CAPTCHA detected and AI solver failed after 3 attempts: ${botCheck.reason}. This site may require the Chrome Relay extension or manual intervention.`;
+                        logBrowserAccess({ action: 'navigate', target: url, path: 'headless', result: 'error', ms: Date.now() - startMs, error: `captcha_solver_failed: ${botCheck.reason}` });
+                        return msg;
+                    }
+                } else {
+                    const msg = `⚠️ Headless browser was blocked: ${botCheck.reason}. This site requires the Chrome Relay extension for authenticated access.`;
+                    logBrowserAccess({ action: 'navigate', target: url, path: 'headless', result: 'error', ms: Date.now() - startMs, error: botCheck.reason });
+                    return msg;
+                }
             }
 
             const title = await page.title();
