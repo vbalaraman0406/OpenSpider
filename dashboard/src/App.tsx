@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Activity, Terminal, CheckCircle2, Server, Key, Bot, Send, MessageSquare, Radio, Smartphone, MessagesSquare, Users, Globe, Play, Square, Settings, RefreshCw, LayoutDashboard, ListTree, FolderGit2, Wrench, FileText, FileCode, Search, Download, X, Trash, GitMerge, Timer, Plus, Clock, AlertTriangle, Paperclip, Image as ImageIcon, Sun, Moon, Monitor, Heart } from 'lucide-react';
+import { Activity, Terminal, CheckCircle2, Server, Key, Bot, Send, MessageSquare, Radio, Smartphone, MessagesSquare, Users, Globe, Play, Square, Settings, RefreshCw, LayoutDashboard, ListTree, FolderGit2, Wrench, FileText, FileCode, Search, Download, X, Trash, GitMerge, Timer, Plus, Clock, AlertTriangle, Paperclip, Image as ImageIcon, Sun, Moon, Monitor, Heart, Zap, Workflow } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import AgentFlowGraph, { AgentFlowEvent } from './components/AgentFlowGraph';
@@ -2120,6 +2120,316 @@ function CronView({ agents, logs }: { agents: any[]; logs: LogMessage[] }) {
     );
 }
 
+// ─── Workflows View ─────────────────────────────────────────────────────────
+
+function WorkflowsView() {
+    const [workflows, setWorkflows] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [expanded, setExpanded] = useState<string | null>(null);
+    const [runResult, setRunResult] = useState<any | null>(null);
+
+    const fetchWorkflows = () => {
+        apiFetch('/api/workflows').then(r => r.json()).then(d => {
+            setWorkflows(d.workflows || []);
+            setLoading(false);
+        }).catch(() => setLoading(false));
+    };
+
+    useEffect(() => { fetchWorkflows(); }, []);
+
+    const deleteWorkflow = (id: string) => {
+        apiFetch(`/api/workflows/${id}`, { method: 'DELETE' }).then(() => fetchWorkflows());
+    };
+
+    const runWorkflow = async (id: string) => {
+        setRunResult({ running: true, workflowId: id });
+        try {
+            const res = await apiFetch(`/api/workflows/${id}/run`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+            const data = await res.json();
+            setRunResult(data.result || data);
+        } catch (e: any) {
+            setRunResult({ error: e.message });
+        }
+    };
+
+    const toggleStatus = async (wf: any) => {
+        const updated = { ...wf, status: wf.status === 'enabled' ? 'disabled' : 'enabled' };
+        await apiFetch(`/api/workflows/${wf.id}`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updated)
+        });
+        fetchWorkflows();
+    };
+
+    return (
+        <div className="flex-1 p-8 fade-in overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+                <div>
+                    <h2 className="text-2xl font-bold text-white">Workflow Chains</h2>
+                    <p className="text-slate-400 text-sm mt-1">Multi-step task pipelines that chain agent actions together.</p>
+                </div>
+                <button onClick={fetchWorkflows} className="flex items-center gap-2 px-4 py-2 bg-slate-700/50 text-slate-300 rounded-lg hover:bg-slate-700 transition">
+                    <RefreshCw className="w-4 h-4" /> Refresh
+                </button>
+            </div>
+
+            {/* Stats */}
+            <div className="grid grid-cols-3 gap-4 mb-6">
+                <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
+                    <div className="text-2xl font-bold text-emerald-400">{workflows.length}</div>
+                    <div className="text-xs text-slate-500 uppercase tracking-wider">Total Workflows</div>
+                </div>
+                <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
+                    <div className="text-2xl font-bold text-blue-400">{workflows.filter(w => w.status === 'enabled').length}</div>
+                    <div className="text-xs text-slate-500 uppercase tracking-wider">Active</div>
+                </div>
+                <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
+                    <div className="text-2xl font-bold text-orange-400">{workflows.filter(w => w.lastRunStatus === 'failed').length}</div>
+                    <div className="text-xs text-slate-500 uppercase tracking-wider">Last Failed</div>
+                </div>
+            </div>
+
+            {loading ? (
+                <div className="text-slate-400 text-center py-8">Loading workflows...</div>
+            ) : workflows.length === 0 ? (
+                <div className="bg-slate-800/30 border border-slate-700/30 rounded-xl p-12 text-center">
+                    <Workflow className="w-12 h-12 text-slate-600 mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-slate-300 mb-2">No Workflows Yet</h3>
+                    <p className="text-slate-500 text-sm">Create workflows via the API or agent chat to automate multi-step task chains.</p>
+                </div>
+            ) : (
+                <div className="space-y-3">
+                    {workflows.map((wf: any) => (
+                        <div key={wf.id} className="bg-slate-800/50 border border-slate-700/50 rounded-xl overflow-hidden">
+                            <div className="p-4 flex items-center justify-between cursor-pointer hover:bg-slate-800/70 transition" onClick={() => setExpanded(expanded === wf.id ? null : wf.id)}>
+                                <div className="flex items-center gap-3">
+                                    <Workflow className="w-5 h-5 text-indigo-400" />
+                                    <div>
+                                        <div className="font-semibold text-white">{wf.name}</div>
+                                        <div className="text-xs text-slate-500">{wf.description || `${wf.steps?.length || 0} steps · Trigger: ${wf.trigger?.type || 'manual'}`}</div>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${wf.status === 'enabled' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-600/30 text-slate-500'}`}>
+                                        {wf.status?.toUpperCase()}
+                                    </span>
+                                    {wf.lastRunStatus && (
+                                        <span className={`px-2 py-0.5 rounded text-xs ${wf.lastRunStatus === 'success' ? 'bg-green-500/20 text-green-400' : wf.lastRunStatus === 'failed' ? 'bg-red-500/20 text-red-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
+                                            {wf.lastRunStatus}
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                            {expanded === wf.id && (
+                                <div className="border-t border-slate-700/50 p-4 bg-slate-900/30">
+                                    <div className="text-xs text-slate-500 mb-3 uppercase tracking-wider">Pipeline Steps</div>
+                                    <div className="space-y-2 mb-4">
+                                        {(wf.steps || []).map((step: any, i: number) => (
+                                            <div key={step.id} className="flex items-center gap-3 text-sm">
+                                                <span className="text-slate-600 font-mono text-xs w-6">{i + 1}.</span>
+                                                <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                                    step.action === 'agent_task' ? 'bg-blue-500/20 text-blue-400' :
+                                                    step.action === 'condition' ? 'bg-yellow-500/20 text-yellow-400' :
+                                                    step.action === 'deliver' ? 'bg-green-500/20 text-green-400' :
+                                                    'bg-purple-500/20 text-purple-400'
+                                                }`}>{step.action}</span>
+                                                <span className="text-slate-300 truncate">{step.prompt || step.if || step.template || step.skillName || '—'}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    {wf.lastRunAt && (
+                                        <div className="text-xs text-slate-500 mb-3">Last run: {new Date(wf.lastRunAt).toLocaleString()}</div>
+                                    )}
+                                    <div className="flex gap-2">
+                                        <button onClick={() => runWorkflow(wf.id)} className="px-3 py-1.5 bg-indigo-600/20 text-indigo-400 rounded-lg text-xs font-medium hover:bg-indigo-600/30 transition flex items-center gap-1">
+                                            <Play className="w-3 h-3" /> Run Now
+                                        </button>
+                                        <button onClick={() => toggleStatus(wf)} className="px-3 py-1.5 bg-slate-700/50 text-slate-400 rounded-lg text-xs font-medium hover:bg-slate-700 transition">
+                                            {wf.status === 'enabled' ? 'Disable' : 'Enable'}
+                                        </button>
+                                        <button onClick={() => deleteWorkflow(wf.id)} className="px-3 py-1.5 bg-red-500/10 text-red-400 rounded-lg text-xs font-medium hover:bg-red-500/20 transition flex items-center gap-1">
+                                            <Trash className="w-3 h-3" /> Delete
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {/* Run Result Display */}
+            {runResult && (
+                <div className="mt-6 bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
+                    <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-sm font-semibold text-white">Run Result</h3>
+                        <button onClick={() => setRunResult(null)} className="text-slate-500 hover:text-slate-300"><X className="w-4 h-4" /></button>
+                    </div>
+                    {runResult.running ? (
+                        <div className="text-yellow-400 text-sm">⏳ Workflow executing...</div>
+                    ) : runResult.error ? (
+                        <div className="text-red-400 text-sm">{runResult.error}</div>
+                    ) : (
+                        <div className="text-sm">
+                            <div className={`font-medium ${runResult.status === 'success' ? 'text-green-400' : 'text-red-400'}`}>
+                                {runResult.status?.toUpperCase()} — {runResult.totalDurationMs}ms
+                            </div>
+                            <div className="mt-2 space-y-1">
+                                {(runResult.stepResults || []).map((sr: any) => (
+                                    <div key={sr.stepId} className="flex items-center gap-2 text-xs">
+                                        <span className={sr.status === 'success' ? 'text-green-400' : 'text-red-400'}>{sr.status === 'success' ? '✓' : '✗'}</span>
+                                        <span className="text-slate-400">{sr.stepId}</span>
+                                        <span className="text-slate-500 truncate">{sr.output?.substring(0, 100)}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ─── Event Triggers View ────────────────────────────────────────────────────
+
+function EventTriggersView() {
+    const [triggers, setTriggers] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    const fetchTriggers = () => {
+        apiFetch('/api/events/triggers').then(r => r.json()).then(d => {
+            setTriggers(d.triggers || []);
+            setLoading(false);
+        }).catch(() => setLoading(false));
+    };
+
+    useEffect(() => { fetchTriggers(); }, []);
+
+    const deleteTrigger = (id: string) => {
+        apiFetch(`/api/events/triggers/${id}`, { method: 'DELETE' }).then(() => fetchTriggers());
+    };
+
+    const toggleStatus = async (t: any) => {
+        const updated = { ...t, status: t.status === 'enabled' ? 'disabled' : 'enabled' };
+        await apiFetch('/api/events/triggers', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updated)
+        });
+        fetchTriggers();
+    };
+
+    const sourceColors: Record<string, string> = {
+        gmail: 'bg-red-500/20 text-red-400',
+        whatsapp: 'bg-green-500/20 text-green-400',
+        webhook: 'bg-purple-500/20 text-purple-400',
+        cron_result: 'bg-blue-500/20 text-blue-400',
+    };
+
+    return (
+        <div className="flex-1 p-8 fade-in overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+                <div>
+                    <h2 className="text-2xl font-bold text-white">Event Triggers</h2>
+                    <p className="text-slate-400 text-sm mt-1">React to real-time events — emails, messages, webhooks, and cron results.</p>
+                </div>
+                <button onClick={fetchTriggers} className="flex items-center gap-2 px-4 py-2 bg-slate-700/50 text-slate-300 rounded-lg hover:bg-slate-700 transition">
+                    <RefreshCw className="w-4 h-4" /> Refresh
+                </button>
+            </div>
+
+            {/* Stats */}
+            <div className="grid grid-cols-4 gap-4 mb-6">
+                <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
+                    <div className="text-2xl font-bold text-emerald-400">{triggers.length}</div>
+                    <div className="text-xs text-slate-500 uppercase tracking-wider">Total Triggers</div>
+                </div>
+                <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
+                    <div className="text-2xl font-bold text-blue-400">{triggers.filter(t => t.status === 'enabled').length}</div>
+                    <div className="text-xs text-slate-500 uppercase tracking-wider">Active</div>
+                </div>
+                <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
+                    <div className="text-2xl font-bold text-orange-400">{triggers.reduce((sum: number, t: any) => sum + (t.fireCount || 0), 0)}</div>
+                    <div className="text-xs text-slate-500 uppercase tracking-wider">Total Fires</div>
+                </div>
+                <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
+                    <div className="text-2xl font-bold text-purple-400">{new Set(triggers.map((t: any) => t.source)).size}</div>
+                    <div className="text-xs text-slate-500 uppercase tracking-wider">Sources</div>
+                </div>
+            </div>
+
+            {loading ? (
+                <div className="text-slate-400 text-center py-8">Loading triggers...</div>
+            ) : triggers.length === 0 ? (
+                <div className="bg-slate-800/30 border border-slate-700/30 rounded-xl p-12 text-center">
+                    <Zap className="w-12 h-12 text-slate-600 mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-slate-300 mb-2">No Event Triggers Yet</h3>
+                    <p className="text-slate-500 text-sm">Create triggers via the API or agent chat to react to Gmail, WhatsApp, webhooks, and cron results.</p>
+                </div>
+            ) : (
+                <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl overflow-hidden">
+                    <table className="w-full">
+                        <thead>
+                            <tr className="border-b border-slate-700/50">
+                                <th className="text-left text-xs text-slate-500 uppercase tracking-wider p-3">Name</th>
+                                <th className="text-left text-xs text-slate-500 uppercase tracking-wider p-3">Source</th>
+                                <th className="text-left text-xs text-slate-500 uppercase tracking-wider p-3">Filter</th>
+                                <th className="text-left text-xs text-slate-500 uppercase tracking-wider p-3">Action</th>
+                                <th className="text-left text-xs text-slate-500 uppercase tracking-wider p-3">Fires</th>
+                                <th className="text-left text-xs text-slate-500 uppercase tracking-wider p-3">Status</th>
+                                <th className="text-right text-xs text-slate-500 uppercase tracking-wider p-3">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {triggers.map((t: any) => (
+                                <tr key={t.id} className="border-b border-slate-700/30 hover:bg-slate-800/70 transition">
+                                    <td className="p-3">
+                                        <div className="font-medium text-white text-sm">{t.name}</div>
+                                        {t.description && <div className="text-xs text-slate-500">{t.description}</div>}
+                                    </td>
+                                    <td className="p-3">
+                                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${sourceColors[t.source] || 'bg-slate-600/30 text-slate-400'}`}>
+                                            {t.source?.toUpperCase()}
+                                        </span>
+                                    </td>
+                                    <td className="p-3 text-xs text-slate-400 font-mono">
+                                        {Object.entries(t.filter || {}).map(([k, v]) => `${k}: ${v}`).join(', ') || '—'}
+                                    </td>
+                                    <td className="p-3 text-xs text-slate-400">
+                                        {t.action?.type === 'workflow' ? `→ Workflow: ${t.action.workflowId}` : `→ Agent Task`}
+                                    </td>
+                                    <td className="p-3 text-sm text-slate-300">{t.fireCount || 0}</td>
+                                    <td className="p-3">
+                                        <button onClick={() => toggleStatus(t)} className={`px-2 py-0.5 rounded text-xs font-medium cursor-pointer transition ${t.status === 'enabled' ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30' : 'bg-slate-600/30 text-slate-500 hover:bg-slate-600/50'}`}>
+                                            {t.status?.toUpperCase()}
+                                        </button>
+                                    </td>
+                                    <td className="p-3 text-right">
+                                        <button onClick={() => deleteTrigger(t.id)} className="text-red-400/60 hover:text-red-400 transition">
+                                            <Trash className="w-4 h-4" />
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+
+            {/* Info Card */}
+            <div className="mt-6 bg-slate-800/30 border border-slate-700/30 rounded-xl p-4">
+                <h4 className="text-sm font-semibold text-slate-300 mb-2">Supported Event Sources</h4>
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div className="flex items-center gap-2"><span className="px-2 py-0.5 rounded bg-red-500/20 text-red-400 font-medium">GMAIL</span> <span className="text-slate-500">Incoming emails via webhook</span></div>
+                    <div className="flex items-center gap-2"><span className="px-2 py-0.5 rounded bg-green-500/20 text-green-400 font-medium">WHATSAPP</span> <span className="text-slate-500">Message pattern matching</span></div>
+                    <div className="flex items-center gap-2"><span className="px-2 py-0.5 rounded bg-purple-500/20 text-purple-400 font-medium">WEBHOOK</span> <span className="text-slate-500">POST /api/webhooks/trigger</span></div>
+                    <div className="flex items-center gap-2"><span className="px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 font-medium">CRON_RESULT</span> <span className="text-slate-500">After cron job completion</span></div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 const funnyStatuses = [
     "Searching the web for answers...",
     "Talking to a friend...",
@@ -2133,7 +2443,7 @@ const funnyStatuses = [
 ];
 
 export default function App() {
-    type TabName = 'overview' | 'channels' | 'sessions' | 'usage' | 'chat' | 'agents' | 'skills' | 'logs' | 'flow' | 'cron' | 'processes';
+    type TabName = 'overview' | 'channels' | 'sessions' | 'usage' | 'chat' | 'agents' | 'skills' | 'workflows' | 'events' | 'logs' | 'flow' | 'cron' | 'processes';
     const [activeTab, setActiveTab] = useState<TabName>('chat');
     const [configuredChannel, setConfiguredChannel] = useState<string | null>(null);
     const [logs, setLogs] = useState<LogMessage[]>([]);
@@ -2589,6 +2899,20 @@ export default function App() {
                         >
                             <Wrench className="w-4 h-4" />
                             Dynamic Skills
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('workflows')}
+                            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${activeTab === 'workflows' ? 'bg-indigo-600/10 text-indigo-400 ring-1 ring-indigo-500/30 shadow-[0_4px_20px_-4px_rgba(99,102,241,0.2)]' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'}`}
+                        >
+                            <Workflow className="w-4 h-4" />
+                            Workflows
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('events')}
+                            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${activeTab === 'events' ? 'bg-amber-600/10 text-amber-400 ring-1 ring-amber-500/30 shadow-[0_4px_20px_-4px_rgba(245,158,11,0.2)]' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'}`}
+                        >
+                            <Zap className="w-4 h-4" />
+                            Event Triggers
                         </button>
                     </div>
 
@@ -3164,6 +3488,8 @@ export default function App() {
                 {activeTab === 'usage' && <UsageView />}
                 {activeTab === 'logs' && <LogsView logs={logs} />}
                 {activeTab === 'cron' && <CronView agents={agents} logs={logs} />}
+                {activeTab === 'workflows' && <WorkflowsView />}
+                {activeTab === 'events' && <EventTriggersView />}
                 {activeTab === 'processes' && <ProcessMonitor />}
             </main >
 
