@@ -1,14 +1,24 @@
-🌦️ Vancouver, WA Forecast — Saturday, March 07, 2026 at 06:56 AM
+🌦️ *Vancouver, WA — 5-Day Forecast*
 
 ✅ No active weather alerts
 
-🌧️ Today: 58°F — Chance Rain Showers | 💧36% | 💨5 mph S
-🌧️ Tonight: 46°F — Rain Showers Likely | 💧66% | 💨3 mph WSW
-🌧️ Sunday: 54°F — Light Rain | 💧94% | 💨3 to 9 mph SSW
-🌧️ Sunday Night: 35°F — Light Rain Likely | 💧72% | 💨2 to 9 mph W
-🌧️ Monday: 48°F — Rain And Snow | 💧88% | 💨2 to 9 mph WSW
-🌧️ Monday Night: 33°F — Rain And Snow Likely | 💧86% | 💨2 to 9 mph WSW
-🌧️ Tuesday: 48°F — Rain And Snow Likely then Rain And Snow | 💧85% | 💨3 to 8 mph SSW
-🌧️ Tuesday Night: 38°F — Light Rain | 💧79% | 💨8 mph SSW
-🌧️ Wednesday: 53°F — Rain | 💧83% | 💨8 to 12 mph S
-🌧️ Wednesday Night: 44°F — Rain | 💧83% | 💨12 mph SSW
+☀️ *Today*: 52°F — Rain
+   Wind: 8 to 16 mph S | Precip: 99%
+🌙 *Tonight*: 42°F — Rain
+   Wind: 8 to 16 mph SW | Precip: 99%
+☀️ *Thursday*: 50°F — Rain
+   Wind: 5 to 8 mph SSW | Precip: 100%
+🌙 *Thursday Night*: 41°F — Rain
+   Wind: 7 mph S | Precip: 100%
+☀️ *Friday*: 51°F — Rain
+   Wind: 8 mph SW | Precip: 98%
+🌙 *Friday Night*: 38°F — Rain
+   Wind: 7 mph WNW | Precip: 91%
+☀️ *Saturday*: 51°F — Chance Rain And Snow
+   Wind: 6 mph NW | Precip: 46%
+🌙 *Saturday Night*: 37°F — Chance Light Rain
+   Wind: 2 to 6 mph N | Precip: 32%
+☀️ *Sunday*: 53°F — Chance Light Rain
+   Wind: 5 mph E | Precip: 50%
+🌙 *Sunday Night*: 42°F — Chance Light Rain
+   Wind: 5 mph SSE | Precip: 49%

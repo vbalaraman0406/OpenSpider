@@ -1,66 +1,36 @@
-import urllib.request
+import requests
 import re
-import json
+import warnings
+warnings.filterwarnings('ignore')
 
-def fetch_page(url):
-    req = urllib.request.Request(url, headers={
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml'
-    })
+headers = {
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': 'text/html',
+    'Accept-Language': 'en-US,en;q=0.9'
+}
+
+def fetch_article(name, url):
+    print(f'\n=== {name} ===')
     try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            return resp.read().decode('utf-8', errors='ignore')
+        resp = requests.get(url, headers=headers, timeout=15, verify=False)
+        html = resp.text
+        # Remove script and style tags
+        html = re.sub(r'<script[^>]*>.*?</script>', '', html, flags=re.DOTALL)
+        html = re.sub(r'<style[^>]*>.*?</style>', '', html, flags=re.DOTALL)
+        # Extract paragraph text
+        paras = re.findall(r'<p[^>]*>(.*?)</p>', html, re.DOTALL)
+        for p in paras:
+            t = re.sub(r'<[^>]+>', '', p).strip()
+            t = re.sub(r'\s+', ' ', t)
+            if len(t) > 40:
+                print(t[:500])
+                print()
     except Exception as e:
-        return f'ERROR: {e}'
+        print(f'Error: {e}')
 
-# Let me search for specific contractor details with a more targeted query
-def search_ddg(query):
-    import urllib.parse
-    encoded = urllib.parse.quote(query)
-    url = f'https://html.duckduckgo.com/html/?q={encoded}'
-    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'})
-    try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            html = resp.read().decode('utf-8', errors='ignore')
-        results = []
-        pattern = r'<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>'
-        links = re.findall(pattern, html, re.DOTALL)
-        snippet_pattern = r'<a[^>]*class="result__snippet"[^>]*>(.*?)</a>'
-        snippets = re.findall(snippet_pattern, html, re.DOTALL)
-        for i, (link, title) in enumerate(links[:10]):
-            clean_title = re.sub(r'<[^>]+>', '', title).strip()
-            clean_snippet = ''
-            if i < len(snippets):
-                clean_snippet = re.sub(r'<[^>]+>', '', snippets[i]).strip()
-            if 'uddg=' in link:
-                actual = urllib.parse.unquote(link.split('uddg=')[1].split('&')[0])
-            else:
-                actual = link
-            results.append({'title': clean_title, 'url': actual, 'snippet': clean_snippet})
-        return results
-    except Exception as e:
-        return []
+# Key articles to fetch
+fetch_article('NDTV - TN Election Date', 'https://www.ndtv.com/india-news/tamil-nadu-election-date-2026')
+fetch_article('Opinion Polls', 'https://www.google.com/search?q=Tamil+Nadu+2026+election+opinion+poll+DMK+AIADMK+BJP+seat+prediction')
+fetch_article('Alliance Updates', 'https://www.google.com/search?q=Tamil+Nadu+2026+election+alliance+DMK+AIADMK+BJP+TVK+Vijay')
 
-# Search for specific contractors with phone numbers and ratings
-queries = [
-    'Hawthorne Tile Portland OR phone number rating reviews',
-    'All Tile bathroom contractor Portland phone reviews',
-    'Masterworks Tile Installation Vancouver WA phone rating',
-    'RTA Tile LLC Vancouver WA phone rating reviews',
-    'bathroom tile contractor Portland OR phone number 5 star reviews 2024',
-    'NW Tile Works Portland Oregon contractor reviews phone',
-    'Pacific Tile Portland bathroom installer reviews rating',
-    'bathroom tile installation contractor reviews phone number rating Portland Oregon'
-]
-
-contractors = []
-for q in queries:
-    print(f'\n=== {q} ===')
-    results = search_ddg(q)
-    for r in results[:5]:
-        print(f"  {r['title']}")
-        print(f"  {r['url']}")
-        print(f"  {r['snippet'][:250]}")
-        print()
-
-print('\n=== DONE ===')
+print('\nDONE')

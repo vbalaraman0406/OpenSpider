@@ -1,45 +1,74 @@
 import requests, json
 
-points = requests.get('https://api.weather.gov/points/45.6387,-122.6615', headers={'User-Agent': 'OpenSpider/1.0'}).json()
-forecast_url = points['properties']['forecast']
-forecast = requests.get(forecast_url, headers={'User-Agent': 'OpenSpider/1.0'}).json()
-periods = forecast['properties']['periods']
-alerts_data = requests.get('https://api.weather.gov/alerts/active?point=45.6387,-122.6615', headers={'User-Agent': 'OpenSpider/1.0'}).json()
-alerts = alerts_data.get('features', [])
+headers = {'User-Agent': 'OpenSpider Weather Bot (coolvishnu@gmail.com)', 'Accept': 'application/geo+json'}
 
-emoji_map = {'Sunny':'☀️','Clear':'🌙','Mostly Sunny':'🌤️','Partly Sunny':'⛅','Mostly Cloudy':'🌥️','Cloudy':'☁️','Rain':'🌧️','Light Rain':'🌦️','Heavy Rain':'🌧️','Showers':'🌦️','Thunderstorm':'⛈️','Snow':'❄️','Fog':'🌫️','Wind':'💨','Partly Cloudy':'⛅','Rain Showers':'🌦️','Chance Rain Showers':'🌦️','Rain Showers Likely':'🌦️','Light Rain Likely':'🌦️','Slight Chance Rain Showers':'🌦️','Rain Likely':'🌧️','Chance Light Rain':'🌦️'}
+# Fetch forecast
+forecast_resp = requests.get('https://api.weather.gov/gridpoints/PQR/114,109/forecast', headers=headers, timeout=15)
+periods = forecast_resp.json()['properties']['periods'][:10]
 
-def get_emoji(short):
-    for k,v in emoji_map.items():
-        if k.lower() in short.lower():
-            return v
-    return '🌡️'
+# Fetch alerts
+alerts_resp = requests.get('https://api.weather.gov/alerts/active?point=45.6387,-122.6615', headers=headers, timeout=15)
+alerts = alerts_resp.json().get('features', [])
 
-md = '# 🌦️ Vancouver, WA — 5-Day Weather Forecast\n'
-md += '*Source: National Weather Service (NWS)*\n\n'
+# Build markdown
+lines = []
+lines.append('# 🌦️ 5-Day Weather Forecast — Vancouver, WA')
+lines.append(f'*Source: National Weather Service (NWS)*\n')
 
 if alerts:
-    md += '## ⚠️ Active Weather Alerts\n'
+    lines.append('## ⚠️ Active Weather Alerts')
     for a in alerts:
         p = a['properties']
-        md += f"**{p.get('event','')}** — {p.get('headline','')}\n\n"
+        lines.append(f"**{p.get('event','')}** — {p.get('headline','')}")
+        lines.append(f"Severity: {p.get('severity','')}")
+        lines.append(f"{p.get('description','')[:500]}\n")
 else:
-    md += '> ✅ **No active weather alerts for Vancouver, WA.**\n\n'
+    lines.append('## ✅ No Active Weather Alerts\n')
 
-md += '## 📊 Forecast Overview\n\n'
-md += '| Period | Temp | Wind | Precip % | Conditions |\n'
-md += '|--------|------|------|----------|------------|\n'
+lines.append('| Period | Temp | Conditions | Wind | Precip % | Details |')
+lines.append('|--------|------|------------|------|----------|---------|')
 
 for p in periods:
-    e = get_emoji(p['shortForecast'])
-    precip = p.get('probabilityOfPrecipitation',{}).get('value')
-    precip_str = f"{precip}%" if precip is not None else 'N/A'
-    md += f"| {p['name']} | {p['temperature']}°{p['temperatureUnit']} | {p['windSpeed']} {p['windDirection']} | {precip_str} | {e} {p['shortForecast']} |\n"
+    precip = p.get('probabilityOfPrecipitation', {}).get('value', 'N/A')
+    if precip is None:
+        precip = 'N/A'
+    else:
+        precip = f"{precip}%"
+    det = p['detailedForecast'][:120]
+    lines.append(f"| {p['name']} | {p['temperature']}°{p['temperatureUnit']} | {p['shortForecast']} | {p['windSpeed']} {p['windDirection']} | {precip} | {det} |")
 
-md += '\n## 📝 Detailed Forecast\n\n'
+markdown = '\n'.join(lines)
+
+# Also build a compact WhatsApp version
+wa = ['🌦️ *Vancouver, WA — 5-Day Forecast*', '']
+if alerts:
+    wa.append('⚠️ ALERTS:')
+    for a in alerts:
+        wa.append(f"• {a['properties'].get('event','')}: {a['properties'].get('headline','')}")
+    wa.append('')
+else:
+    wa.append('✅ No active weather alerts\n')
+
 for p in periods:
-    e = get_emoji(p['shortForecast'])
-    md += f"### {e} {p['name']}\n"
-    md += f"{p['detailedForecast']}\n\n"
+    precip = p.get('probabilityOfPrecipitation', {}).get('value', 'N/A')
+    if precip is None:
+        precip = 'N/A'
+    else:
+        precip = f"{precip}%"
+    icon = '☀️' if p['isDaytime'] else '🌙'
+    wa.append(f"{icon} *{p['name']}*: {p['temperature']}°{p['temperatureUnit']} — {p['shortForecast']}")
+    wa.append(f"   Wind: {p['windSpeed']} {p['windDirection']} | Precip: {precip}")
 
-print(md)
+wa_text = '\n'.join(wa)
+
+with open('/Users/vbalaraman/OpenSpider/weather_email.md', 'w') as f:
+    f.write(markdown)
+with open('/Users/vbalaraman/OpenSpider/weather_wa.txt', 'w') as f:
+    f.write(wa_text)
+
+print('EMAIL_BODY_START')
+print(markdown)
+print('EMAIL_BODY_END')
+print('WA_START')
+print(wa_text)
+print('WA_END')

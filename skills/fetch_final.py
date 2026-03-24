@@ -1,97 +1,44 @@
 import requests
-from bs4 import BeautifulSoup
 import re
-import json
-import time
 
-headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'}
-results = {}
+headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'}
 
-# Try stockanalysis.com for defense stocks
-defense = {'LMT': 'lmt', 'RTX': 'rtx', 'NOC': 'noc', 'GD': 'gd'}
-for ticker, slug in defense.items():
-    try:
-        time.sleep(1)
-        r = requests.get(f'https://stockanalysis.com/stocks/{slug}/', headers=headers, timeout=15)
-        soup = BeautifulSoup(r.text, 'html.parser')
-        text = soup.get_text()[:3000]
-        # Find price pattern - usually first large number
-        prices = re.findall(r'\$([\d,]+\.\d{2})', text)
-        changes = re.findall(r'([+-]?\d+\.\d+%)', text)
-        results[ticker] = {'prices': prices[:5], 'changes': changes[:5]}
-    except Exception as e:
-        results[ticker] = {'error': str(e)[:150]}
-
-# S&P 500 from stockanalysis
+# Get full article on top 3 cyber attacks
+url = 'https://cybersecuritynews.com/top-3-cyber-attacks-in-march-2026/'
 try:
-    time.sleep(1)
-    r = requests.get('https://stockanalysis.com/stocks/spy/', headers=headers, timeout=15)
-    soup = BeautifulSoup(r.text, 'html.parser')
-    text = soup.get_text()[:3000]
-    prices = re.findall(r'\$([\d,]+\.\d{2})', text)
-    changes = re.findall(r'([+-]?\d+\.\d+%)', text)
-    results['SPY'] = {'prices': prices[:5], 'changes': changes[:5]}
+    resp = requests.get(url, headers=headers, timeout=10)
+    text = resp.text
+    text = re.sub(r'<script[^>]*>.*?</script>', '', text, flags=re.DOTALL)
+    text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL)
+    # Get headings
+    headings = re.findall(r'<h[23][^>]*>(.*?)</h[23]>', text, flags=re.DOTALL)
+    for h in headings:
+        clean = re.sub(r'<[^>]+>', '', h).strip()
+        if len(clean) > 5:
+            print(f'HEADING: {clean}')
+    print()
+    # Get all paragraphs with more content
+    paragraphs = re.findall(r'<p[^>]*>(.*?)</p>', text, flags=re.DOTALL)
+    for p in paragraphs[3:30]:
+        t = re.sub(r'<[^>]+>', '', p).strip()
+        if len(t) > 20:
+            print(t[:500])
+            print()
 except Exception as e:
-    results['SPY'] = {'error': str(e)[:150]}
+    print(f'ERROR: {e}')
 
-# QQQ for NASDAQ
+# Search for recent financial sector breaches
+print('\n=== RECENT FINANCIAL BREACHES ===')
 try:
-    time.sleep(1)
-    r = requests.get('https://stockanalysis.com/stocks/qqq/', headers=headers, timeout=15)
-    soup = BeautifulSoup(r.text, 'html.parser')
-    text = soup.get_text()[:3000]
-    prices = re.findall(r'\$([\d,]+\.\d{2})', text)
-    changes = re.findall(r'([+-]?\d+\.\d+%)', text)
-    results['QQQ'] = {'prices': prices[:5], 'changes': changes[:5]}
+    url2 = 'https://html.duckduckgo.com/html/?q=financial+institution+data+breach+2026+march'
+    resp2 = requests.get(url2, headers=headers, timeout=10)
+    links = re.findall(r'<a rel="nofollow" class="result__a" href="([^"]+)">(.+?)</a>', resp2.text)
+    snippets = re.findall(r'<a class="result__snippet"[^>]*>(.+?)</a>', resp2.text)
+    for i, (link, title) in enumerate(links[:5]):
+        ct = re.sub(r'<[^>]+>', '', title)
+        sn = re.sub(r'<[^>]+>', '', snippets[i]) if i < len(snippets) else ''
+        print(f'TITLE: {ct}')
+        print(f'SNIPPET: {sn[:250]}')
+        print('---')
 except Exception as e:
-    results['QQQ'] = {'error': str(e)[:150]}
-
-# Try Bing for Iran war news
-try:
-    time.sleep(1)
-    r = requests.get('https://www.bing.com/search?q=iran+us+war+military+developments+march+2026', headers=headers, timeout=15)
-    soup = BeautifulSoup(r.text, 'html.parser')
-    snippets = []
-    for li in soup.find_all('li', class_='b_algo'):
-        h2 = li.find('h2')
-        if h2:
-            snippets.append(h2.get_text(strip=True))
-        p = li.find('p')
-        if p:
-            snippets.append(p.get_text(strip=True)[:200])
-    results['bing_iran'] = snippets[:15]
-except Exception as e:
-    results['bing_iran_err'] = str(e)[:150]
-
-# Bing for defense stocks performance
-try:
-    time.sleep(1)
-    r = requests.get('https://www.bing.com/search?q=defense+stocks+LMT+RTX+NOC+performance+iran+war+2026', headers=headers, timeout=15)
-    soup = BeautifulSoup(r.text, 'html.parser')
-    snippets = []
-    for li in soup.find_all('li', class_='b_algo'):
-        h2 = li.find('h2')
-        if h2:
-            snippets.append(h2.get_text(strip=True))
-        p = li.find('p')
-        if p:
-            snippets.append(p.get_text(strip=True)[:200])
-    results['bing_defense'] = snippets[:10]
-except Exception as e:
-    results['bing_defense_err'] = str(e)[:150]
-
-# Bing for oil analyst commentary
-try:
-    time.sleep(1)
-    r = requests.get('https://www.bing.com/search?q=oil+price+analyst+forecast+iran+conflict+2026', headers=headers, timeout=15)
-    soup = BeautifulSoup(r.text, 'html.parser')
-    snippets = []
-    for li in soup.find_all('li', class_='b_algo'):
-        p = li.find('p')
-        if p:
-            snippets.append(p.get_text(strip=True)[:200])
-    results['bing_oil_analyst'] = snippets[:8]
-except Exception as e:
-    results['bing_oil_err'] = str(e)[:150]
-
-print(json.dumps(results, indent=2, default=str))
+    print(f'ERROR: {e}')

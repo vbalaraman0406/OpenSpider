@@ -1,66 +1,33 @@
-from html.parser import HTMLParser
+import json
+import re
 
-with open('/Users/vbalaraman/OpenSpider/ausgp.html', 'r', encoding='utf-8') as f:
-    html = f.read()
+with open('./cron_jobs.json', 'r') as f:
+    data = json.load(f)
 
-class TableParser(HTMLParser):
-    def __init__(self):
-        super().__init__()
-        self.in_table = False
-        self.in_row = False
-        self.in_cell = False
-        self.tables = []
-        self.current_table = []
-        self.current_row = []
-        self.current_cell = ''
-        self.depth = 0
-        
-    def handle_starttag(self, tag, attrs):
-        attrs_dict = dict(attrs)
-        if tag == 'table':
-            cls = attrs_dict.get('class', '')
-            if 'wikitable' in cls:
-                self.in_table = True
-                self.current_table = []
-                self.depth += 1
-        elif tag == 'tr' and self.in_table:
-            self.in_row = True
-            self.current_row = []
-        elif tag in ['td', 'th'] and self.in_row:
-            self.in_cell = True
-            self.current_cell = ''
-        elif tag == 'br' and self.in_cell:
-            self.current_cell += ' '
-            
-    def handle_endtag(self, tag):
-        if tag == 'table' and self.in_table:
-            self.depth -= 1
-            if self.depth <= 0:
-                self.in_table = False
-                self.tables.append(self.current_table)
-                self.current_table = []
-                self.depth = 0
-        elif tag == 'tr' and self.in_row:
-            self.in_row = False
-            if self.current_row:
-                self.current_table.append(self.current_row)
-        elif tag in ['td', 'th'] and self.in_cell:
-            self.in_cell = False
-            self.current_row.append(self.current_cell.strip())
-            
-    def handle_data(self, data):
-        if self.in_cell:
-            self.current_cell += data
+print('TOTAL JOBS IN FILE: ' + str(len(data)))
+print()
 
-parser = TableParser()
-parser.feed(html)
+for i, job in enumerate(data):
+    name = job.get('name', 'NO NAME')
+    print(str(i) + ': ' + name)
 
-# Print TABLE 1 (Race Classification) fully
-print('=== TABLE 1: RACE CLASSIFICATION ===')
-for row in parser.tables[1]:
-    print(' | '.join(row))
+print()
+print('=' * 80)
+print('SEARCHING FOR MARKET/S&P/NASDAQ RELATED JOBS...')
+print('=' * 80)
 
-# Print TABLE 0 (Qualifying) fully  
-print('\n=== TABLE 0: QUALIFYING ===')
-for row in parser.tables[0]:
-    print(' | '.join(row))
+for job in data:
+    name = job.get('name', '')
+    job_str = json.dumps(job)
+    if 'S&P' in name or 'NASDAQ' in name or 'Market' in name or 'Pre-Market' in name or 's&p' in name.lower() or 'nasdaq' in name.lower():
+        print()
+        print('JOB NAME: ' + name)
+        print('-' * 60)
+        prompt = job.get('prompt', job.get('task', job.get('description', 'N/A')))
+        print('PROMPT:')
+        print(prompt)
+        print()
+        emails = re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', job_str)
+        unique_emails = list(dict.fromkeys(emails))
+        print('EMAILS: ' + str(unique_emails))
+        print()

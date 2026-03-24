@@ -1,79 +1,63 @@
+import sys
+sys.path.insert(0, '/Users/vbalaraman/OpenSpider/skills')
+
 import yfinance as yf
+from datetime import datetime, timedelta
 
-# Fetch S&P 500 and NASDAQ data
-sp500 = yf.Ticker('^GSPC')
-nasdaq = yf.Ticker('^IXIC')
-vix = yf.Ticker('^VIX')
-tny = yf.Ticker('^TNX')
+def get_quote(ticker):
+    try:
+        stock = yf.Ticker(ticker)
+        info = stock.info or {}
+        price = info.get('regularMarketPrice') or info.get('currentPrice', 0)
+        prev_close = info.get('regularMarketPreviousClose') or info.get('previousClose', 0)
+        change = round(price - prev_close, 2) if price and prev_close else None
+        change_pct = round((change / prev_close) * 100, 2) if change and prev_close else None
+        
+        hist = stock.history(period='5d')
+        weekly_change_pct = None
+        if len(hist) >= 2:
+            first_close = float(hist['Close'].iloc[0])
+            last_close = float(hist['Close'].iloc[-1])
+            weekly_change_pct = round(((last_close - first_close) / first_close) * 100, 2)
+        
+        return {
+            'ticker': ticker,
+            'name': info.get('shortName') or info.get('longName', ticker),
+            'price': price,
+            'change': change,
+            'change_pct': change_pct,
+            'weekly_change_pct': weekly_change_pct,
+            'volume': info.get('regularMarketVolume') or info.get('volume'),
+            'market_cap': info.get('marketCap'),
+            '52w_high': info.get('fiftyTwoWeekHigh'),
+            '52w_low': info.get('fiftyTwoWeekLow'),
+            'pe_ratio': info.get('trailingPE'),
+        }
+    except Exception as e:
+        return {'ticker': ticker, 'error': str(e)}
 
-end_date = '2026-03-05'
-start_date = '2026-02-01'
+print('=== COMMODITIES ===')
+for t in ['CL=F', 'BZ=F', 'GC=F']:
+    q = get_quote(t)
+    label = {'CL=F': 'WTI Crude Oil', 'BZ=F': 'Brent Crude Oil', 'GC=F': 'Gold'}.get(t, t)
+    print(f"{label}: ${q.get('price','N/A')} | Daily: {q.get('change_pct','N/A')}% | Weekly: {q.get('weekly_change_pct','N/A')}%")
 
-sp_hist = sp500.history(start=start_date, end=end_date)
-nq_hist = nasdaq.history(start=start_date, end=end_date)
-vix_hist = vix.history(start=start_date, end=end_date)
-tny_hist = tny.history(start=start_date, end=end_date)
+print('\n=== MAJOR INDICES ===')
+for t in ['^GSPC', '^IXIC', '^DJI']:
+    q = get_quote(t)
+    label = {'^GSPC': 'S&P 500', '^IXIC': 'NASDAQ', '^DJI': 'Dow Jones'}.get(t, t)
+    print(f"{label}: {q.get('price','N/A')} | Daily: {q.get('change_pct','N/A')}% | Weekly: {q.get('weekly_change_pct','N/A')}%")
 
-print('=== S&P 500 Last 5 Days ===')
-if len(sp_hist) > 0:
-    print(sp_hist.tail(5).to_string())
-else:
-    print('No data available')
+print('\n=== DEFENSE STOCKS ===')
+for t in ['LMT', 'RTX', 'NOC', 'GD']:
+    q = get_quote(t)
+    print(f"{q.get('name', t)} ({t}): ${q.get('price','N/A')} | Daily: {q.get('change_pct','N/A')}% | Weekly: {q.get('weekly_change_pct','N/A')}% | P/E: {q.get('pe_ratio','N/A')} | MCap: {q.get('market_cap','N/A')}")
 
-print('\n=== NASDAQ Last 5 Days ===')
-if len(nq_hist) > 0:
-    print(nq_hist.tail(5).to_string())
-else:
-    print('No data available')
+print('\n=== ENERGY STOCKS ===')
+for t in ['XOM', 'CVX', 'OXY']:
+    q = get_quote(t)
+    print(f"{q.get('name', t)} ({t}): ${q.get('price','N/A')} | Daily: {q.get('change_pct','N/A')}% | Weekly: {q.get('weekly_change_pct','N/A')}% | P/E: {q.get('pe_ratio','N/A')} | MCap: {q.get('market_cap','N/A')}")
 
-print('\n=== VIX Last 3 Days ===')
-if len(vix_hist) > 0:
-    print(vix_hist.tail(3).to_string())
-else:
-    print('No data available')
-
-print('\n=== 10Y Treasury Last 3 Days ===')
-if len(tny_hist) > 0:
-    print(tny_hist.tail(3).to_string())
-else:
-    print('No data available')
-
-# Volume stats
-if len(sp_hist) >= 20:
-    sp_vol_20avg = sp_hist['Volume'].tail(20).mean()
-    sp_vol_today = sp_hist['Volume'].iloc[-1]
-    print(f'\nS&P 500 Volume Today: {sp_vol_today:,.0f}, 20-day avg: {sp_vol_20avg:,.0f}')
-else:
-    print(f'\nS&P 500 data points: {len(sp_hist)}')
-
-if len(nq_hist) >= 20:
-    nq_vol_20avg = nq_hist['Volume'].tail(20).mean()
-    nq_vol_today = nq_hist['Volume'].iloc[-1]
-    print(f'NASDAQ Volume Today: {nq_vol_today:,.0f}, 20-day avg: {nq_vol_20avg:,.0f}')
-else:
-    print(f'NASDAQ data points: {len(nq_hist)}')
-
-# Calculate daily changes
-if len(sp_hist) >= 2:
-    sp_close = sp_hist['Close'].iloc[-1]
-    sp_prev = sp_hist['Close'].iloc[-2]
-    sp_chg = sp_close - sp_prev
-    sp_pct = (sp_chg / sp_prev) * 100
-    print(f'\nS&P 500 Close: {sp_close:.2f}, Change: {sp_chg:+.2f} ({sp_pct:+.2f}%)')
-
-if len(nq_hist) >= 2:
-    nq_close = nq_hist['Close'].iloc[-1]
-    nq_prev = nq_hist['Close'].iloc[-2]
-    nq_chg = nq_close - nq_prev
-    nq_pct = (nq_chg / nq_prev) * 100
-    print(f'NASDAQ Close: {nq_close:.2f}, Change: {nq_chg:+.2f} ({nq_pct:+.2f}%)')
-
-if len(vix_hist) >= 2:
-    vix_close = vix_hist['Close'].iloc[-1]
-    vix_prev = vix_hist['Close'].iloc[-2]
-    vix_chg = vix_close - vix_prev
-    print(f'VIX Close: {vix_close:.2f}, Change: {vix_chg:+.2f}')
-
-if len(tny_hist) >= 1:
-    tny_close = tny_hist['Close'].iloc[-1]
-    print(f'10Y Treasury Yield: {tny_close:.3f}%')
+print('\n=== VIX ===')
+q = get_quote('^VIX')
+print(f"VIX: {q.get('price','N/A')} | Daily: {q.get('change_pct','N/A')}% | Weekly: {q.get('weekly_change_pct','N/A')}%")

@@ -1,28 +1,33 @@
-import urllib.request
+import yfinance as yf
 import json
-import ssl
 
-ssl._create_default_https_context = ssl._create_unverified_context
+tickers = {
+    'WTI Crude Oil': 'CL=F',
+    'Brent Crude Oil': 'BZ=F',
+    'Gold': 'GC=F',
+    'S&P 500': '^GSPC',
+    'NASDAQ': '^IXIC',
+    'Lockheed Martin': 'LMT',
+    'Raytheon (RTX)': 'RTX',
+    'Northrop Grumman': 'NOC',
+    'General Dynamics': 'GD',
+    'L3Harris': 'LHX'
+}
 
-# Try to get current market data from Yahoo Finance API
-tickers = ['%5EGSPC', '%5EDJI', 'CL%3DF', 'GC%3DF', 'LMT', 'RTX', 'NOC']
-names = ['S&P 500', 'Dow Jones', 'Crude Oil (WTI)', 'Gold', 'Lockheed Martin (LMT)', 'RTX Corp (RTX)', 'Northrop Grumman (NOC)']
-
-results = []
-for i, ticker in enumerate(tickers):
+for name, symbol in tickers.items():
     try:
-        url = f'https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?interval=1d&range=1d'
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        resp = urllib.request.urlopen(req, timeout=10)
-        data = json.loads(resp.read().decode())
-        meta = data['chart']['result'][0]['meta']
-        price = meta.get('regularMarketPrice', 'N/A')
-        prev = meta.get('chartPreviousClose', meta.get('previousClose', None))
-        change_pct = 'N/A'
-        if prev and prev != 0 and price != 'N/A':
-            change_pct = f"{((price - prev) / prev) * 100:+.2f}%"
-        results.append(f"{names[i]}: ${price:,.2f} ({change_pct})")
+        t = yf.Ticker(symbol)
+        info = t.fast_info
+        hist = t.history(period='5d')
+        if len(hist) > 0:
+            current = hist['Close'].iloc[-1]
+            prev = hist['Close'].iloc[0] if len(hist) > 1 else current
+            change_pct = ((current - prev) / prev) * 100
+            high_52 = getattr(info, 'year_high', 'N/A')
+            low_52 = getattr(info, 'year_low', 'N/A')
+            mkt_cap = getattr(info, 'market_cap', 'N/A')
+            print(f"{name} ({symbol}): ${current:.2f} | 5d Chg: {change_pct:+.2f}% | 52w H: {high_52} | 52w L: {low_52} | MktCap: {mkt_cap}")
+        else:
+            print(f"{name} ({symbol}): No data available")
     except Exception as e:
-        results.append(f"{names[i]}: Error - {str(e)[:80]}")
-
-print('\n'.join(results))
+        print(f"{name} ({symbol}): Error - {e}")

@@ -1,31 +1,20 @@
 import re
 
-with open('search_results.html', 'r', encoding='utf-8') as f:
+with open('/Users/vbalaraman/OpenSpider/tn_search.html', 'r', errors='ignore') as f:
     html = f.read()
 
-# Remove script and style tags
-clean = re.sub(r'<script[^>]*>.*?</script>', ' ', html, flags=re.DOTALL|re.IGNORECASE)
-clean = re.sub(r'<style[^>]*>.*?</style>', ' ', clean, flags=re.DOTALL|re.IGNORECASE)
+print(f'HTML length: {len(html)}')
 
-# Extract all href URLs
-urls = re.findall(r'href="(/url\?q=([^&"]+))', clean)
-print("=== Extracted URLs ===")
-for full, url in urls[:30]:
-    decoded = url.replace('%3A', ':').replace('%2F', '/').replace('%3F', '?').replace('%3D', '=').replace('%26', '&')
-    if 'google' not in decoded and 'youtube' not in decoded and 'accounts' not in decoded:
-        print(decoded)
+# Extract result titles and URLs
+titles = re.findall(r'class="result__a"[^>]*>(.*?)</a>', html, re.DOTALL)
+urls = re.findall(r'class="result__a"[^>]*href="([^"]+)"', html)
+snippets = re.findall(r'class="result__snippet"[^>]*>(.*?)</a>', html, re.DOTALL)
 
-# Extract all visible text and look for Let's Remodel
-text = re.sub(r'<[^>]+>', ' ', clean)
-text = re.sub(r'\s+', ' ', text)
-
-# Find chunks mentioning remodel
-chunks = text.split('.')
-for chunk in chunks:
-    if re.search(r"let.{0,3}s.{0,3}remodel", chunk, re.IGNORECASE):
-        print("\nREMODEL MENTION:", chunk.strip()[:300])
-
-# Also look for any business listing patterns
-for chunk in chunks:
-    if re.search(r'(bathroom|kitchen|contractor|remodel)', chunk, re.IGNORECASE) and len(chunk.strip()) > 30:
-        print("\nRELEVANT:", chunk.strip()[:300])
+print(f'Results found: {len(titles)}')
+for i in range(min(10, len(titles))):
+    t = re.sub(r'<[^>]+>', '', titles[i]).strip()
+    s = re.sub(r'<[^>]+>', '', snippets[i]).strip()[:200] if i < len(snippets) else ''
+    u = urls[i] if i < len(urls) else ''
+    print(f'\n{i+1}. {t}')
+    print(f'   Snippet: {s}')
+    print(f'   URL: {u}')

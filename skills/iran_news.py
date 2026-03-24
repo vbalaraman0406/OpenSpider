@@ -1,33 +1,42 @@
-import urllib.request
-import ssl
-import re
+import requests
+import xml.etree.ElementTree as ET
+import warnings
+warnings.filterwarnings('ignore')
 
-ssl._create_default_https_context = ssl._create_unverified_context
-
-sources = [
-    ('Reuters', 'https://www.reuters.com/world/middle-east/'),
-    ('BBC', 'https://www.bbc.com/news/topics/cg41ylwvggnt'),
-    ('Al Jazeera', 'https://www.aljazeera.com/tag/iran/'),
+queries = [
+    'Iran US war latest news today 2026',
+    'Iran conflict military update March 2026',
+    'Iran US diplomatic negotiations 2026',
+    'Strait of Hormuz shipping update 2026'
 ]
 
-for name, url in sources:
+headers = {
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+}
+
+seen_titles = set()
+
+for q in queries:
+    print(f'\n=== QUERY: {q} ===')
+    url = f'https://news.google.com/rss/search?q={q.replace(" ", "+")}&hl=en-US&gl=US&ceid=US:en'
     try:
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'})
-        resp = urllib.request.urlopen(req, timeout=15)
-        html = resp.read().decode('utf-8', errors='ignore')
-        # Extract headlines containing Iran
-        # Look for title/headline patterns
-        titles = re.findall(r'<(?:h[1-4]|a|span)[^>]*>([^<]*[Ii]ran[^<]*)</(?:h[1-4]|a|span)>', html)
-        # Also try data-testid or aria-label patterns
-        titles2 = re.findall(r'(?:title|aria-label|alt)="([^"]*[Ii]ran[^"]*?)"', html)
-        all_titles = list(dict.fromkeys(titles + titles2))  # dedupe preserving order
-        if all_titles:
-            print(f'\n=== {name} ===')
-            for t in all_titles[:10]:
-                t = t.strip()
-                if len(t) > 15 and len(t) < 200:
-                    print(f'  - {t}')
-        else:
-            print(f'\n=== {name} === No Iran headlines found in HTML')
+        resp = requests.get(url, headers=headers, timeout=15, verify=False)
+        root = ET.fromstring(resp.text)
+        items = root.findall('.//item')
+        count = 0
+        for item in items:
+            if count >= 6:
+                break
+            title = item.find('title').text if item.find('title') is not None else 'N/A'
+            if title in seen_titles:
+                continue
+            seen_titles.add(title)
+            link = item.find('link').text if item.find('link') is not None else 'N/A'
+            pubdate = item.find('pubDate').text if item.find('pubDate') is not None else 'N/A'
+            source_el = item.find('source')
+            source = source_el.text if source_el is not None else 'N/A'
+            print(f'[{source}] {title}')
+            print(f'  Date: {pubdate}')
+            count += 1
     except Exception as e:
-        print(f'\n=== {name} === Error: {str(e)[:100]}')
+        print(f'Error: {e}')
