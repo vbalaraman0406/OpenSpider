@@ -7,6 +7,10 @@
  *
  * DEDUP: Processed email IDs are persisted to disk so the same email
  * is never fired twice, even across server restarts.
+ *
+ * AUTO-CLEANUP: After a Google Alert email triggers a workflow,
+ * it is moved to Trash (recoverable for 30 days).
+ * GUARDRAIL: Only emails from googlealerts-noreply@google.com are trashed.
  */
 import { EventBus } from './EventBus';
 import * as fs from 'node:fs';
@@ -14,6 +18,13 @@ import * as path from 'node:path';
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 let pollerInterval: ReturnType<typeof setInterval> | null = null;
+
+// ─── Google Alert Sender Guardrail ──────────────────────────────────────────
+// Only emails from this EXACT sender will be auto-trashed after triggering.
+// This prevents accidental deletion of any other emails.
+const GOOGLE_ALERTS_SENDERS = [
+    'googlealerts-noreply@google.com',
+];
 
 // ─── Persistent Dedup ──────────────────────────────────────────────────────
 const DEDUP_FILE = path.join(process.cwd(), 'workspace', 'gmail_poller_dedup.json');
@@ -90,6 +101,25 @@ async function pollGmail(): Promise<void> {
             if (matched) {
                 matchedCount++;
                 console.log(`  ⚡ [GmailPoller] Trigger matched for: "${email.subject}"`);
+
+                // ─── Auto-Trash Google Alert Emails After Triggering ────────
+                // GUARDRAIL: Only trash if sender is exactly googlealerts-noreply@google.com
+                const fromAddr = (email.from || '').toLowerCase();
+                const isGoogleAlert = GOOGLE_ALERTS_SENDERS.some(sender =>
+                    fromAddr.includes(sender)
+                );
+                if (isGoogleAlert) {
+                    try {
+                        const trashResult = await gmail.trashEmail(email.id);
+                        if (trashResult.success) {
+                            console.log(`  🗑️ [GmailPoller] Auto-trashed Google Alert: "${email.subject}"`);
+                        } else {
+                            console.warn(`  ⚠️ [GmailPoller] Trash failed: ${trashResult.error}`);
+                        }
+                    } catch (e: any) {
+                        console.warn(`  ⚠️ [GmailPoller] Trash error: ${e.message}`);
+                    }
+                }
             }
         }
 

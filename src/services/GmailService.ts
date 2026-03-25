@@ -199,4 +199,22 @@ import * as path from 'path'; export class GmailService {
       };
     }
   }
+
+  /**
+   * Move an email to the Trash. Recoverable for 30 days.
+   * Use this instead of permanent delete for safety.
+   */
+  async trashEmail(messageId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      this.init();
+      await this.gmail.users.messages.trash({
+        userId: 'me',
+        id: messageId,
+      });
+      return { success: true };
+    } catch (err: any) {
+      const message = err?.response?.data?.error?.message || err?.message || String(err);
+      return { success: false, error: `Gmail trash failed: ${message}` };
+    }
+  }
 }
