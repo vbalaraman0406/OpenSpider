@@ -16,7 +16,8 @@ from google.auth.exceptions import RefreshError
 # If modifying these scopes, delete the file token.json.
 SCOPES = [
     'https://www.googleapis.com/auth/gmail.send',
-    'https://www.googleapis.com/auth/gmail.readonly'
+    'https://www.googleapis.com/auth/gmail.readonly',
+    'https://www.googleapis.com/auth/gmail.modify'
 ]
 
 # ──────────────────────────────────────────────────
