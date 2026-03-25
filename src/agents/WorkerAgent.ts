@@ -982,43 +982,105 @@ ${context.join('\n')}
             // We only trigger skeletal compaction if the envelope gets dangerous (e.g. > 12,000 chars roughly 3.5k tokens).
 
             const totalLength = messages.reduce((acc, m) => acc + (typeof m.content === 'string' ? m.content.length : 0), 0);
-            const DANGER_THRESHOLD = 15000; // Allow more context for browser-heavy tasks before pruning
+            const DANGER_THRESHOLD = 18000; // Allow generous context for multi-turn conversations
 
             if (totalLength > DANGER_THRESHOLD) {
-                console.log(`[Token Optimization] Context window dangerously large (${totalLength} chars). Triggering OpenSpider V3 Adaptive Pruning...`);
+                console.log(`[Token Optimization] Context window large (${totalLength} chars). Triggering V4 Memory-Preserving Pruning...`);
 
-                // We keep the first 2 messages (system/initial user), and the VERY last turn. Everything in the middle is skeletonized to save bandwidth.
-                for (let j = 2; j < messages.length - 2; j++) {
+                // ─── V4 Memory-Preserving Pruning ────────────────────────────
+                // STEP 1: Build a rolling memory summary from all assistant messages
+                // before wiping them. This preserves key facts (names, numbers,
+                // lists, decisions) that the agent needs for continuity.
+                const memoryFragments: string[] = [];
+                const KEEP_TAIL = 4; // Keep last 4 messages intact (more recent context)
+
+                for (let j = 2; j < messages.length - KEEP_TAIL; j++) {
                     const msg = messages[j];
+                    if (!msg || typeof msg.content !== 'string') continue;
 
-                    // 1. Prune User Tool Results
-                    if (msg && msg.role === 'user' && typeof msg.content === 'string' && msg.content.startsWith('Tool Result:\n')) {
+                    if (msg.role === 'assistant') {
+                        try {
+                            const payload = JSON.parse(msg.content);
+                            // Collect summary_of_findings
+                            if (payload.summary_of_findings && payload.summary_of_findings.length > 10
+                                && !payload.summary_of_findings.includes('[PRUNED')) {
+                                memoryFragments.push(payload.summary_of_findings);
+                            }
+                            // Preserve final_answer content (key deliverables)
+                            if (payload.action === 'final_answer' && payload.result) {
+                                const resultSnippet = payload.result.substring(0, 500);
+                                memoryFragments.push(`[Delivered to user]: ${resultSnippet}`);
+                            }
+                            // Preserve send_whatsapp content (messages the agent sent)
+                            if (payload.action === 'send_whatsapp' && payload.message) {
+                                const msgSnippet = payload.message.substring(0, 300);
+                                memoryFragments.push(`[WhatsApp sent]: ${msgSnippet}`);
+                            }
+                            // Preserve send_email draft content
+                            if (payload.action === 'send_email' && payload.body) {
+                                const bodySnippet = payload.body.substring(0, 300);
+                                memoryFragments.push(`[Email draft]: to=${payload.to || '?'} subj=${payload.subject || '?'} body=${bodySnippet}`);
+                            }
+                        } catch { }
+                    }
+
+                    // Extract key data from tool results (lists, names, numbers)
+                    if (msg.role === 'user' && msg.content.startsWith('Tool Result:\n')) {
+                        const resultText = msg.content.substring(0, 800);
+                        // Check for structured data worth preserving
+                        const hasKeyData = /contractor|phone|email|draft|\$\d|★|cost|price|quote/i.test(resultText);
+                        if (hasKeyData) {
+                            const snippet = resultText.substring(13, 400);
+                            memoryFragments.push(`[Tool data]: ${snippet}`);
+                        }
+                    }
+                }
+
+                // STEP 2: Build the consolidated memory note
+                const uniqueMemory = [...new Set(memoryFragments)];
+                const memoryNote = uniqueMemory.length > 0
+                    ? `[CONVERSATION MEMORY - preserved across pruning]\n${uniqueMemory.slice(-15).join('\n')}\n[END MEMORY]`
+                    : '';
+
+                // STEP 3: Prune middle messages (keep first 2 + memory note + last KEEP_TAIL)
+                for (let j = 2; j < messages.length - KEEP_TAIL; j++) {
+                    const msg = messages[j];
+                    if (!msg || typeof msg.content !== 'string') continue;
+
+                    if (msg.role === 'user' && msg.content.startsWith('Tool Result:\n')) {
                         if (!msg.content.includes('[PRUNED_BY_OPENSPIDER]')) {
-                            msg.content = `Tool Result:\n[PRUNED_BY_OPENSPIDER] Execution succeeded. See historic logs for raw stdout.`;
+                            msg.content = `Tool Result:\n[PRUNED_BY_OPENSPIDER] Execution succeeded.`;
                         }
                     }
 
-                    // 2. Prune Assistant JSON logic blocks (Thoughts and Source Code)
-                    if (msg && msg.role === 'assistant' && typeof msg.content === 'string') {
+                    if (msg.role === 'assistant') {
                         if (!msg.content.includes('[PRUNED_BY_OPENSPIDER]')) {
                             try {
                                 const payload = JSON.parse(msg.content);
-
-                                // Preserve any explicit summary while dropping the massive realtime thought processing
-                                const memory = payload.summary_of_findings || "No specific findings logged for this step.";
-                                payload.thought = `[PRUNED_BY_OPENSPIDER] Kept logic in memory. Findings: ${memory}`;
-
-                                // Strip raw code payloads if present to save massive tokens
-                                if (payload.content) payload.content = "[PRUNED CODE STREAM]";
-                                if (payload.command) payload.command = "[PRUNED COMMAND]";
-                                if (payload.args) payload.args = "[PRUNED ARGS]";
-
+                                const memory = payload.summary_of_findings || 'No findings.';
+                                payload.thought = `[PRUNED_BY_OPENSPIDER] ${memory}`;
+                                if (payload.content) payload.content = '[PRUNED]';
+                                if (payload.command) payload.command = '[PRUNED]';
+                                if (payload.args) payload.args = '[PRUNED]';
+                                if (payload.message) payload.message = '[PRUNED]';
+                                if (payload.body) payload.body = '[PRUNED]';
                                 msg.content = JSON.stringify(payload);
-                            } catch (e) {
-                                // If it's not valid JSON, we just let it pass
-                            }
+                            } catch { }
                         }
                     }
+                }
+
+                // STEP 4: Inject persistent memory note after system+user messages
+                if (memoryNote) {
+                    const existingMemIdx = messages.findIndex(m =>
+                        typeof m.content === 'string' && m.content.includes('[CONVERSATION MEMORY')
+                    );
+                    if (existingMemIdx >= 0 && messages[existingMemIdx]) {
+                        messages[existingMemIdx]!.content = memoryNote;
+                    } else {
+                        messages.splice(2, 0, { role: 'user' as const, content: memoryNote });
+                    }
+                    console.log(`[Token Optimization] 🧠 Preserved ${uniqueMemory.length} memory fragments across pruning`);
                 }
             }
 
@@ -1038,3 +1100,4 @@ ${context.join('\n')}
             : "Worker Agent hit max iteration limit without finding a final answer.";
     }
 }
+
