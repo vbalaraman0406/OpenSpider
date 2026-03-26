@@ -898,6 +898,21 @@ export async function clickElement(selector: string): Promise<string> {
             
             if (!el) return JSON.stringify({ success: false, error: 'Not found. Tried CSS: [${escapedCss}] and text: [${escapedTexts}]' });
             
+            // Prevent links from opening in new tabs
+            let p = el;
+            while (p && p.tagName !== 'BODY') {
+                if (p.getAttribute) {
+                    if (p.getAttribute('target') === '_blank') p.removeAttribute('target');
+                }
+                p = p.parentElement;
+            }
+            // Override window.open temporarily to force same-tab navigation
+            window._originalOpen = window.open;
+            window.open = function(url) { 
+                if (url) window.location.href = url; 
+                return window; 
+            };
+            
             // Get bounding box for CDP mouse click
             el.scrollIntoView({ behavior: 'smooth', block: 'center' });
             const rect = el.getBoundingClientRect();
