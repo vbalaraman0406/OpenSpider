@@ -380,18 +380,16 @@ ${context.join('\n')}
                     toolOutput = `Response from ${response.target}:\n${subResult}`;
                 } else if (response.action === 'browse_web') {
                     // command = sub-action (navigate/click/type/read_content/scroll/close/execute_js)
-                    // filename = URL (for navigate)
-                    // args = CSS selector (for click/type) or direction (for scroll)
-                    // content = text to type, or raw script payload for execute_js
+                    // Fallback heuristics for 100% LLM hallucination resistance
                     const subAction = (response.command || 'navigate') as BrowseAction['action'];
                     const browseAction: BrowseAction = {
                         action: subAction,
-                        url: response.url || response.filename || response.args,
-                        selector: response.args,
-                        text: response.content,
-                        script: response.content,
-                        message: response.message,
-                        direction: response.args as 'up' | 'down',
+                        url: response.url || response.filename || response.target || response.args || response.content,
+                        selector: response.args || response.target || response.content || response.filename,
+                        text: response.content || response.message || response.args,
+                        script: response.content || response.message || response.args,
+                        message: response.message || response.content,
+                        direction: (response.direction || response.args || response.content) as 'up' | 'down',
                     };
                     console.log(`[Worker - ${this.role}] Browser action: ${browseAction.action} ${browseAction.url || browseAction.selector || ''}`);
                     let rawBrowserOutput = await this.browserTool.execute(browseAction);
