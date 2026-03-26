@@ -68,7 +68,7 @@ export class WorkerAgent {
             'search_skills': '- search_skills: { "content": "stock market" } (Search the skills catalog for existing curated scripts. ALWAYS search before writing a new script!)',
             'create_workflow': '- create_workflow: { "filename": "id", "content": "Name", "args": "JSON steps array" } (Create a reusable multi-step pipeline.)',
             'create_event_trigger': '- create_event_trigger: { "filename": "id", "content": "Name", "args": "JSON config" } (Create an event trigger.)',
-            'browse_web': '- browse_web: Open a REAL browser. Set "command" to navigate, click, type, read_content, list_elements, etc.',
+            'browse_web': '- browse_web: Open a REAL browser.\n  To use browse_web, set "command" to the sub-action and use other fields:\n    - Navigate: { "action": "browse_web", "command": "navigate", "url": "https://google.com" }\n    - Click:    { "action": "browse_web", "command": "click", "args": "button.submit" }\n    - Type:     { "action": "browse_web", "command": "type", "args": "input[name=q]", "content": "search query" }\n    - Read:     { "action": "browse_web", "command": "read_content" }\n    - Read targeted section: { "action": "browse_web", "command": "read_content", "args": "main" } (Use CSS selector to focus extraction)\n    - Scroll:   { "action": "browse_web", "command": "scroll", "args": "down" }\n    - List:     { "action": "browse_web", "command": "list_elements" }\n    - Run JS:   { "action": "browse_web", "command": "execute_js", "content": "return document.querySelector(\'.score\').innerText" }\n    - Close:    { "action": "browse_web", "command": "close" }',
             'wait_for_user': '- wait_for_user: { "message": "Please log in to your account" } (Pause and ask the user to do something in the browser.)',
             'schedule_task': '- schedule_task: { "command": "24", "content": "prompt", "filename": "job name" } (Schedule OR UPDATE a recurring task.)',
             'message_agent': '- message_agent: { "target": "Role Name", "message": "Text to send" } (Delegate a sub-task to a specialized sub-agent)',
@@ -261,6 +261,7 @@ ${context.join('\n')}
                         thought: { type: "string" },
                         summary_of_findings: { type: "string", description: "A highly compressed, 1-2 sentence memory of what you learned in this step. Retained forever even if thoughts are pruned." },
                         command: { type: "string" },
+                        url: { type: "string", description: "The target URL for web browsing or requests" },
                         filename: { type: "string" },
                         content: { type: "string" },
                         args: { type: "string" },
@@ -385,7 +386,7 @@ ${context.join('\n')}
                     const subAction = (response.command || 'navigate') as BrowseAction['action'];
                     const browseAction: BrowseAction = {
                         action: subAction,
-                        url: response.filename,
+                        url: response.url || response.filename || response.args,
                         selector: response.args,
                         text: response.content,
                         script: response.content,
