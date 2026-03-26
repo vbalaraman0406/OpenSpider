@@ -163,7 +163,9 @@ async function checkAndExecuteJobs() {
                 ? `\n\n[MANDATORY AGENT ROUTING] You MUST delegate this task to the "${job.agentId}" agent. Do NOT pick any other agent. This is a system-level directive from the scheduler.`
                 : '';
 
-            const cronPrompt = `[SYSTEM CRON TRIGGER] Wake up and execute your scheduled background task. Do not ask me for permission. Just do it and summarize the results.${cronFromNote}${agentDirective}\n\nTask: ${job.prompt}`;
+            const explicitLogNote = `\n\n[LOGGING REQUIREMENT] In your final summary report, you MUST explicitly print the exact, raw email addresses and WhatsApp numbers/JIDs you sent messages to. Do NOT use abstract phrases like "default user", "the requested group", or "the recipient". Print the exact target strings returned by the tool output.`;
+
+            const cronPrompt = `[SYSTEM CRON TRIGGER] Wake up and execute your scheduled background task. Do not ask me for permission. Just do it and summarize the results.${cronFromNote}${agentDirective}${explicitLogNote}\n\nTask: ${job.prompt}`;
 
             activeCronJobs++;
             manager.processUserRequest(cronPrompt).then(result => {
@@ -234,7 +236,9 @@ export async function runJobForcefully(jobId: string) {
         ? `\n\n[MANDATORY AGENT ROUTING] You MUST delegate this task to the "${job.agentId}" agent. Do NOT pick any other agent. This is a system-level directive from the scheduler.`
         : '';
 
-    const cronPrompt = `[SYSTEM MANUAL TRIGGER] Wake up and execute your background task manually requested by the user. Do not ask me for permission. Just do it and summarize the results.${cronFromNote}${agentDirective}\n\nTask: ${job.prompt}`;
+    const explicitLogNote = `\n\n[LOGGING REQUIREMENT] In your final summary report, you MUST explicitly print the exact, raw email addresses and WhatsApp numbers/JIDs you sent messages to. Do NOT use abstract phrases like "default user", "the requested group", or "the recipient". Print the exact target strings returned by the tool output.`;
+
+    const cronPrompt = `[SYSTEM MANUAL TRIGGER] Wake up and execute your background task manually requested by the user. Do not ask me for permission. Just do it and summarize the results.${cronFromNote}${agentDirective}${explicitLogNote}\n\nTask: ${job.prompt}`;
 
     // Fire and forget
     activeCronJobs++;
