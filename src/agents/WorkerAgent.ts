@@ -56,6 +56,35 @@ export class WorkerAgent {
         const persona = new PersonaShell(this.role);
         const compiledPersonaPrompt = persona.compileSystemPrompt();
 
+        const caps = persona.getCapabilities();
+        const allowedTools = caps?.allowedTools || ['read_file', 'write_file', 'execute_command', 'search_codebase'];
+        // Ensure final_answer is always available so the agent can conclude
+        if (!allowedTools.includes('final_answer')) allowedTools.push('final_answer');
+
+        const ALL_TOOLS: Record<string, string> = {
+            'run_command': '- run_command: { "command": "echo hello" } (Run a bash command within the project environment)',
+            'write_script': '- write_script: { "filename": "test.py", "content": "print(\'hello\')" } (Write a code script to disk)',
+            'execute_script': '- execute_script: { "filename": "test.py", "args": "" } (Execute a dynamically written script)',
+            'search_skills': '- search_skills: { "content": "stock market" } (Search the skills catalog for existing curated scripts. ALWAYS search before writing a new script!)',
+            'create_workflow': '- create_workflow: { "filename": "id", "content": "Name", "args": "JSON steps array" } (Create a reusable multi-step pipeline.)',
+            'create_event_trigger': '- create_event_trigger: { "filename": "id", "content": "Name", "args": "JSON config" } (Create an event trigger.)',
+            'browse_web': '- browse_web: Open a REAL browser. Set "command" to navigate, click, type, read_content, list_elements, etc.',
+            'wait_for_user': '- wait_for_user: { "message": "Please log in to your account" } (Pause and ask the user to do something in the browser.)',
+            'schedule_task': '- schedule_task: { "command": "24", "content": "prompt", "filename": "job name" } (Schedule OR UPDATE a recurring task.)',
+            'message_agent': '- message_agent: { "target": "Role Name", "message": "Text to send" } (Delegate a sub-task to a specialized sub-agent)',
+            'send_email': '- send_email: { "to": "user", "subject": "Hello", "body": "message", "from": "alias" } (Send an outbound email natively.)',
+            'read_emails': '- read_emails: { "content": "query string", "target": "5" } (Scan the user\'s Gmail inbox natively.)',
+            'send_whatsapp': '- send_whatsapp: { "message": "Hello!", "to": "Engineering Team" } (Send a WhatsApp message.)',
+            'send_voice': '- send_voice: { "message": "Hello", "args": "voice_id" } (Send a voice note to the user via WhatsApp.)',
+            'update_whatsapp_whitelist': '- update_whatsapp_whitelist: { "command": "add_dm", "target": "+14" } (Safely grant or revoke WhatsApp access.)',
+            'final_answer': '- final_answer: { "result": "The final output" } (CRITICAL: You MUST include the \'result\' key containing your answer)'
+        };
+
+        const activeToolsPrompt = allowedTools
+            .map((t: string) => ALL_TOOLS[t])
+            .filter(Boolean)
+            .join('\n');
+
         const systemPrompt = `${compiledPersonaPrompt}
 
 [CURRENT DATE & TIME]
@@ -74,37 +103,7 @@ CRITICAL COMPLETION RULE: You start with 30 steps. Your budget auto-extends if y
 ${assignedSkillsContext}
 
 Available tools you can request in your JSON response:
-- run_command: { "command": "echo hello" } (Run a bash command within the project environment)
-- write_script: { "filename": "test.py", "content": "print('hello')" } (Write a code script to disk)
-- execute_script: { "filename": "test.py", "args": "" } (Execute a dynamically written script)
-- search_skills: { "content": "stock market" } (Search the skills catalog for existing curated scripts by keyword. ALWAYS search before writing a new script — reuse existing skills when possible!)
-- create_workflow: { "filename": "my-workflow-id", "content": "My Workflow Name", "args": "JSON steps array" } (Create a reusable multi-step workflow pipeline. "filename" = unique id, "content" = display name, "args" = JSON stringified array of step objects. Each step: { "id": "step1", "action": "agent_task"|"condition"|"deliver"|"skill", "prompt": "...", "channel": "whatsapp"|"email", "target": "...", "template": "{{prev.output}}" }. Steps run in order with output chaining via {{stepId.output}}. Example: [{"id":"s1","action":"agent_task","prompt":"Research X"},{"id":"s2","action":"deliver","channel":"whatsapp","target":"default","template":"{{s1.output}}"}])
-- create_event_trigger: { "filename": "my-trigger-id", "content": "My Trigger Name", "args": "JSON config" } (Create an event trigger that fires when matching events occur. "filename" = unique id, "content" = display name, "args" = JSON config with: { "source": "gmail"|"whatsapp"|"webhook"|"cron_result", "filter": { "from": "*@domain.com", "subject_contains": "...", "body_contains": "..." }, "action": { "type": "workflow"|"agent_task", "workflowId": "...", "prompt": "..." } })
-- browse_web: Open a REAL browser. ALWAYS prefer this over Python scripts for web searches.
-  To use browse_web, set "command" to the sub-action and use other fields:
-    - Navigate: { "action": "browse_web", "command": "navigate", "filename": "https://google.com" }
-    - Click:    { "action": "browse_web", "command": "click", "args": "button.submit" }
-    - Type:     { "action": "browse_web", "command": "type", "args": "input[name=q]", "content": "search query" }
-    - Read:     { "action": "browse_web", "command": "read_content" }  ← reads full page (capped at 1500 chars)
-    - Read targeted section: { "action": "browse_web", "command": "read_content", "args": "main" }  ← CSS selector for focused extraction. Use this when you need specific data (e.g. "args": ".results", "args": "article", "args": "#contact", "args": "table"). PREFER targeted selectors over full-page reads to save tokens.
-    - Scroll:   { "action": "browse_web", "command": "scroll", "args": "down" }
-    - List:     { "action": "browse_web", "command": "list_elements" }  ← shows all clickable links/buttons with their text. Use this when you can't find what to click.
-    - Run JS:   { "action": "browse_web", "command": "execute_js", "content": "return document.querySelector('.score').innerText" }  ← run custom JS to extract specific data
-    - Close:    { "action": "browse_web", "command": "close" }
-- wait_for_user: { "message": "Please log in to your account" } (Pause and ask the user to do something in the browser, like logging in. Waits up to 120 seconds.)
-- schedule_task: { "command": "24", "content": "Fetch Vancouver WA weather and send to user via WhatsApp", "filename": "Daily Weather Brief" } (Schedule OR UPDATE a recurring task. If a job with the same "filename" already exists it will be UPDATED in place — use this when the user asks to change/modify an existing job. IMPORTANT: When updating, existing delivery recipients (WhatsApp numbers, groups, emails) and schedule are automatically PRESERVED — you only need to provide the NEW task content. To create or update an interval-based job: "command" = interval in hours (e.g. "24"). To create or update a time-of-day job: "command" = "preferredTime:HH:MM" (e.g. "preferredTime:07:00"). Only set "command" if you want to CHANGE the schedule. "content" = the prompt/task to execute, "filename" = short name for the job (must match exactly to update).)
-- message_agent: { "target": "Role Name", "message": "Text to send" } (Delegate a sub-task to a specialized sub-agent)
-- send_email: { "to": "user@example.com", "subject": "Hello", "body": "My message here", "from": "optional-alias@gmail.com" } (Send an outbound email natively using OAuth. Use the optional "from" field only when explicitly instructed to send from a specific alias.)
-- read_emails: { "content": "query string", "target": "5" } (Scan the user's Gmail inbox natively. "content" is the search query like 'is:unread' or 'from:boss', and "target" is the max number of results.)
-- send_whatsapp: { "message": "Hello!", "to": "Engineering Team" } (Send a WhatsApp message. "to" is optional – if omitted, the message goes to the default configured owner. You can provide a comma-separated list of phone numbers, the word "default", OR the exact name of a WhatsApp Group the bot is in. CRITICAL: the "message" field is the exact text that the human user will read. Do NOT put internal status logs like 'Message sent successfully' in here. Write the conversational answer.)
-- send_voice: { "message": "Hello, how are you?", "args": "voice_id" } (Send a voice note to the user via WhatsApp. The text in "message" will be converted to speech using ElevenLabs TTS and delivered as an audio message. Use "args" to optionally specify a voice ID. Available voices:
-  • "21m00Tcm4TlvDq8ikWAM" = Rachel (default, warm female)
-  • "EXAVITQu4vr4xnSDxMaL" = Bella (soft female)
-  • "ErXwobaYiN019PkySvjV" = Antoni (calm male)
-  • "VR6AewLTigWG4xSOukaG" = Arnold (deep male)
-  • "pNInz6obpgDQGcFmaJgB" = Adam (confident male)
-- update_whatsapp_whitelist: { "command": "add_dm", "target": "+14155552671" } (Safely grant or revoke WhatsApp access for users. "command" can be "add_dm", "remove_dm", "add_group", or "remove_group". "target" should be the raw phone number (e.g. +14155552671) or exact Group JID strings.)
-- final_answer: { "result": "The final output" } (CRITICAL: You MUST include the 'result' key containing your answer)
+${activeToolsPrompt}
 
 BROWSER USAGE GUIDELINES:
 - ALWAYS prefer browse_web over writing Python scripts for web searches, data lookup, or scraping. The browser is faster and uses fewer tokens.
@@ -254,25 +253,11 @@ ${context.join('\n')}
             }
             let response;
             try {
-                response = await this.llm.generateStructuredOutputs<{
-                    action: 'run_command' | 'write_script' | 'execute_script' | 'search_skills' | 'create_workflow' | 'create_event_trigger' | 'browse_web' | 'wait_for_user' | 'schedule_task' | 'message_agent' | 'send_email' | 'read_emails' | 'send_whatsapp' | 'send_voice' | 'update_whatsapp_whitelist' | 'final_answer';
-                    command?: string;
-                    filename?: string;
-                    content?: string;
-                    args?: string;
-                    target?: string;
-                    message?: string;
-                    to?: string;
-                    subject?: string;
-                    body?: string;
-                    from?: string;
-                    result?: string;
-                    summary_of_findings: string;
-                    thought: string;
-                }>(messages, {
+                // We use <any> here because the exact action string union is now completely dynamic based on allowedTools
+                response = await this.llm.generateStructuredOutputs<any>(messages, {
                     type: "object",
                     properties: {
-                        action: { type: "string", enum: ["run_command", "write_script", "execute_script", "search_skills", "browse_web", "wait_for_user", "schedule_task", "message_agent", "send_email", "read_emails", "send_whatsapp", "send_voice", "update_whatsapp_whitelist", "final_answer"] },
+                        action: { type: "string", enum: allowedTools },
                         thought: { type: "string" },
                         summary_of_findings: { type: "string", description: "A highly compressed, 1-2 sentence memory of what you learned in this step. Retained forever even if thoughts are pruned." },
                         command: { type: "string" },
