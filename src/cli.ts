@@ -813,6 +813,7 @@ modelsMenu
         // Build the fallback chain display
         const chain = ['Primary'];
         if (process.env.FALLBACK_MODEL) chain.push(process.env.FALLBACK_MODEL);
+        if (provider === 'antigravity-internal') chain.push('Internal Fallback');
         if (process.env.DEEPSEEK_API_KEY) chain.push('DeepSeek');
         if (process.env.NVIDIA_API_KEY_1) chain.push('NVIDIA-1');
         if (process.env.NVIDIA_API_KEY_2) chain.push('NVIDIA-2');

@@ -105,6 +105,23 @@ export function getProvider(modelNameOverride?: string): LLMProvider {
         }
     }
 
+    // 1.5 Antigravity Internal Backup Model
+    if (provider === 'antigravity-internal') {
+        const fallbacks = [
+            'gemini-2.5-flash',
+            'gemini-2.0-flash-thinking'
+        ];
+        
+        const primaryModel = process.env.GEMINI_MODEL || 'claude-opus-4-6-thinking';
+        // Pick the first fallback that isn't the primary model
+        const internalFallbackModel = fallbacks.find(m => m !== primaryModel) || 'gemini-2.5-flash';
+        
+        fallbackProviders.push({
+            provider: new AntigravityInternalProvider(internalFallbackModel),
+            label: `antigravity-internal/${internalFallbackModel}`
+        });
+    }
+
     // 2. DeepSeek Backup Model
     const deepseekKey = process.env.DEEPSEEK_API_KEY;
     const deepseekModel = process.env.DEEPSEEK_MODEL || 'deepseek-chat';

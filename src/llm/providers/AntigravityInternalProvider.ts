@@ -15,8 +15,8 @@ export class AntigravityInternalProvider implements LLMProvider {
         'gemini-2.5-pro',
     ];
 
-    constructor() {
-        this.model = process.env.GEMINI_MODEL || 'claude-sonnet-4-5';
+    constructor(overrideModel?: string) {
+        this.model = overrideModel || process.env.GEMINI_MODEL || 'claude-sonnet-4-5';
     }
 
     private async ensureAuth(): Promise<AuthState> {
