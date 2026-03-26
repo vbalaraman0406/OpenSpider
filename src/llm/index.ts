@@ -108,8 +108,9 @@ export function getProvider(modelNameOverride?: string): LLMProvider {
     // 1.5 Antigravity Internal Backup Model
     if (provider === 'antigravity-internal') {
         const fallbacks = [
-            'gemini-2.5-flash',
-            'gemini-2.0-flash-thinking'
+            'gemini-3.1-pro',
+            'gemini-2.5-pro',
+            'gemini-2.5-flash'
         ];
         
         const primaryModel = process.env.GEMINI_MODEL || 'claude-opus-4-6-thinking';

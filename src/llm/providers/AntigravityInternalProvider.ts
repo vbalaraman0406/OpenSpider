@@ -10,9 +10,10 @@ export class AntigravityInternalProvider implements LLMProvider {
     // Fallback models in priority order — verified against daily-cloudcode-pa endpoint
     private static readonly MODEL_FALLBACKS: string[] = [
         'claude-sonnet-4-5',
-        'gemini-2.5-flash',
-        'claude-opus-4-6-thinking',
+        'gemini-3.1-pro',
         'gemini-2.5-pro',
+        'claude-opus-4-6-thinking',
+        'gemini-2.5-flash',
     ];
 
     constructor(overrideModel?: string) {
