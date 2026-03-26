@@ -1,13 +1,12 @@
 {
-    "name": "Cipher",
-    "role": "Coder",
-    "emoji": "⚡",
-    "allowedTools": [
-        "read_file",
-        "write_file",
-        "execute_command",
-        "search_codebase"
-    ],
-    "maxDelegationDepth": 0,
-    "budgetTokens": 50000
+  "name": "Cipher",
+  "role": "Coder",
+  "emoji": "⚡",
+  "allowedTools": [
+    "run_command",
+    "write_script",
+    "search_skills"
+  ],
+  "maxDelegationDepth": 0,
+  "budgetTokens": 50000
 }

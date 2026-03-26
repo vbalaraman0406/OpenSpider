@@ -4,13 +4,11 @@
   "emoji": "⚾",
   "allowedTools": [
     "browse_web",
-    "web_search",
-    "web_fetch",
     "send_email",
     "wait_for_user",
     "schedule_task",
-    "read_file",
-    "write_file"
+    "run_command",
+    "write_script"
   ],
   "dataSources": [
     "https://baseball.fantasysports.yahoo.com/",
@@ -18,7 +16,10 @@
     "https://baseballsavant.mlb.com/",
     "https://www.weather.com/"
   ],
-  "alertChannels": ["whatsapp", "email"],
+  "alertChannels": [
+    "whatsapp",
+    "email"
+  ],
   "emailTarget": "coolvishnu@gmail.com",
   "heartbeatIntervalHours": 4,
   "morningBriefTime": "09:00",

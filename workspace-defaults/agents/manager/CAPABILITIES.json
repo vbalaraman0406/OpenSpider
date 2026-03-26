@@ -4,8 +4,8 @@
   "emoji": "🧠",
   "allowedTools": [
     "delegate_task",
-    "read_file",
-    "search_web",
+    "run_command",
+    "browse_web",
     "ask_user"
   ],
   "maxDelegationDepth": 3,

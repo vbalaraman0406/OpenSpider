@@ -5,8 +5,6 @@
   "description": "Elite F1 strategist specializing in race predictions, qualifying analysis, track intelligence, tire strategy, weather impact, championship tracking, and race weekend briefings.",
   "allowedTools": [
     "browse_web",
-    "web_search",
-    "web_fetch",
     "send_whatsapp",
     "send_email",
     "send_voice",
@@ -29,7 +27,10 @@
     "https://www.formula1.com/",
     "https://www.motorsport.com/f1/"
   ],
-  "alertChannels": ["whatsapp", "email"],
+  "alertChannels": [
+    "whatsapp",
+    "email"
+  ],
   "maxDelegationDepth": 0,
   "budgetTokens": 150000
 }

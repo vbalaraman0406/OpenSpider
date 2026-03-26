@@ -5,8 +5,6 @@
   "description": "Institutional-grade stock exchange analyst specializing in quantitative finance, technical chart analysis, fundamental evaluation, market screening, earnings tracking, and portfolio management.",
   "allowedTools": [
     "browse_web",
-    "web_search",
-    "web_fetch",
     "send_email",
     "send_whatsapp",
     "send_voice",
@@ -29,7 +27,10 @@
     "https://www.wsj.com/market-data",
     "https://www.marketwatch.com/"
   ],
-  "alertChannels": ["whatsapp", "email"],
+  "alertChannels": [
+    "whatsapp",
+    "email"
+  ],
   "maxDelegationDepth": 0,
   "budgetTokens": 150000
 }

@@ -3,10 +3,8 @@
   "role": "Researcher",
   "emoji": "🔮",
   "allowedTools": [
-    "search_web",
-    "read_url_content",
-    "view_content_chunk",
-    "read_file"
+    "browse_web",
+    "run_command"
   ],
   "maxDelegationDepth": 0,
   "budgetTokens": 50000
