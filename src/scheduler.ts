@@ -72,6 +72,111 @@ function getCronEmailFromAddress(): string {
     } catch (e) { }
     return '';
 }
+// ─── Queue Structures ───
+interface QueuedContext {
+    job: CronJob;
+    isManual: boolean;
+    cronPrompt: string;
+}
+
+const jobQueue: QueuedContext[] = [];
+let isProcessingQueue = false;
+
+async function processJobQueue() {
+    if (isProcessingQueue || jobQueue.length === 0) return;
+    isProcessingQueue = true;
+
+    while (jobQueue.length > 0) {
+        const ctx = jobQueue.shift()!;
+        try {
+            await executeQueuedContext(ctx);
+        } catch (e) {
+            console.error(`[Scheduler] Queue execution failed for job "${ctx.job.description}":`, e);
+        }
+    }
+
+    isProcessingQueue = false;
+}
+
+async function executeQueuedContext(ctx: QueuedContext) {
+    const job = ctx.job;
+    const prefix = ctx.isManual ? 'Manual Job' : 'Job';
+    console.log(`\n▶️ [SchedulerQueue] Starting ${prefix}: "${job.description}"...`);
+
+    // Digest-type jobs use DigestEngine instead of ManagerAgent
+    if (job.type === 'digest') {
+        activeCronJobs++;
+        try {
+            const { DigestEngine } = await import('./DigestEngine');
+            const digest = await DigestEngine.compileDigest();
+            const config = DigestEngine.getConfig();
+
+            // Deliver via configured channels
+            if (config.channels.includes('whatsapp') && config.whatsappTargets.length > 0) {
+                try {
+                    const { sendWhatsAppMessage } = require('./whatsapp');
+                    for (const target of config.whatsappTargets) {
+                        await sendWhatsAppMessage(target, digest);
+                    }
+                } catch (waErr: any) {
+                    console.error(`[Scheduler] Digest WhatsApp delivery failed:`, waErr.message);
+                }
+            }
+
+            activeCronJobs--;
+            console.log(`[Scheduler] Digest "${job.description}" compiled successfully.`);
+            console.log(JSON.stringify({
+                type: 'cron_result',
+                jobName: job.description,
+                result: digest,
+                timestamp: new Date().toISOString()
+            }));
+        } catch (err: any) {
+            activeCronJobs--;
+            console.error(`[Scheduler] Digest "${job.description}" failed:`, err);
+        }
+        return;
+    }
+
+    // Standard Agent Handling
+    const manager = new ManagerAgent(job.modelOverride || undefined);
+    activeCronJobs++;
+
+    try {
+        const result = await manager.processUserRequest(ctx.cronPrompt);
+        activeCronJobs--;
+        console.log(`[Scheduler] ${prefix} "${job.description}" completed. Result:\n${result}`);
+        
+        console.log(JSON.stringify({
+            type: 'cron_result',
+            jobName: job.description,
+            result: result,
+            timestamp: new Date().toISOString()
+        }));
+
+        if (!ctx.isManual) {
+            // ─── EventBus + Workflow Chain Integration ───
+            const { EventBus } = await import('./EventBus');
+            EventBus.emit('cron_result', {
+                source: 'cron_result',
+                jobId: job.id,
+                jobName: job.description,
+                body: result,
+            }).catch((err: any) => console.error('[Scheduler] EventBus emit failed:', err));
+
+            const { WorkflowEngine } = await import('./WorkflowEngine');
+            const chained = WorkflowEngine.getWorkflowsForCron(job.id);
+            for (const wf of chained) {
+                console.log(`🔗 [Scheduler] Triggering chained workflow: "${wf.name}"`);
+                WorkflowEngine.executeWorkflow(wf.id, `Cron job "${job.description}" completed.\n\nResult:\n${result}`)
+                    .catch((err: any) => console.error(`[Scheduler] Workflow "${wf.name}" failed:`, err));
+            }
+        }
+    } catch (err) {
+        activeCronJobs--;
+        console.error(`[Scheduler] ${prefix} "${job.description}" failed:`, err);
+    }
+}
 
 async function checkAndExecuteJobs() {
     try {
@@ -115,49 +220,13 @@ async function checkAndExecuteJobs() {
             return jobs; // withJobs() writes this back atomically
         });
 
-        // Execute jobs OUTSIDE the lock — the file is already updated
+        if (jobsToRun.length === 0) return;
+
+        // Prepare jobs for execution OUTSIDE the lock — the file is already updated
         const cronFrom = getCronEmailFromAddress();
         const cronFromNote = cronFrom ? `\n\n[CRON EMAIL SENDER RULE] IMPORTANT: When sending any emails as part of this automated task, you MUST always set the "from" field to "${cronFrom}" in your send_email tool call. This is a system-level requirement for all cron job emails.` : '';
 
         for (const job of jobsToRun) {
-            // Digest-type jobs use DigestEngine instead of ManagerAgent
-            if (job.type === 'digest') {
-                activeCronJobs++;
-                import('./DigestEngine').then(async ({ DigestEngine }) => {
-                    try {
-                        const digest = await DigestEngine.compileDigest();
-                        const config = DigestEngine.getConfig();
-
-                        // Deliver via configured channels
-                        if (config.channels.includes('whatsapp') && config.whatsappTargets.length > 0) {
-                            try {
-                                const { sendWhatsAppMessage } = require('./whatsapp');
-                                for (const target of config.whatsappTargets) {
-                                    await sendWhatsAppMessage(target, digest);
-                                }
-                            } catch (waErr: any) {
-                                console.error(`[Scheduler] Digest WhatsApp delivery failed:`, waErr.message);
-                            }
-                        }
-
-                        activeCronJobs--;
-                        console.log(`[Scheduler] Digest "${job.description}" compiled successfully.`);
-                        console.log(JSON.stringify({
-                            type: 'cron_result',
-                            jobName: job.description,
-                            result: digest,
-                            timestamp: new Date().toISOString()
-                        }));
-                    } catch (err: any) {
-                        activeCronJobs--;
-                        console.error(`[Scheduler] Digest "${job.description}" failed:`, err);
-                    }
-                });
-                continue;
-            }
-
-            const manager = new ManagerAgent(job.modelOverride || undefined);
-
             // Inject agent routing directive so ManagerAgent delegates to the correct worker
             const agentDirective = (job.agentId && job.agentId !== 'manager')
                 ? `\n\n[MANDATORY AGENT ROUTING] You MUST delegate this task to the "${job.agentId}" agent. Do NOT pick any other agent. This is a system-level directive from the scheduler.`
@@ -168,43 +237,12 @@ async function checkAndExecuteJobs() {
 
             const cronPrompt = `[SYSTEM CRON TRIGGER] Wake up and execute your scheduled background task. Do not ask me for permission. Just do it and summarize the results.${cronFromNote}${agentDirective}${explicitLogNote}${antiHallucinationNote}\n\nTask: ${job.prompt}`;
 
-            activeCronJobs++;
-            manager.processUserRequest(cronPrompt).then(result => {
-                activeCronJobs--;
-                console.log(`[Scheduler] Job "${job.description}" completed. Result:\n${result}`);
-                console.log(JSON.stringify({
-                    type: 'cron_result',
-                    jobName: job.description,
-                    result: result,
-                    timestamp: new Date().toISOString()
-                }));
-
-                // ─── EventBus + Workflow Chain Integration ───
-                // Emit cron_result event for any registered triggers
-                import('./EventBus').then(({ EventBus }) => {
-                    EventBus.emit('cron_result', {
-                        source: 'cron_result',
-                        jobId: job.id,
-                        jobName: job.description,
-                        body: result,
-                    }).catch(err => console.error('[Scheduler] EventBus emit failed:', err));
-                });
-
-                // Fire any workflows chained to this cron job
-                import('./WorkflowEngine').then(({ WorkflowEngine }) => {
-                    const chained = WorkflowEngine.getWorkflowsForCron(job.id);
-                    for (const wf of chained) {
-                        console.log(`🔗 [Scheduler] Triggering chained workflow: "${wf.name}"`);
-                        WorkflowEngine.executeWorkflow(wf.id, `Cron job "${job.description}" completed.\n\nResult:\n${result}`)
-                            .catch(err => console.error(`[Scheduler] Workflow "${wf.name}" failed:`, err));
-                    }
-                });
-
-            }).catch(err => {
-                activeCronJobs--;
-                console.error(`[Scheduler] Job "${job.description}" failed:`, err);
-            });
+            console.log(`[Scheduler] Queuing Background Job: "${job.description}"`);
+            jobQueue.push({ job, isManual: false, cronPrompt });
         }
+
+        // Kick off the queue processor
+        processJobQueue();
 
     } catch (e) {
         console.error(`[Scheduler] Loop Error:`, e);
@@ -226,9 +264,8 @@ export async function runJobForcefully(jobId: string) {
     if (!jobToRun) return false;
     const job = jobToRun as CronJob;
 
-    console.log(`\n⚡ [Scheduler] Manually Triggering Job: "${job.description}"`);
+    console.log(`\n⚡ [Scheduler] Manually Triggering Job (pushing to queue): "${job.description}"`);
 
-    const manager = new ManagerAgent(job.modelOverride || undefined);
     const cronFrom = getCronEmailFromAddress();
     const cronFromNote = cronFrom ? `\n\n[CRON EMAIL SENDER RULE] IMPORTANT: When sending any emails as part of this automated task, you MUST always set the "from" field to "${cronFrom}" in your send_email tool call. This is a system-level requirement for all cron job emails.` : '';
 
@@ -242,22 +279,8 @@ export async function runJobForcefully(jobId: string) {
 
     const cronPrompt = `[SYSTEM MANUAL TRIGGER] Wake up and execute your background task manually requested by the user. Do not ask me for permission. Just do it and summarize the results.${cronFromNote}${agentDirective}${explicitLogNote}${antiHallucinationNote}\n\nTask: ${job.prompt}`;
 
-    // Fire and forget
-    activeCronJobs++;
-    manager.processUserRequest(cronPrompt).then(result => {
-        activeCronJobs--;
-        console.log(`[Scheduler] Manual Job "${job.description}" completed. Result:\n${result}`);
-        // Broadcast cron result to dashboard chat window
-        console.log(JSON.stringify({
-            type: 'cron_result',
-            jobName: job.description,
-            result: result,
-            timestamp: new Date().toISOString()
-        }));
-    }).catch(err => {
-        activeCronJobs--;
-        console.error(`[Scheduler] Manual Job "${job.description}" failed:`, err);
-    });
+    jobQueue.push({ job, isManual: true, cronPrompt });
+    processJobQueue();
 
     return true;
 }
