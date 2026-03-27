@@ -108,8 +108,8 @@ export function getProvider(modelNameOverride?: string): LLMProvider {
     // 1.5 Antigravity Internal Backup Models (Strict Order)
     if (provider === 'antigravity-internal') {
         const fallbacks = [
-            'claude-sonnet-4-5',
-            'gemini-3.1-pro',
+            'claude-sonnet-4-6',
+            'gemini-2.5-pro',
             'gemini-2.5-flash'
         ];
         
