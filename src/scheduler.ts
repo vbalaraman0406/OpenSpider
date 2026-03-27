@@ -164,8 +164,9 @@ async function checkAndExecuteJobs() {
                 : '';
 
             const explicitLogNote = `\n\n[LOGGING REQUIREMENT] In your final summary report, you MUST explicitly print the exact, raw email addresses and WhatsApp numbers/JIDs you sent messages to. Do NOT use abstract phrases like "default user", "the requested group", or "the recipient". Print the exact target strings returned by the tool output.`;
+            const antiHallucinationNote = `\n\n[ANTI-HALLUCINATION DIRECTIVE] You MUST explicitly execute the required tool (e.g. 'send_email', 'send_whatsapp') to actually send a message. Do NOT simply draft the email/message content within your final "result" output. The task is only complete once you call the tool and receive a success confirmation.`;
 
-            const cronPrompt = `[SYSTEM CRON TRIGGER] Wake up and execute your scheduled background task. Do not ask me for permission. Just do it and summarize the results.${cronFromNote}${agentDirective}${explicitLogNote}\n\nTask: ${job.prompt}`;
+            const cronPrompt = `[SYSTEM CRON TRIGGER] Wake up and execute your scheduled background task. Do not ask me for permission. Just do it and summarize the results.${cronFromNote}${agentDirective}${explicitLogNote}${antiHallucinationNote}\n\nTask: ${job.prompt}`;
 
             activeCronJobs++;
             manager.processUserRequest(cronPrompt).then(result => {
@@ -237,8 +238,9 @@ export async function runJobForcefully(jobId: string) {
         : '';
 
     const explicitLogNote = `\n\n[LOGGING REQUIREMENT] In your final summary report, you MUST explicitly print the exact, raw email addresses and WhatsApp numbers/JIDs you sent messages to. Do NOT use abstract phrases like "default user", "the requested group", or "the recipient". Print the exact target strings returned by the tool output.`;
+    const antiHallucinationNote = `\n\n[ANTI-HALLUCINATION DIRECTIVE] You MUST explicitly execute the required tool (e.g. 'send_email', 'send_whatsapp') to actually send a message. Do NOT simply draft the email/message content within your final "result" output. The task is only complete once you call the tool and receive a success confirmation.`;
 
-    const cronPrompt = `[SYSTEM MANUAL TRIGGER] Wake up and execute your background task manually requested by the user. Do not ask me for permission. Just do it and summarize the results.${cronFromNote}${agentDirective}${explicitLogNote}\n\nTask: ${job.prompt}`;
+    const cronPrompt = `[SYSTEM MANUAL TRIGGER] Wake up and execute your background task manually requested by the user. Do not ask me for permission. Just do it and summarize the results.${cronFromNote}${agentDirective}${explicitLogNote}${antiHallucinationNote}\n\nTask: ${job.prompt}`;
 
     // Fire and forget
     activeCronJobs++;
