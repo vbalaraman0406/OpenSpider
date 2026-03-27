@@ -129,7 +129,7 @@ chrome.debugger.onDetach.addListener((source, reason) => {
     if (source.tabId === targetTab) {
         console.log('[Relay] Debugger detached:', reason);
 
-        // If user manually cancelled, fully disconnect
+        // If user manually cancelled through the yellow banner, fully disconnect
         if (reason === 'canceled_by_user') {
             console.log('[Relay] User cancelled debugging. Fully disconnecting.');
             attachedTabId = null;
@@ -138,6 +138,36 @@ chrome.debugger.onDetach.addListener((source, reason) => {
             chrome.action.setBadgeText({ text: '' });
             stopKeepalive();
             clearConnectionState();
+            return;
+        }
+
+        // CRITICAL BUGFIX: If the agent opened a temporary tab, and the user closed it to clean up,
+        // do NOT panic and disconnect the relay! Gracefully fall back to the original tab.
+        if (reason === 'target_closed' && source.tabId === agentTabId && attachedTabId) {
+            console.log('[Relay] Agent tab closed. Falling back to original background tab.');
+            agentTabId = null; // Clear the dead tab
+            saveConnectionState();
+            
+            // Try to re-attach to the original tab
+            setTimeout(async () => {
+                try {
+                    await chrome.debugger.attach({ tabId: attachedTabId }, '1.3');
+                    console.log('[Relay] Successfully fell back to original tab', attachedTabId);
+                    chrome.action.setBadgeText({ text: 'ON' });
+                    chrome.action.setBadgeBackgroundColor({ color: '#00AA00' });
+                } catch (err) {
+                    console.warn('[Relay] Fallback re-attach failed:', err);
+                }
+            }, 500);
+            return;
+        }
+
+        // If the original background tab was closed while the agent was running in a new tab...
+        if (reason === 'target_closed' && source.tabId === attachedTabId && agentTabId) {
+            console.log('[Relay] Original background tab was closed. Making agent tab the primary context.');
+            attachedTabId = agentTabId;
+            agentTabId = null;
+            saveConnectionState();
             return;
         }
 
