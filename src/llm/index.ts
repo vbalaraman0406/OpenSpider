@@ -105,22 +105,25 @@ export function getProvider(modelNameOverride?: string): LLMProvider {
         }
     }
 
-    // 1.5 Antigravity Internal Backup Model
+    // 1.5 Antigravity Internal Backup Models (Strict Order)
     if (provider === 'antigravity-internal') {
         const fallbacks = [
+            'claude-sonnet-4-5',
             'gemini-3.1-pro',
-            'gemini-2.5-pro',
             'gemini-2.5-flash'
         ];
         
         const primaryModel = process.env.GEMINI_MODEL || 'claude-opus-4-6-thinking';
-        // Pick the first fallback that isn't the primary model
-        const internalFallbackModel = fallbacks.find(m => m !== primaryModel) || 'gemini-2.5-flash';
         
-        fallbackProviders.push({
-            provider: new AntigravityInternalProvider(internalFallbackModel),
-            label: `antigravity-internal/${internalFallbackModel}`
-        });
+        // Register each Google IDE fallback model in strict sequence
+        for (const fbModel of fallbacks) {
+            if (fbModel !== primaryModel) {
+                fallbackProviders.push({
+                    provider: new AntigravityInternalProvider(fbModel),
+                    label: `antigravity-internal/${fbModel}`
+                });
+            }
+        }
     }
 
     // 2. DeepSeek Backup Model
