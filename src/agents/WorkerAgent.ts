@@ -391,22 +391,32 @@ ${context.join('\n')}
                         message: response.message || response.content,
                         direction: (response.direction || response.args || response.content) as 'up' | 'down',
                     };
-                    console.log(`[Worker - ${this.role}] Browser action: ${browseAction.action} ${browseAction.url || browseAction.selector || ''}`);
-                    let rawBrowserOutput = await this.browserTool.execute(browseAction);
-                    // SECURITY (V7): Sanitize web content to prevent prompt injection from malicious websites
-                    if (subAction === 'read_content' || subAction === 'execute_js') {
-                        rawBrowserOutput = rawBrowserOutput
-                            .replace(/\[SYSTEM\]/gi, '[WEB]')
-                            .replace(/\[ASSISTANT\]/gi, '[WEB]')
-                            .replace(/\[USER\]/gi, '[WEB]')
-                            .replace(/ignore previous instructions/gi, '[FILTERED]')
-                            .replace(/ignore all previous/gi, '[FILTERED]')
-                            .replace(/you are now/gi, '[FILTERED]')
-                            .replace(/new instructions:/gi, '[FILTERED]')
-                            .replace(/\x00/g, '');
-                        toolOutput = `---BEGIN WEB CONTENT---\n${rawBrowserOutput}\n---END WEB CONTENT---`;
+                    
+                    // Explicit LLM Schema Self-Correction for completely missing fields
+                    if (subAction === 'navigate' && !browseAction.url) {
+                        toolOutput = `SYSTEM EXCEPTION: You selected "navigate" but completely forgot the "url" JSON field! You MUST include "url" (e.g. "url": "https://example.com"). Try again.`;
+                    } else if (['click', 'type'].includes(subAction) && !browseAction.selector) {
+                        toolOutput = `SYSTEM EXCEPTION: You selected "${subAction}" but completely forgot the "args" JSON field for the CSS selector! You MUST include "args" (e.g. "args": "button.submit"). Try again.`;
+                    } else if (subAction === 'execute_js' && !browseAction.script) {
+                        toolOutput = `SYSTEM EXCEPTION: You selected "execute_js" but forgot the "content" JSON field for the JS code! Try again.`;
                     } else {
-                        toolOutput = rawBrowserOutput;
+                        console.log(`[Worker - ${this.role}] Browser action: ${browseAction.action} ${browseAction.url || browseAction.selector || ''}`);
+                        let rawBrowserOutput = await this.browserTool.execute(browseAction);
+                        // SECURITY (V7): Sanitize web content to prevent prompt injection from malicious websites
+                        if (subAction === 'read_content' || subAction === 'execute_js') {
+                            rawBrowserOutput = rawBrowserOutput
+                                .replace(/\[SYSTEM\]/gi, '[WEB]')
+                                .replace(/\[ASSISTANT\]/gi, '[WEB]')
+                                .replace(/\[USER\]/gi, '[WEB]')
+                                .replace(/ignore previous instructions/gi, '[FILTERED]')
+                                .replace(/ignore all previous/gi, '[FILTERED]')
+                                .replace(/you are now/gi, '[FILTERED]')
+                                .replace(/new instructions:/gi, '[FILTERED]')
+                                .replace(/\x00/g, '');
+                            toolOutput = `---BEGIN WEB CONTENT---\n${rawBrowserOutput}\n---END WEB CONTENT---`;
+                        } else {
+                            toolOutput = rawBrowserOutput;
+                        }
                     }
                 } else if (response.action === 'wait_for_user') {
                     const waitMessage = response.message || 'Please complete the required action in the browser.';
