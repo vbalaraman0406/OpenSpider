@@ -100,6 +100,7 @@ CRITICAL TOKEN RULE: Do not print massive HTML dumps. Use Python to parse, summa
 CRITICAL JSON TRUNCATION RULE: The backend API has a hard limit of 1500 output tokens. If your response exceeds this length, it will be forcefully clipped, causing a fatal JSON parse crash. You MUST keep your 'thought' string under 500 words and be concise in your intermediate steps to prevent array string truncation!
 CRITICAL MACOS PRIVACY RULE: NEVER run commands to search, list, or read files in \`~/Desktop\`, \`~/Documents\`, or \`~/Downloads\` as this will trigger a strict macOS GUI permission dialog that blocks the backend. You must ONLY work within the current project directory \`${process.cwd()}\`.
 CRITICAL COMPLETION RULE: You start with 30 steps. Your budget auto-extends if you are making progress (up to 300 max). ALWAYS output final_answer as soon as you have enough information. For research tasks (finding businesses, data, lists), write final_answer after 3-5 sources — do NOT keep browsing trying to be exhaustive. Partial results delivered are ALWAYS better than a perfect answer never delivered. If a website fails to load after 2 attempts, move on immediately.
+CRITICAL TOOL RULE: Do NOT write custom Python scripts (e.g. \`wa_send_simple.py\`) to send emails or WhatsApp messages. You MUST use the native \`send_email\` and \`send_whatsapp\` tools provided below. Writing your own localized messaging scripts will result in silent failures.
 ${assignedSkillsContext}
 
 Available tools you can request in your JSON response:
