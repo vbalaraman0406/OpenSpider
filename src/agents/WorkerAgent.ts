@@ -827,12 +827,31 @@ ${context.join('\n')}
                                 let sentCount = 0;
                                 const failedJids: string[] = [];
                                 for (const jid of targetJids) {
-                                    try {
-                                        await sendWhatsAppMessage(jid, formattedMsg);
-                                        sentCount++;
-                                    } catch (e: any) {
-                                        console.error(`Failed to send to ${jid}:`, e);
-                                        failedJids.push(`${jid}: ${e.message}`);
+                                    let success = false;
+                                    let lastError: any = null;
+                                    const MAX_RETRIES = 3;
+
+                                    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+                                        try {
+                                            await sendWhatsAppMessage(jid, formattedMsg);
+                                            success = true;
+                                            sentCount++;
+                                            break; // Success, exit retry loop
+                                        } catch (e: any) {
+                                            lastError = e;
+                                            console.warn(`[Worker - ${this.role}] WhatsApp send attempt ${attempt}/${MAX_RETRIES} failed for ${jid}: ${e.message}`);
+                                            if (attempt < MAX_RETRIES) {
+                                                // Backoff: 3000ms, then 6000ms
+                                                const delayMs = attempt * 3000;
+                                                console.log(`[Worker - ${this.role}] Retrying sending to ${jid} in ${delayMs / 1000}s...`);
+                                                await new Promise(resolve => setTimeout(resolve, delayMs));
+                                            }
+                                        }
+                                    }
+
+                                    if (!success) {
+                                        console.error(`[Worker - ${this.role}] Failed to send to ${jid} after ${MAX_RETRIES} attempts:`, lastError);
+                                        failedJids.push(`${jid}: ${lastError?.message || 'Unknown error'}`);
                                     }
                                 }
 
