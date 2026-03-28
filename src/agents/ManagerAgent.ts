@@ -356,11 +356,11 @@ Example output:
             // The LLM frequently ignores prompt-level routing rules, so we enforce at code level.
             const lowerPrompt = prompt.toLowerCase();
             const isBaseballQuery = [
-                'baseball', 'fantasy baseball', 'mlb', 'batter', 'pitcher', 'lineup',
-                'roster', 'waiver', 'draft', 'yahoo fantasy', 'fantasy league',
-                'home run', 'rbi', 'era', 'batting', 'pitching', 'spring training',
-                'market makers' // User's team name
-            ].some(kw => lowerPrompt.includes(kw));
+                '\\bbaseball\\b', '\\bfantasy baseball\\b', '\\bmlb\\b', '\\bbatters?\\b', '\\bpitchers?\\b', '\\blineups?\\b',
+                '\\brosters?\\b', '\\bwaivers?\\b', '\\bdrafts?\\b', '\\byahoo fantasy\\b', '\\bfantasy league\\b',
+                '\\bhome runs?\\b', '\\brbi\\b', '\\bera\\b', '\\bbatting\\b', '\\bpitching\\b', '\\bspring training\\b',
+                '\\bmarket makers\\b' // User's team name
+            ].some(regex => new RegExp(regex, 'i').test(lowerPrompt));
 
             if (isBaseballQuery && planResult.plan) {
                 for (const step of planResult.plan) {
