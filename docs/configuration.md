@@ -97,9 +97,10 @@ If your primary LLM encounters a rate limit (429), authentication error (401), s
 |---|---|---|---|
 | **1** | **Primary Provider** | e.g. `GEMINI_API_KEY` | The default provider as configured above |
 | **2** | **Legacy Fallback** | `FALLBACK_MODEL` | Simple text model override (e.g. `gemini-2.5-flash`) |
-| **3** | **DeepSeek Backup** | `DEEPSEEK_API_KEY`, `DEEPSEEK_MODEL` | DeepSeek explicitly acts as the strongest, cheapest first backup |
-| **4** | **NVIDIA Backup 1** | `NVIDIA_API_KEY_1`, `NVIDIA_MODEL_1` | First NVIDIA API endpoint (e.g. Nemotron) |
-| **5** | **NVIDIA Backup 2** | `NVIDIA_API_KEY_2`, `NVIDIA_MODEL_2` | Second NVIDIA API endpoint |
+| **3** | **Internal Fallback** | `(Antigravity only)` | Safe internal step down to `gemini-3.1-pro` → `gemini-2.5-pro` → `flash` to preserve quota before external failover |
+| **4** | **DeepSeek Backup** | `DEEPSEEK_API_KEY`, `DEEPSEEK_MODEL` | DeepSeek explicitly acts as the strongest, cheapest first external backup |
+| **5** | **NVIDIA Backup 1** | `NVIDIA_API_KEY_1`, `NVIDIA_MODEL_1` | First NVIDIA API endpoint (e.g. Nemotron) |
+| **6** | **NVIDIA Backup 2** | `NVIDIA_API_KEY_2`, `NVIDIA_MODEL_2` | Second NVIDIA API endpoint |
 
 You can safely add these backup models at any time by running:
 ```bash

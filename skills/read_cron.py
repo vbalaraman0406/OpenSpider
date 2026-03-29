@@ -1,14 +1,16 @@
-import json
-import os
+import json, os
 
-path = '/Users/vbalaraman/OpenSpider/workspace/cron_jobs.json'
-if os.path.exists(path):
-    with open(path, 'r') as f:
-        data = json.load(f)
-    job = next((j for j in data['jobs'] if j['filename'] == 'Trump Truth Social Monitor'), None)
-    if job:
-        print(job['lastRunTimestamp'])
-    else:
-        print('Job not found')
-else:
-    print('File not found')
+with open('workspace/cron_jobs.json', 'r') as f:
+    data = json.load(f)
+
+print(f'Total jobs: {len(data)}')
+print(f'Type: {type(data)}')
+
+if isinstance(data, list):
+    for i, j in enumerate(data):
+        print(f'\n--- Job {i} ---')
+        print(json.dumps(j, indent=2)[:500])
+elif isinstance(data, dict):
+    for k, v in data.items():
+        print(f'\n--- Key: {k} ---')
+        print(json.dumps(v, indent=2)[:500])

@@ -252,7 +252,7 @@ openspider models list
 ──────────────────────────────────────────────────
 Default Provider:   antigravity-internal
 Primary Model:      claude-opus-4-6-thinking
-Fallback Chain:     Primary → DeepSeek → NVIDIA-1 → NVIDIA-2
+Fallback Chain:     Primary → Internal Fallback → DeepSeek → NVIDIA-1 → NVIDIA-2
 ──────────────────────────────────────────────────
 
 All configured providers:

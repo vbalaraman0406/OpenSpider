@@ -1,16 +1,16 @@
 import os
-
-content = """Last check: 2026-03-21 01:52:39
-
-
-## User Preferences
-
-- **BMO Downdetector Monitoring Rule (CRITICAL)**: NEVER send a WhatsApp message when BMO Downdetector shows NO issues. Only send a message if there IS an active outage or problem detected. This is a hard rule — the user has requested this multiple times. Silence = no issues. Do NOT confirm 'all clear' or 'no issues found' — just stay silent.
-- **BMO Monitoring: NEVER send messages when no issues are reported. Only alert when there is an active outage or problem. This is a critical, repeated user directive. The CEO has ordered this MULTIPLE times. Any violation is forbidden.**
-"""
-
-with open('workspace/memory.md', 'w') as f:
-    f.write(content)
-
-print('memory.md updated successfully')
-print(open('workspace/memory.md').read())
+os.makedirs('workspace/memory', exist_ok=True)
+with open('workspace/memory/trump_truth_last_check.md', 'w') as f:
+    f.write('# Trump Truth Social - Last Check\n\n')
+    f.write('## Last Check Time\n')
+    f.write('Saturday, March 28, 2026 at 4:38 PM PDT\n\n')
+    f.write('## Latest Post Found\n')
+    f.write('- **Timestamp:** Saturday, March 28, 2026 at 6:37 PM EDT (3:37 PM PDT)\n')
+    f.write('- **Status:** No new posts within 30-min window. No alert sent.\n\n')
+    f.write('## Latest Posts Found (March 28, 2026)\n')
+    f.write('1. **6:37 PM EDT** - TrumpRX website sees steady growth in prescription offerings\n')
+    f.write('2. **6:37 PM EDT** - NY AG Letitia James referred again for criminal prosecution\n')
+    f.write('3. **6:36 PM EDT** - No, Trump is not losing his nerve on Iran (WashPost)\n')
+    f.write('4. **6:15 PM EDT** - It is time for the Senate Filibuster to END...\n')
+    f.write('5. **5:46 PM EDT** - Watch Mark Levin interview of Marc Thiessen tonight\n')
+print('Memory file updated successfully.')

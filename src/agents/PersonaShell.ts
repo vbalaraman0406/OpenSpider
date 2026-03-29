@@ -180,8 +180,8 @@ export class PersonaShell {
 
         // CAPABILITIES.json
         const defaultTools: Record<string, string[]> = {
-            'researcher': ['search_web', 'read_url', 'run_command', 'write_script', 'execute_script'],
-            'coder': ['read_file', 'write_file', 'run_command', 'write_script', 'execute_script'],
+            'researcher': ['browse_web', 'run_command', 'write_script', 'execute_script'],
+            'coder': ['run_command', 'write_script', 'execute_script', 'search_skills'],
             'tester': ['run_command', 'write_script', 'execute_script'],
         };
         const tools = defaultTools[role.toLowerCase()] || ['run_command', 'write_script', 'execute_script'];

@@ -611,8 +611,14 @@ ${context.join('\n')}
                     }
                 } else if (response.action === 'send_email' && response.to && response.subject && response.body) {
                     console.log(`[Worker - ${this.role}] Dispatching email to ${response.to}...`);
-                    try {
-                        const rootDir = __dirname.endsWith('src') ? path.join(__dirname, '..', '..') : path.join(__dirname, '..', '..');
+                    
+                    // LLM Context Guardrail: The LLM frequently mistakes WhatsApp JIDs for email addresses due to the @ symbol.
+                    if (response.to.includes('@s.whatsapp.net') || response.to.includes('@g.us')) {
+                        console.warn(`[Worker - ${this.role}] Blocked attempt to send email to WhatsApp JID: ${response.to}`);
+                        toolOutput = `CRITICAL ERROR: '${response.to}' is a WhatsApp ID, NOT an email address! You MUST use the 'send_whatsapp' tool (with the 'message' field) to send this message. Do NOT use send_email for WhatsApp targets.`;
+                    } else {
+                        try {
+                            const rootDir = __dirname.endsWith('src') ? path.join(__dirname, '..', '..') : path.join(__dirname, '..', '..');
                         const pythonScript = path.join(rootDir, 'skills', 'send_email.py');
 
                         // SECURITY FIX (CRIT-2): Use spawnSync with argument array instead of execSync
@@ -647,8 +653,9 @@ ${context.join('\n')}
                     } catch (e: any) {
                         toolOutput = `Failed to send email. Ensure OAuth is configured via 'openspider tools email setup'. Error: ${e.message}`;
                     }
-                } else if (response.action === 'read_emails') {
-                    console.log(`[Worker - ${this.role}] Scanning Gmail Inbox...`);
+                }
+            } else if (response.action === 'read_emails') {
+                console.log(`[Worker - ${this.role}] Scanning Gmail Inbox...`);
                     // Support optional search queries via args or content, and maxResults via target (stringified number)
                     const query = response.args || response.content || 'is:unread';
                     const maxResults = response.target ? parseInt(response.target, 10) : 5;
