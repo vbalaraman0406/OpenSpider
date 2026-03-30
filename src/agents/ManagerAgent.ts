@@ -9,8 +9,10 @@ import { PersonaShell } from './PersonaShell';
 export class ManagerAgent {
     private llm: LLMProvider;
     public cancelRequested: boolean = false;
+    private providerOverride: string | undefined;
 
     constructor(providerOverride?: string) {
+        this.providerOverride = providerOverride;
         if (providerOverride) {
             this.llm = getProvider(providerOverride);
             console.log(`[Manager] Using model override: ${providerOverride}`);
@@ -416,7 +418,7 @@ Example output:
                     // Dynamic Model Routing (Agent Affinity): Give the worker its specific brain if defined
                     const workerPersona = new PersonaShell(resolvedRole);
                     const workerAffinityModel = workerPersona.getPrimaryModel();
-                    const workerLlm = workerAffinityModel ? getProvider(workerAffinityModel) : this.llm;
+                    const workerLlm = (!this.providerOverride && workerAffinityModel) ? getProvider(workerAffinityModel) : this.llm;
                     
                     const worker = new WorkerAgent(workerLlm, resolvedRole, () => this.cancelRequested, isCron);
                     const result = await worker.executeTask(step.instruction, globalContext, imagesBase64);
@@ -463,7 +465,7 @@ Example output:
                         // Dynamic Model Routing (Agent Affinity) for Parallel workers
                         const workerPersona = new PersonaShell(resolvedRole);
                         const workerAffinityModel = workerPersona.getPrimaryModel();
-                        const workerLlm = workerAffinityModel ? getProvider(workerAffinityModel) : this.llm;
+                        const workerLlm = (!this.providerOverride && workerAffinityModel) ? getProvider(workerAffinityModel) : this.llm;
                         
                         const worker = new WorkerAgent(workerLlm, resolvedRole, () => this.cancelRequested, isCron);
                         const result = await worker.executeTask(subtask.instruction, workerContext, imagesBase64);
