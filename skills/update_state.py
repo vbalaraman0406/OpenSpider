@@ -1,0 +1,10 @@
+import json
+
+data = {
+    "last_check": "2026-03-29T22:11:00-07:00",
+    "last_post_seen": "Strait of Trump - March 27 2026 4PM ET",
+    "posts_seen": ["Strait of Trump post - March 27 2026", "10-day pause on Iran energy strikes - March 27 2026", "Iran TWENTY TIMES HARDER threat", "NY AG Letitia James criminal prosecution referral", "NSA Ukraine money routing intercepts", "TrumpRx website growth 54 medications"]
+}
+
+with open('workspace/skills/trump_truth_last_check/state.json', 'w') as f:
+    json.dump(data, f)

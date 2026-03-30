@@ -1,0 +1,116 @@
+{
+  "Indices": {
+    "SPY": {
+      "name": "S&P 500 (SPY)",
+      "price": 648.57,
+      "day_change_pct": -1.43,
+      "week_change_pct": -2.79,
+      "52w_high": 697.84,
+      "52w_low": 481.8,
+      "volume": 138283514
+    },
+    "QQQ": {
+      "name": "NASDAQ (QQQ)",
+      "price": 582.06,
+      "day_change_pct": -1.85,
+      "week_change_pct": -3.05,
+      "52w_high": 637.01,
+      "52w_low": 402.39,
+      "volume": 89087904
+    },
+    "DIA": {
+      "name": "Dow Jones (DIA)",
+      "price": 455.89,
+      "day_change_pct": -0.91,
+      "week_change_pct": -2.85,
+      "52w_high": 505.3,
+      "52w_low": 366.32,
+      "volume": 10444122
+    }
+  },
+  "Commodities": {
+    "CL=F": {
+      "name": "WTI Crude Oil",
+      "price": 98.23,
+      "day_change_pct": 2.8,
+      "week_change_pct": 5.06,
+      "52w_high": 119.48,
+      "52w_low": 54.98,
+      "volume": 420146
+    },
+    "BZ=F": {
+      "name": "Brent Crude Oil",
+      "price": 106.41,
+      "day_change_pct": 2.53,
+      "week_change_pct": 6.19,
+      "52w_high": 119.4,
+      "52w_low": 58.39,
+      "volume": 51347
+    },
+    "GC=F": {
+      "name": "Gold",
+      "price": 4574.9,
+      "day_change_pct": -0.67,
+      "week_change_pct": -8.39,
+      "52w_high": 5586.2,
+      "52w_low": 2949.7,
+      "volume": 220773
+    },
+    "SI=F": {
+      "name": "Silver",
+      "price": 69.66,
+      "day_change_pct": -2.18,
+      "week_change_pct": -13.21,
+      "52w_high": 121.3,
+      "52w_low": 28.31,
+      "volume": 49058
+    }
+  },
+  "Defense": {
+    "LMT": {
+      "name": "Lockheed Martin",
+      "price": 627.43,
+      "day_change_pct": -1.58,
+      "week_change_pct": -2.75,
+      "52w_high": 692.0,
+      "52w_low": 410.11,
+      "volume": 6462676
+    },
+    "RTX": {
+      "name": "Raytheon",
+      "price": 198.16,
+      "day_change_pct": -1.28,
+      "week_change_pct": -3.83,
+      "52w_high": 214.5,
+      "52w_low": 112.27,
+      "volume": 8165973
+    },
+    "NOC": {
+      "name": "Northrop Grumman",
+      "price": 706.95,
+      "day_change_pct": -1.01,
+      "week_change_pct": -3.94,
+      "52w_high": 774.0,
+      "52w_low": 450.13,
+      "volume": 1647899
+    },
+    "GD": {
+      "name": "General Dynamics",
+      "price": 345.78,
+      "day_change_pct": -1.1,
+      "week_change_pct": -2.42,
+      "52w_high": 369.7,
+      "52w_low": 239.2,
+      "volume": 2893182
+    },
+    "LHX": {
+      "name": "L3Harris",
+      "price": 352.85,
+      "day_change_pct": -2.98,
+      "week_change_pct": -3.65,
+      "52w_high": 379.23,
+      "52w_low": 195.72,
+      "volume": 1128791
+    }
+  }
+}

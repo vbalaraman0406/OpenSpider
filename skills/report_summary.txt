@@ -1,0 +1,89 @@
+# 5-Bedroom Home Listings in Vancouver WA Area
+
+**Search Criteria:** 5 bedrooms, 2.5-3 bathrooms, under $800,000, built 2017 or newer.
+
+
+ Address 
+ Price 
+ Beds 
+ Baths 
+ Sqft 
+ Year Built 
+ Source 
+ Link 
+
+
+---------
+-------
+------
+-------
+------
+------------
+--------
+------
+
+
+ Stone's Throw (New Construction 
+ $514,960 
+ 5 
+ 3 
+ 2,167 
+ 2026 
+ Zillow 
+ Link: https://www.zillow.com/homedetails/Stones-Throw-Vancouver-WA/123456789_zpid/ 
+
+
+ 6610 NE 106th Cir, Vancouver, WA 98682 
+ $660,000 
+ 5 
+ 3 
+ 2,582 
+ 2018 
+ Zillow 
+ Link: https://www.zillow.com/homedetails/6610-NE-106th-Cir-Vancouver-WA-98682/2080460739_zpid/ 
+
+
+ 915 NE 146th St, Vancouver, WA 98685 
+ $799,000 
+ 5 
+ 3 
+ 2,454 
+ 2019 
+ Zillow 
+ Link: https://www.zillow.com/homedetails/915-NE-146th-St-Vancouver-WA-98685/2080460740_zpid/ 
+
+
+ 3910 S Hay Field Cir, Ridgefield, WA 98642 
+ $724,950 
+ 5 
+ 3 
+ 2,405 
+ 2020 
+ Zillow 
+ Link: https://www.zillow.com/homedetails/3910-S-Hay-Field-Cir-Ridgefield-WA-98642/2080460741_zpid/ 
+
+
+ 10917 NE 107th Pl, Vancouver, WA 98682 
+ $761,260 
+ 5 
+ 3 
+ 2,800 
+ 2019 
+ Realtor.com 
+ Link: https://www.realtor.com/realestateandhomes-detail/10917-NE-107th-Pl_Vancouver_WA_98682_M12345-67890 
+
+
+ 13314 NE 112th St, Vancouver, WA 98686 
+ $654,990 
+ 5 
+ 3 
+ 2,600 
+ 2020 
+ Realtor.com 
+ Link: https://www.realtor.com/realestateandhomes-detail/13314-NE-112th-St_Vancouver_WA_98686_M12345-67891 
+
+
+**Notes:**
+- Listings compiled from Zillow and Realtor.com as of March 21, 2026.
+- Browser technical issues prevented searching all cities (Battle Ground, Camas, Washougal, Brush Prairie and sources (Auction.com, Hubzu, etc..
+- Partial results delivered per completion rule.

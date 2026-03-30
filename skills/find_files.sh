@@ -1,0 +1,1 @@
+find . -maxdepth 5 -type f -name '*.js' -not -path './node_modules/*'

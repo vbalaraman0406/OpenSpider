@@ -1,0 +1,10 @@
+2018,Hyundai,ELANTRA SEL,13990,59653,Gresham, OR (20 mi),Good Deal,6990
+2007,Honda,Civic EX,12999,59730,Portland, OR (12 mi),Fair Deal,5999
+2017,Ford,Fusion SE,11988,73322,Beaverton, OR (15 mi),Great Deal,4988
+2016,BMW,320 i,11997,78467,Beaverton, OR (15 mi),Great Deal,4997
+2014,Mercedes-Benz,C-Class C 250,10488,74581,Beaverton, OR (15 mi),Good Deal,3488
+2018,Ford,Fiesta S,9688,64543,Gresham, OR (21 mi),Good Deal,2688
+2016,Chevrolet,Sonic LT,10599,71334,Beaverton, OR (17 mi),Great Deal,3599
+2012,Mazda,Mazda6 i Sport,9998,62249,Happy Valley, OR (18 mi),Good Deal,2998
+2015,Audi,A3 2.0T Premium Plus,10995,75301,Portland, OR (14 mi),Good Deal,3995
+2019,Ford,Fiesta SE,8995,69444,Not specified,Great Deal,1995

@@ -1,0 +1,1 @@
+gcloud app logs read --service=f1 --project=vish-cloud --limit=100 2>&1 | grep -i -E '(ModuleNotFound|ImportError|No module named|cannot import)' | head -20

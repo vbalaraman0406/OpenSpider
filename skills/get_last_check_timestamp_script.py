@@ -1,0 +1,4 @@
+import sys
+sys.path.append('./skills')
+from trump_truth_last_check import get_last_check_timestamp
+print(get_last_check_timestamp())

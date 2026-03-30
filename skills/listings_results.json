@@ -1,0 +1,902 @@
+[
+  {
+    "address": "917 NW 52nd St Unit C, Seattle, WA 98107",
+    "price": "$830,000",
+    "beds": 3,
+    "baths": 2.5,
+    "sqft": 1490,
+    "year_built": 2020,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/917-NW-52nd-St-98107/unit-C/home/173655994"
+  },
+  {
+    "address": "408 Aloha St, Seattle, WA 98109",
+    "price": "$1,800,000",
+    "beds": 3,
+    "baths": 3,
+    "sqft": 2445,
+    "year_built": 2024,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/408-Aloha-St-98109/home/132214"
+  },
+  {
+    "address": "1601 E Jefferson St, Seattle, WA 98122",
+    "price": "$1,599,000",
+    "beds": 4,
+    "baths": 2.5,
+    "sqft": 2293,
+    "year_built": 2022,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/1601-E-Jefferson-St-98122/home/22594317"
+  },
+  {
+    "address": "341 NW 90th St Unit B, Seattle, WA 98117",
+    "price": "$650,000",
+    "beds": 2,
+    "baths": 2.5,
+    "sqft": 1104,
+    "year_built": 2023,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/341-NW-90th-St-98117/unit-B/home/185870095"
+  },
+  {
+    "address": "12522 15th Ave NE Unit B, Seattle, WA 98125",
+    "price": "$740,000",
+    "beds": 3,
+    "baths": 2.5,
+    "sqft": 1450,
+    "year_built": 2020,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/12522-15th-Ave-NE-98125/unit-B/home/174063954"
+  },
+  {
+    "address": "8020 17th Ave NW, Seattle, WA 98117",
+    "price": "$1,275,000",
+    "beds": 3,
+    "baths": 3,
+    "sqft": 2130,
+    "year_built": 2021,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/8020-17th-Ave-NW-98117/home/175478851"
+  },
+  {
+    "address": "917 NW 52nd St Unit C, Seattle, WA 98107",
+    "price": "$830,000",
+    "beds": 3,
+    "baths": 2.5,
+    "sqft": 1490,
+    "year_built": 2020,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/917-NW-52nd-St-98107/unit-C/home/173655994"
+  },
+  {
+    "address": "408 Aloha St, Seattle, WA 98109",
+    "price": "$1,800,000",
+    "beds": 3,
+    "baths": 3,
+    "sqft": 2445,
+    "year_built": 2024,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/408-Aloha-St-98109/home/132214"
+  },
+  {
+    "address": "1601 E Jefferson St, Seattle, WA 98122",
+    "price": "$1,599,000",
+    "beds": 4,
+    "baths": 2.5,
+    "sqft": 2293,
+    "year_built": 2022,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/1601-E-Jefferson-St-98122/home/22594317"
+  },
+  {
+    "address": "341 NW 90th St Unit B, Seattle, WA 98117",
+    "price": "$650,000",
+    "beds": 2,
+    "baths": 2.5,
+    "sqft": 1104,
+    "year_built": 2023,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/341-NW-90th-St-98117/unit-B/home/185870095"
+  },
+  {
+    "address": "12522 15th Ave NE Unit B, Seattle, WA 98125",
+    "price": "$740,000",
+    "beds": 3,
+    "baths": 2.5,
+    "sqft": 1450,
+    "year_built": 2020,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/12522-15th-Ave-NE-98125/unit-B/home/174063954"
+  },
+  {
+    "address": "8020 17th Ave NW, Seattle, WA 98117",
+    "price": "$1,275,000",
+    "beds": 3,
+    "baths": 3,
+    "sqft": 2130,
+    "year_built": 2021,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/8020-17th-Ave-NW-98117/home/175478851"
+  },
+  {
+    "address": "917 NW 52nd St Unit C, Seattle, WA 98107",
+    "price": "$830,000",
+    "beds": 3,
+    "baths": 2.5,
+    "sqft": 1490,
+    "year_built": 2020,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/917-NW-52nd-St-98107/unit-C/home/173655994"
+  },
+  {
+    "address": "408 Aloha St, Seattle, WA 98109",
+    "price": "$1,800,000",
+    "beds": 3,
+    "baths": 3,
+    "sqft": 2445,
+    "year_built": 2024,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/408-Aloha-St-98109/home/132214"
+  },
+  {
+    "address": "1601 E Jefferson St, Seattle, WA 98122",
+    "price": "$1,599,000",
+    "beds": 4,
+    "baths": 2.5,
+    "sqft": 2293,
+    "year_built": 2022,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/1601-E-Jefferson-St-98122/home/22594317"
+  },
+  {
+    "address": "341 NW 90th St Unit B, Seattle, WA 98117",
+    "price": "$650,000",
+    "beds": 2,
+    "baths": 2.5,
+    "sqft": 1104,
+    "year_built": 2023,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/341-NW-90th-St-98117/unit-B/home/185870095"
+  },
+  {
+    "address": "12522 15th Ave NE Unit B, Seattle, WA 98125",
+    "price": "$740,000",
+    "beds": 3,
+    "baths": 2.5,
+    "sqft": 1450,
+    "year_built": 2020,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/12522-15th-Ave-NE-98125/unit-B/home/174063954"
+  },
+  {
+    "address": "8020 17th Ave NW, Seattle, WA 98117",
+    "price": "$1,275,000",
+    "beds": 3,
+    "baths": 3,
+    "sqft": 2130,
+    "year_built": 2021,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/8020-17th-Ave-NW-98117/home/175478851"
+  },
+  {
+    "address": "917 NW 52nd St Unit C, Seattle, WA 98107",
+    "price": "$830,000",
+    "beds": 3,
+    "baths": 2.5,
+    "sqft": 1490,
+    "year_built": 2020,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/917-NW-52nd-St-98107/unit-C/home/173655994"
+  },
+  {
+    "address": "408 Aloha St, Seattle, WA 98109",
+    "price": "$1,800,000",
+    "beds": 3,
+    "baths": 3,
+    "sqft": 2445,
+    "year_built": 2024,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/408-Aloha-St-98109/home/132214"
+  },
+  {
+    "address": "1601 E Jefferson St, Seattle, WA 98122",
+    "price": "$1,599,000",
+    "beds": 4,
+    "baths": 2.5,
+    "sqft": 2293,
+    "year_built": 2022,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/1601-E-Jefferson-St-98122/home/22594317"
+  },
+  {
+    "address": "341 NW 90th St Unit B, Seattle, WA 98117",
+    "price": "$650,000",
+    "beds": 2,
+    "baths": 2.5,
+    "sqft": 1104,
+    "year_built": 2023,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/341-NW-90th-St-98117/unit-B/home/185870095"
+  },
+  {
+    "address": "12522 15th Ave NE Unit B, Seattle, WA 98125",
+    "price": "$740,000",
+    "beds": 3,
+    "baths": 2.5,
+    "sqft": 1450,
+    "year_built": 2020,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/12522-15th-Ave-NE-98125/unit-B/home/174063954"
+  },
+  {
+    "address": "8020 17th Ave NW, Seattle, WA 98117",
+    "price": "$1,275,000",
+    "beds": 3,
+    "baths": 3,
+    "sqft": 2130,
+    "year_built": 2021,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/8020-17th-Ave-NW-98117/home/175478851"
+  },
+  {
+    "address": "917 NW 52nd St Unit C, Seattle, WA 98107",
+    "price": "$830,000",
+    "beds": 3,
+    "baths": 2.5,
+    "sqft": 1490,
+    "year_built": 2020,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/917-NW-52nd-St-98107/unit-C/home/173655994"
+  },
+  {
+    "address": "408 Aloha St, Seattle, WA 98109",
+    "price": "$1,800,000",
+    "beds": 3,
+    "baths": 3,
+    "sqft": 2445,
+    "year_built": 2024,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/408-Aloha-St-98109/home/132214"
+  },
+  {
+    "address": "1601 E Jefferson St, Seattle, WA 98122",
+    "price": "$1,599,000",
+    "beds": 4,
+    "baths": 2.5,
+    "sqft": 2293,
+    "year_built": 2022,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/1601-E-Jefferson-St-98122/home/22594317"
+  },
+  {
+    "address": "341 NW 90th St Unit B, Seattle, WA 98117",
+    "price": "$650,000",
+    "beds": 2,
+    "baths": 2.5,
+    "sqft": 1104,
+    "year_built": 2023,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/341-NW-90th-St-98117/unit-B/home/185870095"
+  },
+  {
+    "address": "12522 15th Ave NE Unit B, Seattle, WA 98125",
+    "price": "$740,000",
+    "beds": 3,
+    "baths": 2.5,
+    "sqft": 1450,
+    "year_built": 2020,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/12522-15th-Ave-NE-98125/unit-B/home/174063954"
+  },
+  {
+    "address": "8020 17th Ave NW, Seattle, WA 98117",
+    "price": "$1,275,000",
+    "beds": 3,
+    "baths": 3,
+    "sqft": 2130,
+    "year_built": 2021,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/8020-17th-Ave-NW-98117/home/175478851"
+  },
+  {
+    "address": "917 NW 52nd St Unit C, Seattle, WA 98107",
+    "price": "$830,000",
+    "beds": 3,
+    "baths": 2.5,
+    "sqft": 1490,
+    "year_built": 2020,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/917-NW-52nd-St-98107/unit-C/home/173655994"
+  },
+  {
+    "address": "408 Aloha St, Seattle, WA 98109",
+    "price": "$1,800,000",
+    "beds": 3,
+    "baths": 3,
+    "sqft": 2445,
+    "year_built": 2024,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/408-Aloha-St-98109/home/132214"
+  },
+  {
+    "address": "1601 E Jefferson St, Seattle, WA 98122",
+    "price": "$1,599,000",
+    "beds": 4,
+    "baths": 2.5,
+    "sqft": 2293,
+    "year_built": 2022,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/1601-E-Jefferson-St-98122/home/22594317"
+  },
+  {
+    "address": "341 NW 90th St Unit B, Seattle, WA 98117",
+    "price": "$650,000",
+    "beds": 2,
+    "baths": 2.5,
+    "sqft": 1104,
+    "year_built": 2023,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/341-NW-90th-St-98117/unit-B/home/185870095"
+  },
+  {
+    "address": "12522 15th Ave NE Unit B, Seattle, WA 98125",
+    "price": "$740,000",
+    "beds": 3,
+    "baths": 2.5,
+    "sqft": 1450,
+    "year_built": 2020,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/12522-15th-Ave-NE-98125/unit-B/home/174063954"
+  },
+  {
+    "address": "8020 17th Ave NW, Seattle, WA 98117",
+    "price": "$1,275,000",
+    "beds": 3,
+    "baths": 3,
+    "sqft": 2130,
+    "year_built": 2021,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/8020-17th-Ave-NW-98117/home/175478851"
+  },
+  {
+    "address": "917 NW 52nd St Unit C, Seattle, WA 98107",
+    "price": "$830,000",
+    "beds": 3,
+    "baths": 2.5,
+    "sqft": 1490,
+    "year_built": 2020,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/917-NW-52nd-St-98107/unit-C/home/173655994"
+  },
+  {
+    "address": "408 Aloha St, Seattle, WA 98109",
+    "price": "$1,800,000",
+    "beds": 3,
+    "baths": 3,
+    "sqft": 2445,
+    "year_built": 2024,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/408-Aloha-St-98109/home/132214"
+  },
+  {
+    "address": "1601 E Jefferson St, Seattle, WA 98122",
+    "price": "$1,599,000",
+    "beds": 4,
+    "baths": 2.5,
+    "sqft": 2293,
+    "year_built": 2022,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/1601-E-Jefferson-St-98122/home/22594317"
+  },
+  {
+    "address": "341 NW 90th St Unit B, Seattle, WA 98117",
+    "price": "$650,000",
+    "beds": 2,
+    "baths": 2.5,
+    "sqft": 1104,
+    "year_built": 2023,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/341-NW-90th-St-98117/unit-B/home/185870095"
+  },
+  {
+    "address": "12522 15th Ave NE Unit B, Seattle, WA 98125",
+    "price": "$740,000",
+    "beds": 3,
+    "baths": 2.5,
+    "sqft": 1450,
+    "year_built": 2020,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/12522-15th-Ave-NE-98125/unit-B/home/174063954"
+  },
+  {
+    "address": "8020 17th Ave NW, Seattle, WA 98117",
+    "price": "$1,275,000",
+    "beds": 3,
+    "baths": 3,
+    "sqft": 2130,
+    "year_built": 2021,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/8020-17th-Ave-NW-98117/home/175478851"
+  },
+  {
+    "address": "917 NW 52nd St Unit C, Seattle, WA 98107",
+    "price": "$830,000",
+    "beds": 3,
+    "baths": 2.5,
+    "sqft": 1490,
+    "year_built": 2020,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/917-NW-52nd-St-98107/unit-C/home/173655994"
+  },
+  {
+    "address": "408 Aloha St, Seattle, WA 98109",
+    "price": "$1,800,000",
+    "beds": 3,
+    "baths": 3,
+    "sqft": 2445,
+    "year_built": 2024,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/408-Aloha-St-98109/home/132214"
+  },
+  {
+    "address": "1601 E Jefferson St, Seattle, WA 98122",
+    "price": "$1,599,000",
+    "beds": 4,
+    "baths": 2.5,
+    "sqft": 2293,
+    "year_built": 2022,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/1601-E-Jefferson-St-98122/home/22594317"
+  },
+  {
+    "address": "341 NW 90th St Unit B, Seattle, WA 98117",
+    "price": "$650,000",
+    "beds": 2,
+    "baths": 2.5,
+    "sqft": 1104,
+    "year_built": 2023,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/341-NW-90th-St-98117/unit-B/home/185870095"
+  },
+  {
+    "address": "12522 15th Ave NE Unit B, Seattle, WA 98125",
+    "price": "$740,000",
+    "beds": 3,
+    "baths": 2.5,
+    "sqft": 1450,
+    "year_built": 2020,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/12522-15th-Ave-NE-98125/unit-B/home/174063954"
+  },
+  {
+    "address": "8020 17th Ave NW, Seattle, WA 98117",
+    "price": "$1,275,000",
+    "beds": 3,
+    "baths": 3,
+    "sqft": 2130,
+    "year_built": 2021,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/8020-17th-Ave-NW-98117/home/175478851"
+  },
+  {
+    "address": "917 NW 52nd St Unit C, Seattle, WA 98107",
+    "price": "$830,000",
+    "beds": 3,
+    "baths": 2.5,
+    "sqft": 1490,
+    "year_built": 2020,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/917-NW-52nd-St-98107/unit-C/home/173655994"
+  },
+  {
+    "address": "408 Aloha St, Seattle, WA 98109",
+    "price": "$1,800,000",
+    "beds": 3,
+    "baths": 3,
+    "sqft": 2445,
+    "year_built": 2024,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/408-Aloha-St-98109/home/132214"
+  },
+  {
+    "address": "1601 E Jefferson St, Seattle, WA 98122",
+    "price": "$1,599,000",
+    "beds": 4,
+    "baths": 2.5,
+    "sqft": 2293,
+    "year_built": 2022,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/1601-E-Jefferson-St-98122/home/22594317"
+  },
+  {
+    "address": "341 NW 90th St Unit B, Seattle, WA 98117",
+    "price": "$650,000",
+    "beds": 2,
+    "baths": 2.5,
+    "sqft": 1104,
+    "year_built": 2023,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/341-NW-90th-St-98117/unit-B/home/185870095"
+  },
+  {
+    "address": "12522 15th Ave NE Unit B, Seattle, WA 98125",
+    "price": "$740,000",
+    "beds": 3,
+    "baths": 2.5,
+    "sqft": 1450,
+    "year_built": 2020,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/12522-15th-Ave-NE-98125/unit-B/home/174063954"
+  },
+  {
+    "address": "8020 17th Ave NW, Seattle, WA 98117",
+    "price": "$1,275,000",
+    "beds": 3,
+    "baths": 3,
+    "sqft": 2130,
+    "year_built": 2021,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/8020-17th-Ave-NW-98117/home/175478851"
+  },
+  {
+    "address": "917 NW 52nd St Unit C, Seattle, WA 98107",
+    "price": "$830,000",
+    "beds": 3,
+    "baths": 2.5,
+    "sqft": 1490,
+    "year_built": 2020,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/917-NW-52nd-St-98107/unit-C/home/173655994"
+  },
+  {
+    "address": "408 Aloha St, Seattle, WA 98109",
+    "price": "$1,800,000",
+    "beds": 3,
+    "baths": 3,
+    "sqft": 2445,
+    "year_built": 2024,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/408-Aloha-St-98109/home/132214"
+  },
+  {
+    "address": "1601 E Jefferson St, Seattle, WA 98122",
+    "price": "$1,599,000",
+    "beds": 4,
+    "baths": 2.5,
+    "sqft": 2293,
+    "year_built": 2022,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/1601-E-Jefferson-St-98122/home/22594317"
+  },
+  {
+    "address": "341 NW 90th St Unit B, Seattle, WA 98117",
+    "price": "$650,000",
+    "beds": 2,
+    "baths": 2.5,
+    "sqft": 1104,
+    "year_built": 2023,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/341-NW-90th-St-98117/unit-B/home/185870095"
+  },
+  {
+    "address": "12522 15th Ave NE Unit B, Seattle, WA 98125",
+    "price": "$740,000",
+    "beds": 3,
+    "baths": 2.5,
+    "sqft": 1450,
+    "year_built": 2020,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/12522-15th-Ave-NE-98125/unit-B/home/174063954"
+  },
+  {
+    "address": "8020 17th Ave NW, Seattle, WA 98117",
+    "price": "$1,275,000",
+    "beds": 3,
+    "baths": 3,
+    "sqft": 2130,
+    "year_built": 2021,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/8020-17th-Ave-NW-98117/home/175478851"
+  },
+  {
+    "address": "917 NW 52nd St Unit C, Seattle, WA 98107",
+    "price": "$830,000",
+    "beds": 3,
+    "baths": 2.5,
+    "sqft": 1490,
+    "year_built": 2020,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/917-NW-52nd-St-98107/unit-C/home/173655994"
+  },
+  {
+    "address": "408 Aloha St, Seattle, WA 98109",
+    "price": "$1,800,000",
+    "beds": 3,
+    "baths": 3,
+    "sqft": 2445,
+    "year_built": 2024,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/408-Aloha-St-98109/home/132214"
+  },
+  {
+    "address": "1601 E Jefferson St, Seattle, WA 98122",
+    "price": "$1,599,000",
+    "beds": 4,
+    "baths": 2.5,
+    "sqft": 2293,
+    "year_built": 2022,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/1601-E-Jefferson-St-98122/home/22594317"
+  },
+  {
+    "address": "341 NW 90th St Unit B, Seattle, WA 98117",
+    "price": "$650,000",
+    "beds": 2,
+    "baths": 2.5,
+    "sqft": 1104,
+    "year_built": 2023,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/341-NW-90th-St-98117/unit-B/home/185870095"
+  },
+  {
+    "address": "12522 15th Ave NE Unit B, Seattle, WA 98125",
+    "price": "$740,000",
+    "beds": 3,
+    "baths": 2.5,
+    "sqft": 1450,
+    "year_built": 2020,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/12522-15th-Ave-NE-98125/unit-B/home/174063954"
+  },
+  {
+    "address": "8020 17th Ave NW, Seattle, WA 98117",
+    "price": "$1,275,000",
+    "beds": 3,
+    "baths": 3,
+    "sqft": 2130,
+    "year_built": 2021,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/8020-17th-Ave-NW-98117/home/175478851"
+  },
+  {
+    "address": "917 NW 52nd St Unit C, Seattle, WA 98107",
+    "price": "$830,000",
+    "beds": 3,
+    "baths": 2.5,
+    "sqft": 1490,
+    "year_built": 2020,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/917-NW-52nd-St-98107/unit-C/home/173655994"
+  },
+  {
+    "address": "408 Aloha St, Seattle, WA 98109",
+    "price": "$1,800,000",
+    "beds": 3,
+    "baths": 3,
+    "sqft": 2445,
+    "year_built": 2024,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/408-Aloha-St-98109/home/132214"
+  },
+  {
+    "address": "1601 E Jefferson St, Seattle, WA 98122",
+    "price": "$1,599,000",
+    "beds": 4,
+    "baths": 2.5,
+    "sqft": 2293,
+    "year_built": 2022,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/1601-E-Jefferson-St-98122/home/22594317"
+  },
+  {
+    "address": "341 NW 90th St Unit B, Seattle, WA 98117",
+    "price": "$650,000",
+    "beds": 2,
+    "baths": 2.5,
+    "sqft": 1104,
+    "year_built": 2023,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/341-NW-90th-St-98117/unit-B/home/185870095"
+  },
+  {
+    "address": "12522 15th Ave NE Unit B, Seattle, WA 98125",
+    "price": "$740,000",
+    "beds": 3,
+    "baths": 2.5,
+    "sqft": 1450,
+    "year_built": 2020,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/12522-15th-Ave-NE-98125/unit-B/home/174063954"
+  },
+  {
+    "address": "8020 17th Ave NW, Seattle, WA 98117",
+    "price": "$1,275,000",
+    "beds": 3,
+    "baths": 3,
+    "sqft": 2130,
+    "year_built": 2021,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/8020-17th-Ave-NW-98117/home/175478851"
+  },
+  {
+    "address": "917 NW 52nd St Unit C, Seattle, WA 98107",
+    "price": "$830,000",
+    "beds": 3,
+    "baths": 2.5,
+    "sqft": 1490,
+    "year_built": 2020,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/917-NW-52nd-St-98107/unit-C/home/173655994"
+  },
+  {
+    "address": "408 Aloha St, Seattle, WA 98109",
+    "price": "$1,800,000",
+    "beds": 3,
+    "baths": 3,
+    "sqft": 2445,
+    "year_built": 2024,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/408-Aloha-St-98109/home/132214"
+  },
+  {
+    "address": "1601 E Jefferson St, Seattle, WA 98122",
+    "price": "$1,599,000",
+    "beds": 4,
+    "baths": 2.5,
+    "sqft": 2293,
+    "year_built": 2022,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/1601-E-Jefferson-St-98122/home/22594317"
+  },
+  {
+    "address": "341 NW 90th St Unit B, Seattle, WA 98117",
+    "price": "$650,000",
+    "beds": 2,
+    "baths": 2.5,
+    "sqft": 1104,
+    "year_built": 2023,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/341-NW-90th-St-98117/unit-B/home/185870095"
+  },
+  {
+    "address": "12522 15th Ave NE Unit B, Seattle, WA 98125",
+    "price": "$740,000",
+    "beds": 3,
+    "baths": 2.5,
+    "sqft": 1450,
+    "year_built": 2020,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/12522-15th-Ave-NE-98125/unit-B/home/174063954"
+  },
+  {
+    "address": "8020 17th Ave NW, Seattle, WA 98117",
+    "price": "$1,275,000",
+    "beds": 3,
+    "baths": 3,
+    "sqft": 2130,
+    "year_built": 2021,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/8020-17th-Ave-NW-98117/home/175478851"
+  },
+  {
+    "address": "917 NW 52nd St Unit C, Seattle, WA 98107",
+    "price": "$830,000",
+    "beds": 3,
+    "baths": 2.5,
+    "sqft": 1490,
+    "year_built": 2020,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/917-NW-52nd-St-98107/unit-C/home/173655994"
+  },
+  {
+    "address": "408 Aloha St, Seattle, WA 98109",
+    "price": "$1,800,000",
+    "beds": 3,
+    "baths": 3,
+    "sqft": 2445,
+    "year_built": 2024,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/408-Aloha-St-98109/home/132214"
+  },
+  {
+    "address": "1601 E Jefferson St, Seattle, WA 98122",
+    "price": "$1,599,000",
+    "beds": 4,
+    "baths": 2.5,
+    "sqft": 2293,
+    "year_built": 2022,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/1601-E-Jefferson-St-98122/home/22594317"
+  },
+  {
+    "address": "341 NW 90th St Unit B, Seattle, WA 98117",
+    "price": "$650,000",
+    "beds": 2,
+    "baths": 2.5,
+    "sqft": 1104,
+    "year_built": 2023,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/341-NW-90th-St-98117/unit-B/home/185870095"
+  },
+  {
+    "address": "12522 15th Ave NE Unit B, Seattle, WA 98125",
+    "price": "$740,000",
+    "beds": 3,
+    "baths": 2.5,
+    "sqft": 1450,
+    "year_built": 2020,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/12522-15th-Ave-NE-98125/unit-B/home/174063954"
+  },
+  {
+    "address": "8020 17th Ave NW, Seattle, WA 98117",
+    "price": "$1,275,000",
+    "beds": 3,
+    "baths": 3,
+    "sqft": 2130,
+    "year_built": 2021,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/8020-17th-Ave-NW-98117/home/175478851"
+  },
+  {
+    "address": "917 NW 52nd St Unit C, Seattle, WA 98107",
+    "price": "$830,000",
+    "beds": 3,
+    "baths": 2.5,
+    "sqft": 1490,
+    "year_built": 2020,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/917-NW-52nd-St-98107/unit-C/home/173655994"
+  },
+  {
+    "address": "408 Aloha St, Seattle, WA 98109",
+    "price": "$1,800,000",
+    "beds": 3,
+    "baths": 3,
+    "sqft": 2445,
+    "year_built": 2024,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/408-Aloha-St-98109/home/132214"
+  },
+  {
+    "address": "1601 E Jefferson St, Seattle, WA 98122",
+    "price": "$1,599,000",
+    "beds": 4,
+    "baths": 2.5,
+    "sqft": 2293,
+    "year_built": 2022,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/1601-E-Jefferson-St-98122/home/22594317"
+  },
+  {
+    "address": "341 NW 90th St Unit B, Seattle, WA 98117",
+    "price": "$650,000",
+    "beds": 2,
+    "baths": 2.5,
+    "sqft": 1104,
+    "year_built": 2023,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/341-NW-90th-St-98117/unit-B/home/185870095"
+  },
+  {
+    "address": "12522 15th Ave NE Unit B, Seattle, WA 98125",
+    "price": "$740,000",
+    "beds": 3,
+    "baths": 2.5,
+    "sqft": 1450,
+    "year_built": 2020,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/12522-15th-Ave-NE-98125/unit-B/home/174063954"
+  },
+  {
+    "address": "8020 17th Ave NW, Seattle, WA 98117",
+    "price": "$1,275,000",
+    "beds": 3,
+    "baths": 3,
+    "sqft": 2130,
+    "year_built": 2021,
+    "source": "Redfin",
+    "link": "https://www.redfin.com/WA/Seattle/8020-17th-Ave-NW-98117/home/175478851"
+  }
+]

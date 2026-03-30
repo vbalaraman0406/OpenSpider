@@ -1,0 +1,136 @@
+{
+  "Commodities": {
+    "CL=F": {
+      "name": "WTI Crude Oil",
+      "price": 96.56,
+      "daily_change_pct": 4.43,
+      "weekly_change_pct": 0.87,
+      "52w_high": 119.48,
+      "52w_low": 54.98,
+      "market_cap": "N/A"
+    },
+    "BZ=F": {
+      "name": "Brent Crude Oil",
+      "price": 103.91,
+      "daily_change_pct": 3.69,
+      "weekly_change_pct": 3.43,
+      "52w_high": 119.4,
+      "52w_low": 58.39,
+      "market_cap": "N/A"
+    },
+    "GC=F": {
+      "name": "Gold Spot",
+      "price": 5025.8,
+      "daily_change_pct": 0.47,
+      "weekly_change_pct": -1.76,
+      "52w_high": 5586.2,
+      "52w_low": 2949.7,
+      "market_cap": "N/A"
+    }
+  },
+  "Indices": {
+    "^GSPC": {
+      "name": "S&P 500",
+      "price": 6699.38,
+      "daily_change_pct": 1.01,
+      "weekly_change_pct": -1.21,
+      "52w_high": 7002.28,
+      "52w_low": 4835.04,
+      "market_cap": "N/A"
+    },
+    "^IXIC": {
+      "name": "NASDAQ",
+      "price": 22374.18,
+      "daily_change_pct": 1.22,
+      "weekly_change_pct": -1.42,
+      "52w_high": 24019.99,
+      "52w_low": 14784.03,
+      "market_cap": "N/A"
+    },
+    "^DJI": {
+      "name": "Dow Jones",
+      "price": 46946.41,
+      "daily_change_pct": 0.83,
+      "weekly_change_pct": -1.59,
+      "52w_high": 50512.79,
+      "52w_low": 36611.78,
+      "market_cap": "N/A"
+    }
+  },
+  "Defense": {
+    "LMT": {
+      "name": "Lockheed Martin",
+      "price": 645.2,
+      "daily_change_pct": -0.12,
+      "weekly_change_pct": -0.92,
+      "52w_high": 692.0,
+      "52w_low": 410.11,
+      "market_cap": 149297856512
+    },
+    "RTX": {
+      "name": "Raytheon/RTX",
+      "price": 206.06,
+      "daily_change_pct": 0.75,
+      "weekly_change_pct": -0.45,
+      "52w_high": 214.5,
+      "52w_low": 112.27,
+      "market_cap": 277351464960
+    },
+    "NOC": {
+      "name": "Northrop Grumman",
+      "price": 735.96,
+      "daily_change_pct": 0.31,
+      "weekly_change_pct": 0.13,
+      "52w_high": 774.0,
+      "52w_low": 450.13,
+      "market_cap": 105036259328
+    },
+    "GD": {
+      "name": "General Dynamics",
+      "price": 354.36,
+      "daily_change_pct": 0.81,
+      "weekly_change_pct": -0.35,
+      "52w_high": 369.7,
+      "52w_low": 239.2,
+      "market_cap": 95815311360
+    },
+    "LHX": {
+      "name": "L3Harris",
+      "price": 366.21,
+      "daily_change_pct": 2.02,
+      "weekly_change_pct": 1.24,
+      "52w_high": 379.23,
+      "52w_low": 195.72,
+      "market_cap": 68500623360
+    }
+  },
+  "Energy": {
+    "XOM": {
+      "name": "ExxonMobil",
+      "price": 157.23,
+      "daily_change_pct": 0.71,
+      "weekly_change_pct": 6.14,
+      "52w_high": 159.61,
+      "52w_low": 97.8,
+      "market_cap": 655140192256
+    },
+    "CVX": {
+      "name": "Chevron",
+      "price": 196.84,
+      "daily_change_pct": 0.01,
+      "weekly_change_pct": 5.66,
+      "52w_high": 198.88,
+      "52w_low": 132.04,
+      "market_cap": 393552756736
+    },
+    "COP": {
+      "name": "ConocoPhillips",
+      "price": 121.32,
+      "daily_change_pct": -0.47,
+      "weekly_change_pct": 6.28,
+      "52w_high": 122.5,
+      "52w_low": 79.88,
+      "market_cap": 148294189056
+    }
+  }
+}

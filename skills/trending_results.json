@@ -1,0 +1,156 @@
+{
+  "trends24": [
+    "Rand Paul",
+    "Mullin",
+    "WNBA",
+    "Cesar Chavez",
+    "Dolores Huerta",
+    "Jones Act",
+    "The Hand",
+    "#BTS_SWIM",
+    "FOMC",
+    "Mikel Brown",
+    "Peter Parker",
+    "South Pars",
+    "#BTSonFallon",
+    "Spidey",
+    "Afroman",
+    "#SAKURACelebramus",
+    "#\u00ec\u0098\u00a8\u00ec\u0084\u00b8\u00ec\u0083\u0081\u00ec\u0097\u0090_\u00ec\u0082\u00ac\u00ec\u00bf\u00a0\u00eb\u009d\u00bc_\u00ed\u0094\u00bc\u00ec\u0096\u00b4\u00eb\u0082\u0098",
+    "Good Wednesday",
+    "Under the SAKURA Moonlight",
+    "SWIM TEASER 2 OUT NOW",
+    "#WednesdayMotivation",
+    "Powell",
+    "Trump's DHS",
+    "Military ID",
+    "Hump Day",
+    "I JUST WANNA DIVE",
+    "Sean O'Brien",
+    "Tom Holland",
+    "Punisher",
+    "No Way Home"
+  ],
+  "getdaytrends": [
+    {
+      "topic": "Rand Paul",
+      "volume": "Rand Paul: trending position over last 8 hours"
+    },
+    {
+      "topic": "Mullin",
+      "volume": "Mullin: trending position over last 8 hours"
+    },
+    {
+      "topic": "Cesar Chavez",
+      "volume": "Cesar Chavez: trending position over last 8 hours"
+    },
+    {
+      "topic": "WNBA",
+      "volume": "WNBA: trending position over last 8 hours"
+    },
+    {
+      "topic": "Dolores Huerta",
+      "volume": "Dolores Huerta: trending position over last 8 hours"
+    },
+    {
+      "topic": "FOMC",
+      "volume": "FOMC: trending position over last 8 hours"
+    },
+    {
+      "topic": "The Hand",
+      "volume": "The Hand: trending position over last 8 hours"
+    },
+    {
+      "topic": "Jones Act",
+      "volume": "Jones Act: trending position over last 8 hours"
+    },
+    {
+      "topic": "#FundDHSFreezeICE",
+      "volume": "#FundDHSFreezeICE: trending position over last 8 hours"
+    },
+    {
+      "topic": "Mikel Brown",
+      "volume": "Mikel Brown: trending position over last 8 hours"
+    },
+    {
+      "topic": "#BTS_SWIM",
+      "volume": "#BTS_SWIM: trending position over last 8 hours"
+    },
+    {
+      "topic": "South Pars",
+      "volume": "South Pars: trending position over last 8 hours"
+    },
+    {
+      "topic": "Afroman",
+      "volume": "Afroman: trending position over last 8 hours"
+    },
+    {
+      "topic": "Peter",
+      "volume": "Peter: trending position over last 8 hours"
+    },
+    {
+      "topic": "Spidey",
+      "volume": "Spidey: trending position over last 8 hours"
+    },
+    {
+      "topic": "#SAKURACelebramus",
+      "volume": "#SAKURACelebramus: trending position over last 8 hours"
+    },
+    {
+      "topic": "#BTSonFallon",
+      "volume": "#BTSonFallon: trending position over last 8 hours"
+    },
+    {
+      "topic": "Hulk",
+      "volume": "Hulk: trending position over last 8 hours"
+    },
+    {
+      "topic": "#\uc628\uc138\uc0c1\uc5d0_\uc0ac\ucfe0\ub77c_\ud53c\uc5b4\ub098",
+      "volume": "#\uc628\uc138\uc0c1\uc5d0_\uc0ac\ucfe0\ub77c_\ud53c\uc5b4\ub098: trending position over last 8 hours"
+    },
+    {
+      "topic": "Hump Day",
+      "volume": "Hump Day: trending position over last 8 hours"
+    },
+    {
+      "topic": "Powell",
+      "volume": "Powell: trending position over last 8 hours"
+    },
+    {
+      "topic": "SWIM TEASER 2 OUT NOW",
+      "volume": "SWIM TEASER 2 OUT NOW: trending position over last 8 hours"
+    },
+    {
+      "topic": "Under the SAKURA Moonlight",
+      "volume": "Under the SAKURA Moonlight: trending position over last 8 hours"
+    },
+    {
+      "topic": "Senator Paul",
+      "volume": "Senator Paul: trending position over last 8 hours"
+    },
+    {
+      "topic": "Good Wednesday",
+      "volume": "Good Wednesday: trending position over last 8 hours"
+    },
+    {
+      "topic": "Living Tribunal",
+      "volume": "Living Tribunal: trending position over last 8 hours"
+    },
+    {
+      "topic": "Trump's DHS",
+      "volume": "Trump's DHS: trending position over last 8 hours"
+    },
+    {
+      "topic": "Anatomy of a Fall",
+      "volume": "Anatomy of a Fall: trending position over last 8 hours"
+    },
+    {
+      "topic": "Sean O'Brien",
+      "volume": "Sean O'Brien: trending position over last 8 hours"
+    },
+    {
+      "topic": "The Other",
+      "volume": "The Other: trending position over last 8 hours"
+    }
+  ]
+}

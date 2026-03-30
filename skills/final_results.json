@@ -1,0 +1,22 @@
+[
+  {
+    "address": "Wellington Plan, Sterling Ranch",
+    "price": "$590,995+",
+    "beds": 5,
+    "baths": 3.0,
+    "sqft": 2270,
+    "year_built": "N/A",
+    "source": "Zillow",
+    "url": "https://www.zillow.com/community/sterling-ranch/459014259_zpid/"
+  },
+  {
+    "address": "The 2167 Plan, Stone's Throw",
+    "price": "$514,960+",
+    "beds": 5,
+    "baths": 3.0,
+    "sqft": 2167,
+    "year_built": "N/A",
+    "source": "Zillow",
+    "url": "https://www.zillow.com/community/stone-s-throw/460790757_zpid/"
+  }
+]

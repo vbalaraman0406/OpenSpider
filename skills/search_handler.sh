@@ -1,0 +1,1 @@
+grep -n 'allowedDM\|dmPolicy\|mention\|botMode\|firewall\|whitelist' ./App.js | head -40

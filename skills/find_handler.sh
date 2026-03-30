@@ -1,0 +1,1 @@
+find . -maxdepth 6 -type f \( -name '*.js' -o -name '*.ts' \) -not -path './node_modules/*' -not -name 'App.js' -not -name '*.d.ts' -not -name '*.map' -not -name '*.config.*'

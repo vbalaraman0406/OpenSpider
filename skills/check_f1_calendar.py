@@ -1,0 +1,54 @@
+import json
+import os
+from datetime import datetime, timedelta
+
+# Ensure workspace directory exists
+os.makedirs('workspace', exist_ok=True)
+
+# Create the calendar file
+calendar = [
+  {"round": 1, "raceName": "Australian Grand Prix", "circuit": "Albert Park Circuit", "country": "Australia", "raceDate": "2026-03-08"},
+  {"round": 2, "raceName": "Chinese Grand Prix", "circuit": "Shanghai International Circuit", "country": "China", "raceDate": "2026-03-22"},
+  {"round": 3, "raceName": "Japanese Grand Prix", "circuit": "Suzuka International Racing Course", "country": "Japan", "raceDate": "2026-04-05"},
+  {"round": 4, "raceName": "Bahrain Grand Prix", "circuit": "Bahrain International Circuit", "country": "Bahrain", "raceDate": "2026-04-19"},
+  {"round": 5, "raceName": "Saudi Arabian Grand Prix", "circuit": "Jeddah Corniche Circuit", "country": "Saudi Arabia", "raceDate": "2026-04-26"},
+  {"round": 6, "raceName": "Miami Grand Prix", "circuit": "Miami International Autodrome", "country": "United States", "raceDate": "2026-05-10"},
+  {"round": 7, "raceName": "Emilia Romagna Grand Prix", "circuit": "Autodromo Enzo e Dino Ferrari", "country": "Italy", "raceDate": "2026-05-24"},
+  {"round": 8, "raceName": "Monaco Grand Prix", "circuit": "Circuit de Monaco", "country": "Monaco", "raceDate": "2026-05-31"},
+  {"round": 9, "raceName": "Spanish Grand Prix", "circuit": "Circuit de Barcelona-Catalunya", "country": "Spain", "raceDate": "2026-06-14"},
+  {"round": 10, "raceName": "Canadian Grand Prix", "circuit": "Circuit Gilles Villeneuve", "country": "Canada", "raceDate": "2026-06-28"},
+  {"round": 11, "raceName": "Austrian Grand Prix", "circuit": "Red Bull Ring", "country": "Austria", "raceDate": "2026-07-05"},
+  {"round": 12, "raceName": "British Grand Prix", "circuit": "Silverstone Circuit", "country": "United Kingdom", "raceDate": "2026-07-19"},
+  {"round": 13, "raceName": "Belgian Grand Prix", "circuit": "Circuit de Spa-Francorchamps", "country": "Belgium", "raceDate": "2026-07-26"},
+  {"round": 14, "raceName": "Hungarian Grand Prix", "circuit": "Hungaroring", "country": "Hungary", "raceDate": "2026-08-02"},
+  {"round": 15, "raceName": "Dutch Grand Prix", "circuit": "Circuit Zandvoort", "country": "Netherlands", "raceDate": "2026-08-30"},
+  {"round": 16, "raceName": "Italian Grand Prix", "circuit": "Autodromo Nazionale Monza", "country": "Italy", "raceDate": "2026-09-06"},
+  {"round": 17, "raceName": "Azerbaijan Grand Prix", "circuit": "Baku City Circuit", "country": "Azerbaijan", "raceDate": "2026-09-20"},
+  {"round": 18, "raceName": "Singapore Grand Prix", "circuit": "Marina Bay Street Circuit", "country": "Singapore", "raceDate": "2026-10-04"},
+  {"round": 19, "raceName": "United States Grand Prix", "circuit": "Circuit of the Americas", "country": "United States", "raceDate": "2026-10-18"},
+  {"round": 20, "raceName": "Mexico City Grand Prix", "circuit": "Autodromo Hermanos Rodriguez", "country": "Mexico", "raceDate": "2026-10-25"},
+  {"round": 21, "raceName": "Sao Paulo Grand Prix", "circuit": "Interlagos", "country": "Brazil", "raceDate": "2026-11-08"},
+  {"round": 22, "raceName": "Las Vegas Grand Prix", "circuit": "Las Vegas Strip Circuit", "country": "United States", "raceDate": "2026-11-22"},
+  {"round": 23, "raceName": "Qatar Grand Prix", "circuit": "Lusail International Circuit", "country": "Qatar", "raceDate": "2026-11-29"},
+  {"round": 24, "raceName": "Abu Dhabi Grand Prix", "circuit": "Yas Marina Circuit", "country": "United Arab Emirates", "raceDate": "2026-12-06"}
+]
+
+with open('workspace/f1_calendar_2026.json', 'w') as f:
+    json.dump(calendar, f, indent=2)
+
+# Now check for races within 4 days
+today = datetime(2026, 3, 13)
+window_end = today + timedelta(days=4)
+
+found = False
+for race in calendar:
+    race_date = datetime.strptime(race['raceDate'], '%Y-%m-%d')
+    if today <= race_date <= window_end:
+        print(f"Race: {race['raceName']}")
+        print(f"Date: {race['raceDate']}")
+        print(f"Circuit: {race['circuit']}")
+        print(f"Country: {race['country']}")
+        found = True
+
+if not found:
+    print('No upcoming race this week — stopping.')

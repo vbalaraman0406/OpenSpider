@@ -1,0 +1,506 @@
+import sys
+
+# The content from the last browse_web read_content operation is available in the agent's memory.
+# I will directly write this content to the file.
+html_content = """Page: "Trump's Truth" (https://trumpstruth.org/)
+
+Search the Archive
+ 
+ 
+
+ 
+ 
+ 	 About the Site
+ 
+
+ 
+ 
+ 	 FAQ
+ 
+
+ 
+ 
+ 	 Stats
+ 
+
+ 
+
+ Our site archives all of Donald Trump's TRUTH Social posts, providing a searchable index of his statements, video transcripts, and image descriptions.
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+ 
+ Menu
+ 
+
+ 
+ 
+ 
+ 
+
+ 
+
+ 
+ 
+ 
+ Submit
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+ 
+ 	 Search the Archive
+ 
+
+ 
+ 
+ 	 About the Site
+ 
+
+ 
+ 
+ 	 FAQ
+ 
+
+ 
+ 
+ 	 Stats
+ 
+
+ 
+
+ Our site archives all of Donald Trump's TRUTH Social posts, providing a searchable index of his statements, video transcripts, and image descriptions.
+
+ 
+
+ 
+
+ 
+
+ 
+ 
+ 
+ 
+
+ 
+
+ 
+
+ 
+ 
+ 
+ 
+
+ 
+
+ 
+ Donald J. Trump
+ 
+
+ 
+ @realDonaldTrump · March 27, 2026, 2:16 PM
+ 
+
+ 
+ 
+
+ 
+
+ 
+
+ 
+ 	 Original Post
+ 
+
+ 
+
+ 
+
+ 
+
+ The Radical Left Democrats, and their “Leader,” Cryin’ Chuck Schumer, have made it very clear where they stand, and that is, ON THE SIDE OF CRIMINAL ILLEGAL ALIENS, AND NOT THE AMERICAN PEOPLE. They are refusing to fund Immigration Enforcement unless the Republicans agree to their Open Border Policies, which will never, ever happen again. They almost destroyed our Country, allowing 25 Million People to enter from Prisons, Mental Institutions, and Insane Asylums, those that are Drug Dealers, and thousands of Murderers, many of whom killed more than one person. Because the Democrats have recklessly created a true National Crisis, I am using my authorities under the Law to protect our Great Country, as I always will do! Therefore, I am going to sign an Order instructing the Secretary of Homeland Security, Markwayne Mullin, to immediately pay our TSA Agents in order to address this Emergency Situation, and to quickly stop the Democrat Chaos at the Airports. It is not an easy thing to do, but I am going to do it! I want to thank our hardworking TSA Agents and also, ICE, for the incredible help they have given us at the Airports. I will not allow the Radical Left Democrats to hold our Country hostage any longer. Thank you for your attention to this matter! President DONALD J. TRUMP
+ 
+ 
+ 
+ 
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+ 
+ 
+ 
+
+ 
+
+ 
+ Donald J. Trump
+ 
+
+ 
+ @realDonaldTrump · March 26, 2026, 6:30 PM
+ 
+
+ 
+ 
+
+ 
+
+ 
+
+ 
+ 	 Original Post
+ 
+
+ 
+
+ 
+
+ 
+
+ The Radical Left Democrats, and their “Leader,” Cryin’ Chuck Schumer, have made it very clear where they stand, and that is, ON THE SIDE OF CRIMINAL ILLEGAL ALIENS, AND NOT THE AMERICAN PEOPLE. They are refusing to fund Immigration Enforcement unless the Republicans agree to their Open Border Policies, which will never, ever happen again. They almost destroyed our Country, allowing 25 Million People to enter from Prisons, Mental Institutions, and Insane Asylums, those that are Drug Dealers, and thousands of Murderers, many of whom killed more than one person. Because the Democrats have recklessly created a true National Crisis, I am using my authorities under the Law to protect our Great Country, as I always will do! Therefore, I am going to sign an Order instructing the Secretary of Homeland Security, Markwayne Mullin, to immediately pay our TSA Agents in order to address this Emergency Situation, and to quickly stop the Democrat Chaos at the Airports. It is not an easy thing to do, but I am going to do it! I want to thank our hardworking TSA Agents and also, ICE, for the incredible help they have given us at the Airports. I will not allow the Radical Left Democrats to hold our Country hostage any longer. Thank you for your attention to this matter! President DONALD J. TRUMP
+ 
+ 
+ 
+ 
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+ 
+ 
+ 
+
+ 
+
+ 
+ Donald J. Trump
+ 
+
+ 
+ @realDonaldTrump · March 26, 2026, 6:29 PM
+ 
+
+ 
+ 
+
+ 
+
+ 
+
+ 
+ 	 Original Post
+ 
+
+ 
+
+ 
+
+ 
+
+ Congratulations to the International Olympic Committee on their decision to ban Men from Women’s Sports. This is only happening because of my powerful Executive Order, standing up for Women and Girls! President DONALD J. TRUMP
+ 
+ 
+ 
+ 
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+ 
+ 
+ 
+
+ 
+
+ 
+ Donald J. Trump
+ 
+
+ 
+ @realDonaldTrump · March 26, 2026, 4:11 PM
+ 
+
+ 
+ 
+
+ 
+
+ 
+
+ 
+ 	 Original Post
+ 
+
+ 
+
+ 
+
+ 
+
+ As per Iranian Government request, please let this statement serve to represent that I am pausing the period of Energy Plant destruction by 10 Days to Monday, April 6, 2026, at 8 P.M., Eastern Time. Talks are ongoing and, despite erroneous statements to the contrary by the Fake News Media, and others, they are going very well. Thank you for your attention to this matter! President DONALD J. TRUMP
+ 
+ 
+ 
+ 
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+ 
+ 
+ 
+
+ 
+
+ 
+ Donald J. Trump
+ 
+
+ 
+ @realDonaldTrump · March 26, 2026, 7:22 AM
+ 
+
+ 
+ 
+
+ 
+
+ 
+
+ 
+ 	 Original Post
+ 
+
+ 
+
+ 
+
+ 
+
+ Chuck Schumer, a desperate, crippled politician, who has lost control of the Radical Left Democrats, will make a deal now because he thinks that if he doesn’t, Republicans will TERMINATE THE FILIBUSTER, something which they should do whether he makes a deal or no
+
+ 
+ 
+ 
+ 
+
+ 
+
+ 
+ Donald J. Trump
+ 
+
+ 
+ @realDonaldTrump · March 26, 2026, 6:43 AM
+ 
+
+ 
+ 
+
+ 
+
+ 
+
+ 
+ 	 Original Post
+ 
+
+ 
+
+ 
+
+ 
+
+ I’ve Seen Enough: The Senate Is Broken, And It’s Time To Change The Rules: https://www.dailywire.com/news/ive-seen-enough-the-senate-is-broken-and-its-time-to-change-the-rules
+ 
+ 
+ 
+ 
+
+ 
+
+ 
+ 
+
+ 
+ 	 www.dailywire.com
+ 
+
+ 
+ I’ve Seen Enough: The Senate Is Broken, And It’s Time To Change The Rules
+ 
+
+ 
+ When I arrived in the United States Senate in 2011, the Republican Leader would often paraphrase George Washington who referred to the Senate as the saucer beneath a cup of tea. Just like a saucer cools the tea, the “World’s Greatest Deliberative Body” was uniquely designed to cool the political ...
+ 
+
+ 
+ 
+ 
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+ 
+ 
+ 
+
+ 
+
+ 
+ Donald J. Trump
+ 
+
+ 
+ @realDonaldTrump · March 26, 2026, 6:43 AM
+ 
+
+ 
+ 
+
+ 
+
+ 
+
+ 
+ 	 Original Post
+ 
+
+ 
+
+ 
+
+ 
+
+ U.S. intercepted Ukraine government messages discussing plot to route money to Biden re-election: https://justthenews.com/government/security/nsa-intercepted-ukraine-government-messages-discussing-effort-route-money-2024
+ 
+ 
+ 
+ 
+ 
+
+ 
+
+ 
+ 
+
+ 
+ 
+ 
+ Items per page:
+ 
+ 10 per page
+ 25 per page
+ 50 per page
+ 100 per page
+ 
+ 
+ 
+
+ 
+ Prev. Page
+ Next Page 
+ 
+ 
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ Trump's Truth is an archive of TRUTH Social posts from former President Donald Trump. This site is a project of Defending Democracy Together.
+
+ 
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+ 
+
+🕷️ OpenSpider"""
+
+with open('trump_truths_html.txt', 'w') as f_out:
+    f_out.write(html_content)

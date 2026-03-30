@@ -1,0 +1,433 @@
+{
+  "timestamp": "2026-03-22 20:26:39 UTC",
+  "scanned": 96,
+  "disclaimer": "For informational purposes only. Not financial advice.",
+  "top_gainers": [
+    {
+      "ticker": "ARM",
+      "name": "Arm Holdings plc",
+      "price": 132.35,
+      "change": 2.53,
+      "change_pct": 1.95,
+      "volume": 12353954,
+      "market_cap": 140555517952
+    },
+    {
+      "ticker": "OXY",
+      "name": "Occidental Petroleum Corporatio",
+      "price": 60.71,
+      "change": 1.13,
+      "change_pct": 1.9,
+      "volume": 25049026,
+      "market_cap": 59876245504
+    },
+    {
+      "ticker": "MS",
+      "name": "Morgan Stanley",
+      "price": 161.47,
+      "change": 2.92,
+      "change_pct": 1.84,
+      "volume": 9684339,
+      "market_cap": 256391790592
+    },
+    {
+      "ticker": "WFC",
+      "name": "Wells Fargo & Company",
+      "price": 77.6,
+      "change": 1.21,
+      "change_pct": 1.58,
+      "volume": 37942378,
+      "market_cap": 243592953856
+    },
+    {
+      "ticker": "MA",
+      "name": "Mastercard Incorporated",
+      "price": 496.32,
+      "change": 5.18,
+      "change_pct": 1.05,
+      "volume": 5756518,
+      "market_cap": 442934689792
+    },
+    {
+      "ticker": "XOM",
+      "name": "Exxon Mobil Corporation",
+      "price": 159.67,
+      "change": 1.51,
+      "change_pct": 0.95,
+      "volume": 27751863,
+      "market_cap": 665307119616
+    },
+    {
+      "ticker": "TMO",
+      "name": "Thermo Fisher Scientific Inc",
+      "price": 474.39,
+      "change": 4.18,
+      "change_pct": 0.89,
+      "volume": 1402861,
+      "market_cap": 176228417536
+    },
+    {
+      "ticker": "ADBE",
+      "name": "Adobe Inc.",
+      "price": 248.15,
+      "change": 2.16,
+      "change_pct": 0.88,
+      "volume": 10467284,
+      "market_cap": 101865570304
+    },
+    {
+      "ticker": "COP",
+      "name": "ConocoPhillips",
+      "price": 126.92,
+      "change": 0.9,
+      "change_pct": 0.71,
+      "volume": 31949449,
+      "market_cap": 155139293184
+    },
+    {
+      "ticker": "LYFT",
+      "name": "Lyft, Inc.",
+      "price": 13.47,
+      "change": 0.09,
+      "change_pct": 0.67,
+      "volume": 84222202,
+      "market_cap": 5379290624
+    },
+    {
+      "ticker": "V",
+      "name": "Visa Inc.",
+      "price": 301.62,
+      "change": 1.91,
+      "change_pct": 0.64,
+      "volume": 13993610,
+      "market_cap": 581535268864
+    },
+    {
+      "ticker": "GS",
+      "name": "Goldman Sachs Group, Inc. (The)",
+      "price": 813.53,
+      "change": 4.03,
+      "change_pct": 0.5,
+      "volume": 2883596,
+      "market_cap": 244000849920
+    },
+    {
+      "ticker": "BAC",
+      "name": "Bank of America Corporation",
+      "price": 47.16,
+      "change": 0.15,
+      "change_pct": 0.32,
+      "volume": 77905551,
+      "market_cap": 344385683456
+    },
+    {
+      "ticker": "DIS",
+      "name": "Walt Disney Company (The)",
+      "price": 99.51,
+      "change": 0.31,
+      "change_pct": 0.31,
+      "volume": 26771433,
+      "market_cap": 176469737472
+    },
+    {
+      "ticker": "CRM",
+      "name": "Salesforce, Inc.",
+      "price": 195.38,
+      "change": 0.39,
+      "change_pct": 0.2,
+      "volume": 11636617,
+      "market_cap": 183071064064
+    }
+  ],
+  "top_losers": [
+    {
+      "ticker": "SMCI",
+      "name": "Super Micro Computer, Inc.",
+      "price": 20.53,
+      "change": -10.26,
+      "change_pct": -33.32,
+      "volume": 242958521,
+      "market_cap": 12327894016
+    },
+    {
+      "ticker": "HIMS",
+      "name": "Hims & Hers Health, Inc.",
+      "price": 22.02,
+      "change": -2.14,
+      "change_pct": -8.86,
+      "volume": 27396887,
+      "market_cap": 5019211776
+    },
+    {
+      "ticker": "MARA",
+      "name": "MARA Holdings, Inc.",
+      "price": 8.46,
+      "change": -0.76,
+      "change_pct": -8.24,
+      "volume": 50901292,
+      "market_cap": 3216784896
+    },
+    {
+      "ticker": "NIO",
+      "name": "NIO Inc.",
+      "price": 5.43,
+      "change": -0.46,
+      "change_pct": -7.81,
+      "volume": 52422669,
+      "market_cap": 13730619392
+    },
+    {
+      "ticker": "RIVN",
+      "name": "Rivian Automotive, Inc.",
+      "price": 14.91,
+      "change": -1.21,
+      "change_pct": -7.51,
+      "volume": 51016923,
+      "market_cap": 18503157760
+    },
+    {
+      "ticker": "PLUG",
+      "name": "Plug Power, Inc.",
+      "price": 2.23,
+      "change": -0.17,
+      "change_pct": -7.08,
+      "volume": 104494343,
+      "market_cap": 3108519936
+    },
+    {
+      "ticker": "ONDS",
+      "name": "Ondas Inc",
+      "price": 10.075,
+      "change": -0.66,
+      "change_pct": -6.15,
+      "volume": 86922682,
+      "market_cap": 4668008960
+    },
+    {
+      "ticker": "INTC",
+      "name": "Intel Corporation",
+      "price": 43.87,
+      "change": -2.31,
+      "change_pct": -5.0,
+      "volume": 162814210,
+      "market_cap": 219138473984
+    },
+    {
+      "ticker": "DKNG",
+      "name": "DraftKings Inc.",
+      "price": 23.67,
+      "change": -1.24,
+      "change_pct": -4.98,
+      "volume": 15448543,
+      "market_cap": 11782275072
+    },
+    {
+      "ticker": "SHOP",
+      "name": "Shopify Inc.",
+      "price": 116.78,
+      "change": -5.59,
+      "change_pct": -4.57,
+      "volume": 11955545,
+      "market_cap": 152407670784
+    },
+    {
+      "ticker": "UAL",
+      "name": "United Airlines Holdings, Inc.",
+      "price": 89.95,
+      "change": -4.2,
+      "change_pct": -4.46,
+      "volume": 9271727,
+      "market_cap": 29120231424
+    },
+    {
+      "ticker": "BBAI",
+      "name": "BigBear.ai, Inc.",
+      "price": 3.58,
+      "change": -0.15,
+      "change_pct": -4.02,
+      "volume": 32058587,
+      "market_cap": 1704282496
+    },
+    {
+      "ticker": "ORCL",
+      "name": "Oracle Corporation",
+      "price": 149.68,
+      "change": -5.84,
+      "change_pct": -3.76,
+      "volume": 36483176,
+      "market_cap": 430486552576
+    },
+    {
+      "ticker": "LUV",
+      "name": "Southwest Airlines Company",
+      "price": 39.41,
+      "change": -1.46,
+      "change_pct": -3.57,
+      "volume": 14007041,
+      "market_cap": 20381081600
+    },
+    {
+      "ticker": "RGTI",
+      "name": "Rigetti Computing, Inc.",
+      "price": 14.88,
+      "change": -0.53,
+      "change_pct": -3.44,
+      "volume": 24794814,
+      "market_cap": 4942400512
+    }
+  ],
+  "most_active": [
+    {
+      "ticker": "SMCI",
+      "name": "Super Micro Computer, Inc.",
+      "price": 20.53,
+      "change": -10.26,
+      "change_pct": -33.32,
+      "volume": 242958521,
+      "market_cap": 12327894016
+    },
+    {
+      "ticker": "NVDA",
+      "name": "NVIDIA Corporation",
+      "price": 172.93,
+      "change": -5.4,
+      "change_pct": -3.03,
+      "volume": 241323528,
+      "market_cap": 4203063541760
+    },
+    {
+      "ticker": "INTC",
+      "name": "Intel Corporation",
+      "price": 43.87,
+      "change": -2.31,
+      "change_pct": -5.0,
+      "volume": 162814210,
+      "market_cap": 219138473984
+    },
+    {
+      "ticker": "SPY",
+      "name": "State Street SPDR S&P 500 ETF T",
+      "price": 648.57,
+      "change": -9.43,
+      "change_pct": -1.43,
+      "volume": 138283514,
+      "market_cap": 595245858816
+    },
+    {
+      "ticker": "PLUG",
+      "name": "Plug Power, Inc.",
+      "price": 2.23,
+      "change": -0.17,
+      "change_pct": -7.08,
+      "volume": 104494343,
+      "market_cap": 3108519936
+    },
+    {
+      "ticker": "QQQ",
+      "name": "Invesco QQQ Trust, Series 1",
+      "price": 582.06,
+      "change": -10.96,
+      "change_pct": -1.85,
+      "volume": 91964677,
+      "market_cap": 228807786496
+    },
+    {
+      "ticker": "AAPL",
+      "name": "Apple Inc.",
+      "price": 247.99,
+      "change": -0.97,
+      "change_pct": -0.39,
+      "volume": 88331081,
+      "market_cap": 3644938780672
+    },
+    {
+      "ticker": "ONDS",
+      "name": "Ondas Inc",
+      "price": 10.075,
+      "change": -0.66,
+      "change_pct": -6.15,
+      "volume": 86922682,
+      "market_cap": 4668008960
+    },
+    {
+      "ticker": "LYFT",
+      "name": "Lyft, Inc.",
+      "price": 13.47,
+      "change": 0.09,
+      "change_pct": 0.67,
+      "volume": 84222202,
+      "market_cap": 5379290624
+    },
+    {
+      "ticker": "ABT",
+      "name": "Abbott Laboratories",
+      "price": 105.46,
+      "change": -1.73,
+      "change_pct": -1.61,
+      "volume": 80311999,
+      "market_cap": 183256039424
+    },
+    {
+      "ticker": "TSLA",
+      "name": "Tesla, Inc.",
+      "price": 367.96,
+      "change": -12.34,
+      "change_pct": -3.24,
+      "volume": 78628603,
+      "market_cap": 1380744822784
+    },
+    {
+      "ticker": "QCOM",
+      "name": "QUALCOMM Incorporated",
+      "price": 129.9,
+      "change": -1.38,
+      "change_pct": -1.05,
+      "volume": 78568037,
+      "market_cap": 138739056640
+    },
+    {
+      "ticker": "SOFI",
+      "name": "SoFi Technologies, Inc.",
+      "price": 16.9,
+      "change": -0.18,
+      "change_pct": -1.05,
+      "volume": 78470708,
+      "market_cap": 21551958016
+    },
+    {
+      "ticker": "BAC",
+      "name": "Bank of America Corporation",
+      "price": 47.16,
+      "change": 0.15,
+      "change_pct": 0.32,
+      "volume": 77905551,
+      "market_cap": 344385683456
+    },
+    {
+      "ticker": "IWM",
+      "name": "iShares Russell 2000 ETF",
+      "price": 242.22,
+      "change": -5.41,
+      "change_pct": -2.18,
+      "volume": 74837669,
+      "market_cap": 68075925504
+    }
+  ],
+  "indices": [
+    {
+      "index": "S&P 500",
+      "price": 6506.48,
+      "change_pct": -1.51
+    },
+    {
+      "index": "NASDAQ",
+      "price": 21647.61,
+      "change_pct": -2.01
+    },
+    {
+      "index": "Dow Jones",
+      "price": 45577.47,
+      "change_pct": -0.96
+    }
+  ]
+}
