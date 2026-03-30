@@ -1380,7 +1380,7 @@ export async function startWhatsApp() {
 
             // Send to the Manager Agent
             // Note: ManagerAgent expects images array in updated implementation
-            const senderInfo = `[SENDER CONTEXT] This message is coming from WhatsApp JID: ${replyJid}. When you reply, you MUST use the send_whatsapp tool and explicitly set the "to" field to exactly "${replyJid}" so the message routes back to them and not the default admin!\n\n`;
+            const senderInfo = `[SENDER CONTEXT] This message is coming from WhatsApp JID: ${replyJid}.\n\n`;
             const groupContextPrefix = isGroup ? `[GROUP CHAT] You are responding in a WhatsApp group chat. People can talk to you by tagging you as @${agentName}. Keep this in mind when introducing yourself or giving instructions.\n\n` : '';
 
             // Wrap user message in data delimiters so LLM treats it as data, not instructions

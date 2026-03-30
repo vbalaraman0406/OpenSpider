@@ -305,7 +305,12 @@ Example output:
                 // CODE-LEVEL SAFEGUARD: Some models (e.g. GPT-4o) ignore prompt-level delegation rules
                 // and use direct_response for tasks that require real-time data or browsing.
                 // Detect this and force delegation to a Worker agent.
-                const lowerPrompt = prompt.toLowerCase();
+                // Isolate the actual user text from WhatsApp system Wrappers to prevent false keyword triggers
+                let userTextToEvaluate = prompt;
+                if (userTextToEvaluate.includes('---BEGIN WHATSAPP MESSAGE---')) {
+                    userTextToEvaluate = userTextToEvaluate.split('---BEGIN WHATSAPP MESSAGE---')[1]?.split('---END WHATSAPP MESSAGE---')[0] || userTextToEvaluate;
+                }
+                const lowerPrompt = userTextToEvaluate.toLowerCase();
                 const requiresDelegation = [
                     // Action verbs
                     'browse', 'search', 'look up', 'check', 'find', 'research',
