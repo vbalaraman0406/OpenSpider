@@ -187,8 +187,31 @@ export class DynamicExecutor {
                 encoding: 'utf-8',
                 env: { ...process.env, PATH: process.env.PATH }
             });
+            let out = result.stdout || '';
+            
+            // TOKEN OPTIMIZATION: Minify JSON arrays of objects into Tabular JSON 
+            // to prevent the LLM from burning tokens on repetitive dictionary keys e.g {"title":"A", "url": "B"}, {"title": "C", "url": "D"} -> [["title","url"], ["A","B"], ["C","D"]]
+            try {
+                const trimmedPattern = out.trim();
+                if (trimmedPattern.startsWith('[') && trimmedPattern.endsWith(']')) {
+                    const parsed = JSON.parse(trimmedPattern);
+                    if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === 'object' && !Array.isArray(parsed[0])) {
+                        const keys = Object.keys(parsed[0]);
+                        const tabular = [keys];
+                        for (const row of parsed) {
+                            tabular.push(keys.map(k => row[k]));
+                        }
+                        out = '[System: Auto-Minified Tabular Array]\n' + JSON.stringify(tabular);
+                    } else if (typeof parsed === 'object') {
+                        out = JSON.stringify(parsed); // Standard minification
+                    }
+                } else if (trimmedPattern.startsWith('{') && trimmedPattern.endsWith('}')) {
+                     out = JSON.stringify(JSON.parse(trimmedPattern));
+                }
+            } catch (e) { /* Not a clean JSON string, leave it alone */ }
+
             return {
-                stdout: result.stdout || '',
+                stdout: out,
                 stderr: result.stderr || '',
                 ...(result.status !== 0 ? { error: result.stderr || result.error?.message || `Exit code: ${result.status}` } : {})
             };

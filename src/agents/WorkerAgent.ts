@@ -112,8 +112,8 @@ BROWSER USAGE GUIDELINES:
 
 SMART BROWSING STRATEGY (follow this pattern for ANY site):
 1. Navigate to the site URL
-2. Read the page content to see what's visible
-3. Identify clickable links/buttons FROM THE TEXT you just read (look for team names, menu items, tab labels)
+2. TOKEN OPTIMIZATION: NEVER use \`read_content\` on the entire page. You MUST ALWAYS supply a CSS selector in the \`args\` field (e.g. \`"args": "main"\`, \`"args": ".player-table"\`, \`"args": "article"\`) to extract ONLY the relevant content container and save tokens.
+3. Identify clickable links/buttons FROM THE EXTRACTED TEXT (look for team names, menu items, tab labels)
 4. Click the most relevant link using its EXACT VISIBLE TEXT — e.g., if you see "Market Makers" in the content, click "Market Makers"
 5. Read the resulting page
 6. If you found what you need, extract data and deliver final_answer
@@ -186,6 +186,8 @@ ${context.join('\n')}
         let checkpointInjected = false;
         let postCheckpointActions = 0;
         let postCheckpointHasWork = false;
+
+        const toolCache = new Map<string, { result: string, step: number }>();
 
         // Autonomy Loop
         for (let i = 0; i < HARD_CEILING; i++) {
@@ -302,7 +304,25 @@ ${context.join('\n')}
             }
 
             let toolOutput = "";
-            try {
+            let cacheHit = false;
+            
+            const CACHEABLE_ACTIONS = ['execute_script', 'run_command', 'search_skills', 'read_emails'];
+            const CACHEABLE_BROWSER = ['read_content', 'list_elements'];
+            const isCacheable = CACHEABLE_ACTIONS.includes(response.action) || 
+                                (response.action === 'browse_web' && CACHEABLE_BROWSER.includes(response.command || ''));
+            const cacheKey = JSON.stringify([response.action, response.command, response.args, response.filename, response.content, response.target, response.url]);
+
+            if (isCacheable) {
+                const cached = toolCache.get(cacheKey);
+                if (cached && (i - cached.step) <= 5) {
+                    console.log(`[Worker - ${this.role}] ♻️ Tool Cache Hit for ${response.action}!`);
+                    toolOutput = `[System LOOP DETECTED - CACHE HIT: You already executed this exact command at Step ${cached.step}. The data is unchanged. Do NOT repeat this action. Proceed to analysis.]\n\n${cached.result}`;
+                    cacheHit = true;
+                }
+            }
+
+            if (!cacheHit) {
+                try {
                 if (response.action === 'run_command' && response.command) {
                     console.log(`[Worker - ${this.role}] Running command: ${response.command}`);
                     const res = await this.executor.runCommand(response.command);
@@ -943,6 +963,12 @@ ${context.join('\n')}
             } catch (e: any) {
                 toolOutput = `Tool execution failed: ${e.message}`;
             }
+            
+            // Save successful executions to the cache
+            if (isCacheable && !toolOutput.startsWith('Tool execution failed') && !toolOutput.startsWith('Invalid action')) {
+                toolCache.set(cacheKey, { result: toolOutput, step: i });
+            }
+        } // End of !cacheHit block
 
             // [Token Optimization] Tool output cap: increased for relay browser content
             // which now prioritizes tables/data over nav chrome. The relay extracts up to
