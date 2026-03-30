@@ -362,12 +362,18 @@ Example output:
             // CODE-LEVEL ROUTING OVERRIDES: Force correct agent for specialized domains
             // The LLM frequently ignores prompt-level routing rules, so we enforce at code level.
             const lowerPrompt = prompt.toLowerCase();
-            const isBaseballQuery = [
+            const regexes = [
                 '\\bbaseball\\b', '\\bfantasy baseball\\b', '\\bmlb\\b', '\\bbatters?\\b', '\\bpitchers?\\b', '\\blineups?\\b',
                 '\\brosters?\\b', '\\bwaivers?\\b', '\\bdrafts?\\b', '\\byahoo fantasy\\b', '\\bfantasy league\\b',
                 '\\bhome runs?\\b', '\\brbi\\b', '\\bera\\b', '\\bbatting\\b', '\\bpitching\\b', '\\bspring training\\b',
                 '\\bmarket makers\\b' // User's team name
-            ].some(regex => new RegExp(regex, 'i').test(lowerPrompt));
+            ];
+            const matchingRegex = regexes.find(regex => new RegExp(regex, 'i').test(lowerPrompt));
+            
+            // Only enforce global baseball routing if it's NOT a cron job, OR if the cron job explicitly contains the word 'yahoo' or 'mlb'
+            const isCronTrigger = prompt.includes('[SYSTEM CRON TRIGGER]') || prompt.includes('[SYSTEM MANUAL TRIGGER]');
+            const isBaseballQuery = !!matchingRegex && (!isCronTrigger || /yahoo|mlb/i.test(prompt));
+
 
             if (isBaseballQuery && planResult.plan) {
                 for (const step of planResult.plan) {
