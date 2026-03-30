@@ -232,7 +232,7 @@ async function checkAndExecuteJobs() {
                 ? `\n\n[MANDATORY AGENT ROUTING] You MUST delegate this task to the "${job.agentId}" agent. Do NOT pick any other agent. This is a system-level directive from the scheduler.`
                 : '';
 
-            const explicitLogNote = `\n\n[LOGGING REQUIREMENT] In your final summary report, you MUST explicitly print the exact, raw email addresses and WhatsApp numbers/JIDs you sent messages to. Do NOT use abstract phrases like "default user", "the requested group", or "the recipient". Print the exact target strings returned by the tool output.`;
+            const explicitLogNote = `\n\n[LOGGING REQUIREMENT] In your final summary report (using the 'final_answer' tool), you MUST explicitly print the exact, raw email addresses and WhatsApp numbers/JIDs you sent messages to. Do NOT include this delivery status log inside the actual WhatsApp message or Email body you send to the user! Keep the user's message payload clean.`;
             const antiHallucinationNote = `\n\n[ANTI-HALLUCINATION DIRECTIVE] You MUST explicitly execute the required tool (e.g. 'send_email', 'send_whatsapp') to actually send a message. Do NOT simply draft the email/message content within your final "result" output. The task is only complete once you call the tool and receive a success confirmation.`;
 
             const cronPrompt = `[SYSTEM CRON TRIGGER] Wake up and execute your scheduled background task. Do not ask me for permission. Just do it and summarize the results.${cronFromNote}${agentDirective}${explicitLogNote}${antiHallucinationNote}\n\nTask: ${job.prompt}`;

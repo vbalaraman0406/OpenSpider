@@ -412,7 +412,13 @@ Example output:
                     }));
 
                     const resolvedRole = this.resolveRole(step.role, existingRoles);
-                    const worker = new WorkerAgent(this.llm, resolvedRole, () => this.cancelRequested, isCron);
+                    
+                    // Dynamic Model Routing (Agent Affinity): Give the worker its specific brain if defined
+                    const workerPersona = new PersonaShell(resolvedRole);
+                    const workerAffinityModel = workerPersona.getPrimaryModel();
+                    const workerLlm = workerAffinityModel ? getProvider(workerAffinityModel) : this.llm;
+                    
+                    const worker = new WorkerAgent(workerLlm, resolvedRole, () => this.cancelRequested, isCron);
                     const result = await worker.executeTask(step.instruction, globalContext, imagesBase64);
 
                     console.log(`[Manager] Task ${taskId} completed. Result:\n${result}\n`);
@@ -453,7 +459,13 @@ Example output:
                         // Parallel tasks get a copy of the CURRENT global context!
                         const workerContext = [...globalContext];
                         const resolvedRole = this.resolveRole(subtask.role, existingRoles);
-                        const worker = new WorkerAgent(this.llm, resolvedRole, () => this.cancelRequested, isCron);
+                        
+                        // Dynamic Model Routing (Agent Affinity) for Parallel workers
+                        const workerPersona = new PersonaShell(resolvedRole);
+                        const workerAffinityModel = workerPersona.getPrimaryModel();
+                        const workerLlm = workerAffinityModel ? getProvider(workerAffinityModel) : this.llm;
+                        
+                        const worker = new WorkerAgent(workerLlm, resolvedRole, () => this.cancelRequested, isCron);
                         const result = await worker.executeTask(subtask.instruction, workerContext, imagesBase64);
 
                         console.log(`[Manager] Parallel Task ${taskId} completed.`);

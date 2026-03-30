@@ -6,7 +6,9 @@
     "delegate_task",
     "run_command",
     "browse_web",
-    "ask_user"
+    "ask_user",
+    "send_whatsapp",
+    "send_email"
   ],
   "maxDelegationDepth": 3,
   "budgetTokens": 100000

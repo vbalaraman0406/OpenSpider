@@ -233,6 +233,11 @@ export class PersonaShell {
         return {};
     }
 
+    public getPrimaryModel(): string | undefined {
+        const caps = this.getCapabilities();
+        return caps?.primary_model || undefined;
+    }
+
     public compileSystemPrompt(): string {
         const identity = this.getIdentity();
         const soul = this.getSoul();
