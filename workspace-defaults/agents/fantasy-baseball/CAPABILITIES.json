@@ -8,7 +8,8 @@
     "wait_for_user",
     "schedule_task",
     "run_command",
-    "write_script"
+    "write_script",
+    "send_whatsapp"
   ],
   "dataSources": [
     "https://baseball.fantasysports.yahoo.com/",

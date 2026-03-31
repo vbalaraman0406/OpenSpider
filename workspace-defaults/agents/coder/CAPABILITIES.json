@@ -5,7 +5,8 @@
   "allowedTools": [
     "run_command",
     "write_script",
-    "search_skills"
+    "search_skills",
+    "send_whatsapp"
   ],
   "maxDelegationDepth": 0,
   "budgetTokens": 50000

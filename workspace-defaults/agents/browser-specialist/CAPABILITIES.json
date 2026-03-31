@@ -1,10 +1,13 @@
 {
-    "name": "Browser Specialist",
-    "role": "Advanced Headless Navigation",
-    "emoji": "🕸️",
-    "allowedTools": [
-        "browse_web"
-    ],
-    "maxDelegationDepth": 0,
-    "budgetTokens": 100000
+  "name": "Browser Specialist",
+  "role": "Advanced Headless Navigation",
+  "emoji": "🕸️",
+  "allowedTools": [
+    "browse_web",
+    "send_whatsapp"
+  ],
+  "maxDelegationDepth": 0,
+  "budgetTokens": 100000,
+  "primary_model": "gemini-2.5-flash",
+  "analysis_model": "primary"
 }

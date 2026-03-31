@@ -4,7 +4,10 @@
   "emoji": "🔮",
   "allowedTools": [
     "browse_web",
-    "run_command"
+    "run_command",
+    "write_script",
+    "execute_script",
+    "send_whatsapp"
   ],
   "maxDelegationDepth": 0,
   "budgetTokens": 50000

@@ -4,6 +4,13 @@
     "canva_generate_video",
     "canva_list_templates"
   ],
+  "allowedTools": [
+    "search_skills",
+    "write_script",
+    "run_command",
+    "send_whatsapp",
+    "send_email"
+  ],
   "allowed_commands": false,
   "description": "Expert in auto-generating aesthetic images, social graphics, and short videos using Canva templates.",
   "emoji": "🎨",
