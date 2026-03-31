@@ -31,8 +31,8 @@ async function autoDismissOverlays(): Promise<void> {
         const result = await sendCommand('Runtime.evaluate', {
             expression: [
                 '(function(){',
-                'var clicked="";',
-                // --- Strategy 1: Known consent framework selectors ---
+                'var target=null;var clicked="";',
+                // --- Strategy 1: Known consent framework and generic modal selectors ---
                 'var selectors=[',
                 // OneTrust
                 '"#onetrust-accept-btn-handler",',
@@ -52,7 +52,7 @@ async function autoDismissOverlays(): Promise<void> {
                 '"button[data-testid=uc-accept-all-button]",',
                 // Osano
                 '".osano-cm-accept-all",',
-                // Common generic patterns
+                // Common generic dialog accept/close patterns
                 '"button.accept-all",',
                 '"button.cookie-accept",',
                 '"button.consent-accept",',
@@ -63,55 +63,116 @@ async function autoDismissOverlays(): Promise<void> {
                 '"[aria-label*=Accept][aria-label*=all]",',
                 '"[data-testid*=accept]",',
                 '"[data-testid*=cookie-accept]",',
+                // ADVERTISEMENTS & GENERIC MODALS (Truth Social, etc.)
+                '"[aria-label=Close i]",',
+                '"[aria-label*=close i]",',
+                '"button.close",',
+                '".modal-close",',
+                '".close-button",',
+                '".close-btn",',
+                '".modal .close",',
+                '"[data-testid*=close]",',
+                '"[data-testid*=dismiss]"',
                 '];',
                 'for(var i=0;i<selectors.length;i++){',
                 '  try{var el=document.querySelector(selectors[i]);',
-                '  if(el&&el.offsetParent!==null){el.click();clicked=selectors[i];break;}}catch(e){}',
+                '  if(el&&el.offsetParent!==null){target=el;clicked=selectors[i];break;}}catch(e){}',
                 '}',
                 // --- Strategy 2: Text content matching ---
-                'if(!clicked){',
-                '  var btns=document.querySelectorAll("button,a[role=button],[role=button]");',
+                'if(!target){',
+                '  var btns=document.querySelectorAll("button,a[role=button],[role=button],span[role=button]");',
                 '  var acceptTexts=["accept all","accept cookies","accept & close",',
                 '    "i agree","agree","allow all","allow cookies","ok","got it",',
                 '    "i accept","consent","accept all cookies","agree and continue",',
-                '    "accept and close","accept & continue"];',
+                '    "accept and close","accept & continue","close","dismiss","no thanks","skip"];',
                 '  for(var j=0;j<btns.length;j++){',
                 '    var txt=(btns[j].textContent||"").trim().toLowerCase();',
+                '    if(txt.length===0) txt=btns[j].getAttribute("aria-label")||"";', // Try aria label if text is empty (SVG X icons)
+                '    txt=txt.trim().toLowerCase();',
                 '    if(txt.length>50)continue;',
                 '    for(var k=0;k<acceptTexts.length;k++){',
                 '      if(txt===acceptTexts[k]||txt.indexOf(acceptTexts[k])===0){',
-                '        if(btns[j].offsetParent!==null){btns[j].click();clicked=txt;break;}',
+                '        if(btns[j].offsetParent!==null){target=btns[j];clicked=txt;break;}',
                 '      }',
                 '    }',
-                '    if(clicked)break;',
+                '    if(target)break;',
                 '  }',
                 '}',
                 // --- Strategy 3: Shadow DOM consent banners ---
-                'if(!clicked){',
-                '  var shadows=document.querySelectorAll("[class*=consent],[class*=cookie],[id*=consent],[id*=cookie]");',
+                'if(!target){',
+                '  var shadows=document.querySelectorAll("[class*=consent],[class*=cookie],[id*=consent],[id*=cookie],[class*=modal],[id*=modal]");',
                 '  for(var s=0;s<shadows.length;s++){',
                 '    if(shadows[s].shadowRoot){',
-                '      var sb=shadows[s].shadowRoot.querySelectorAll("button");',
+                '      var sb=shadows[s].shadowRoot.querySelectorAll("button,[role=button]");',
                 '      for(var sb_i=0;sb_i<sb.length;sb_i++){',
                 '        var st=(sb[sb_i].textContent||"").trim().toLowerCase();',
-                '        if(st.indexOf("accept")>=0||st.indexOf("agree")>=0){',
-                '          sb[sb_i].click();clicked="shadow:"+st;break;',
+                '        if(st.indexOf("accept")>=0||st.indexOf("agree")>=0||st==="close"||st==="x"){',
+                '          target=sb[sb_i];clicked="shadow:"+st;break;',
                 '        }',
                 '      }',
-                '      if(clicked)break;',
+                '      if(target)break;',
                 '    }',
                 '  }',
                 '}',
-                'return clicked||"none"',
+                'if(target){',
+                '  var r=target.getBoundingClientRect();',
+                '  return JSON.stringify({found:true,name:clicked,x:r.left,y:r.top,w:r.width,h:r.height});',
+                '}',
+                'return JSON.stringify({found:false});',
                 '})()'
             ].join('\n'),
             returnByValue: true
         });
-        const dismissed = result.result?.value;
-        if (dismissed && dismissed !== 'none') {
-            console.log(`[RelayBridge] \uD83C\uDF6A Auto-dismissed overlay: "${dismissed}"`);
-            // Wait for dialog to close
-            await new Promise(r => setTimeout(r, 500 + Math.floor(Math.random() * 500)));
+        
+        const data = JSON.parse(result.result?.value || '{"found":false}');
+        if (data.found && data.w > 0 && data.h > 0) {
+            console.log(`[RelayBridge] 🍪 Auto-dismissing overlay using Ghost Cursor: "${data.name}"`);
+            
+            // Calculate center of target element
+            const targetX = data.x + data.w / 2;
+            const targetY = data.y + data.h / 2;
+
+            // Generate Bézier path
+            const startX = lastMouseX ?? (Math.random() * 400 + 100);
+            const startY = lastMouseY ?? (Math.random() * 300 + 100);
+            const points = generateBezierPath(startX, startY, targetX, targetY);
+
+            // Animate visual ghost cursor
+            animateGhostCursor(points);
+
+            // Dispatch CDP mouse events to move along curve
+            for (let i = 0; i < points.length; i++) {
+                const p = points[i]!;
+                await sendCommand('Input.dispatchMouseEvent', {
+                    type: 'mouseMoved', x: Math.round(p.x), y: Math.round(p.y), button: 'none'
+                });
+                const progress = i / points.length;
+                const speedFactor = 1 - 4 * Math.pow(progress - 0.5, 2);
+                const delay = Math.floor(8 + (1 - speedFactor) * 17 + Math.random() * 5);
+                await new Promise(r => setTimeout(r, delay));
+            }
+
+            // Hover pause
+            await new Promise(r => setTimeout(r, 150 + Math.floor(Math.random() * 150)));
+
+            // Jitter click
+            const jitterX = targetX + (Math.random() * 4 - 2);
+            const jitterY = targetY + (Math.random() * 4 - 2);
+
+            await sendCommand('Input.dispatchMouseEvent', {
+                type: 'mousePressed', x: Math.round(jitterX), y: Math.round(jitterY), button: 'left', clickCount: 1
+            });
+            await new Promise(r => setTimeout(r, 40 + Math.floor(Math.random() * 80)));
+            await sendCommand('Input.dispatchMouseEvent', {
+                type: 'mouseReleased', x: Math.round(jitterX), y: Math.round(jitterY), button: 'left', clickCount: 1
+            });
+
+            await showClickEffect(jitterX, jitterY);
+            lastMouseX = targetX;
+            lastMouseY = targetY;
+
+            // Wait for dialog to animate fully closed
+            await new Promise(r => setTimeout(r, 800 + Math.floor(Math.random() * 400)));
         }
     } catch {
         // Non-critical

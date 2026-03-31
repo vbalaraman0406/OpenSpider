@@ -431,7 +431,11 @@ Example output:
                     const workerAffinityModel = workerPersona.getPrimaryModel();
                     const workerLlm = (!this.providerOverride && workerAffinityModel) ? getProvider(workerAffinityModel) : this.llm;
                     
-                    const worker = new WorkerAgent(workerLlm, resolvedRole, () => this.cancelRequested, isCron);
+                    const analysisModelId = workerPersona.getAnalysisModel();
+                    const resolvedAnalysisId = analysisModelId === "primary" ? undefined : analysisModelId;
+                    const analysisLlm = (!this.providerOverride && analysisModelId) ? getProvider(resolvedAnalysisId) : undefined;
+                    
+                    const worker = new WorkerAgent(workerLlm, resolvedRole, () => this.cancelRequested, isCron, analysisLlm);
                     const result = await worker.executeTask(step.instruction, globalContext, imagesBase64);
 
                     console.log(`[Manager] Task ${taskId} completed. Result:\n${result}\n`);
@@ -478,7 +482,11 @@ Example output:
                         const workerAffinityModel = workerPersona.getPrimaryModel();
                         const workerLlm = (!this.providerOverride && workerAffinityModel) ? getProvider(workerAffinityModel) : this.llm;
                         
-                        const worker = new WorkerAgent(workerLlm, resolvedRole, () => this.cancelRequested, isCron);
+                        const analysisModelId = workerPersona.getAnalysisModel();
+                        const resolvedAnalysisId = analysisModelId === "primary" ? undefined : analysisModelId;
+                        const analysisLlm = (!this.providerOverride && analysisModelId) ? getProvider(resolvedAnalysisId) : undefined;
+                        
+                        const worker = new WorkerAgent(workerLlm, resolvedRole, () => this.cancelRequested, isCron, analysisLlm);
                         const result = await worker.executeTask(subtask.instruction, workerContext, imagesBase64);
 
                         console.log(`[Manager] Parallel Task ${taskId} completed.`);

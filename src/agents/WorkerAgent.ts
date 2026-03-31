@@ -10,14 +10,16 @@ import { readJobsSync, writeJobsSync, withJobs, CronJob } from '../CronStore';
 
 export class WorkerAgent {
     private llm: LLMProvider;
+    private analysisLlm: LLMProvider | undefined;
     private executor: DynamicExecutor;
     private browserTool: BrowserTool;
     private role: string;
     private cancelChecker: (() => boolean) | undefined;
     private isCron: boolean;
 
-    constructor(llm: LLMProvider, role: string, cancelChecker?: () => boolean, isCron: boolean = false) {
+    constructor(llm: LLMProvider, role: string, cancelChecker?: () => boolean, isCron: boolean = false, analysisLlm?: LLMProvider) {
         this.llm = llm;
+        this.analysisLlm = analysisLlm;
         this.executor = new DynamicExecutor();
         this.browserTool = new BrowserTool();
         this.role = role;
@@ -300,7 +302,51 @@ ${context.join('\n')}
             messages.push({ role: 'user', content: `[PRIOR AGENT ACTION HISTORY]: \n${JSON.stringify(response)}` });
 
             if (response.action === 'final_answer') {
-                return response.result || response.summary_of_findings || "Task completed without explicit result.";
+                const draftResult = response.result || response.summary_of_findings || "Task completed without explicit result.";
+                
+                if (this.analysisLlm) {
+                    console.log(`[Worker - ${this.role}] 🧠 Invoking dedicated Analysis Model (${this.analysisLlm.providerName || 'unknown'}) for final synthesis...`);
+                    
+                    try {
+                        // Create a dynamically optimized copy of the context history
+                        // We strip massive HTML blobs and raw data dumps so the thinking model only sees the high-level reasoning path
+                        const analysisMessages = messages.map(msg => {
+                            if (msg.role === 'user' && typeof msg.content === 'string') {
+                                // 1. Strip raw Tool Execution Outputs (HTML data, CLI outputs)
+                                if (msg.content.startsWith('Tool Result:')) {
+                                    return { role: 'user', content: '[TOOL EXECUTION COMPLETED - RAW DATA STRIPPED FOR ANALYSIS OPTIMIZATION]' } as any;
+                                }
+                                // 2. Condense the Agent's Action History JSON into plain text highlights
+                                if (msg.content.startsWith('[PRIOR AGENT ACTION HISTORY]:')) {
+                                    try {
+                                        const jsonStr = msg.content.replace('[PRIOR AGENT ACTION HISTORY]: \n', '');
+                                        const parsed = JSON.parse(jsonStr);
+                                        return { 
+                                            role: 'user', 
+                                            content: `[AGENT ACTION]: ${parsed.action}\n[THOUGHT]: ${parsed.thought}\n[FINDING]: ${parsed.summary_of_findings}` 
+                                        } as any;
+                                    } catch (e) {
+                                        // Fallback
+                                    }
+                                }
+                            }
+                            return msg;
+                        });
+
+                        analysisMessages.push({ 
+                            role: 'user', 
+                            content: `SYSTEM INSTRUCTION: You are the specialized Analysis & Synthesis model for this task. The primary task execution agent has concluded its data gathering phase and outputted the following raw findings:\n\n---\n${draftResult}\n---\n\nYour job is to read through the entire action history above (which has been optimized to only show the agent's intent and conclusions), verify the findings, and rewrite the final response to be extremely comprehensive, accurate, and formatted beautifully in Markdown tables or lists as requested by the initial prompt. Do NOT wrap your output in JSON, just output direct markdown.` 
+                        });
+
+                        const analysisResponse = await this.analysisLlm.generateResponse(analysisMessages, this.role);
+                        return analysisResponse.text || draftResult;
+                    } catch (e: any) {
+                        console.error(`[Worker - ${this.role}] ⚠️ Analysis model failed, falling back to primary result.`, e);
+                        return draftResult;
+                    }
+                }
+                
+                return draftResult;
             }
 
             let toolOutput = "";
