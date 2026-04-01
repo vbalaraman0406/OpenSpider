@@ -235,6 +235,14 @@ curl -X POST http://localhost:4001/api/email/config \
   -d '{"cronResultsTo":"admin@example.com","vendorEmailTo":"vendor@example.com"}'
 ```
 
+## Outbound Message Deduplication ♻️
+
+OpenSpider features a node-wide cryptographic deduplication cache across both the WhatsApp and Gmail pipelines.
+
+When the agent attempts to send multiple identically structured messages to the same exact recipient during a single workflow or interval step (often caused by duplicated prompt delivery rules), the Gateway securely evaluates a SHA-256 rolling hash of the outbound payload. 
+
+Any exact outbound payload duplicates sent within a **10-minute sliding window** are silently suppressed and dropped at the final network mile. This natively protects your WhatsApp and Email inboxes from accidental multi-part bot spam!
+
 ## Message Handling Flow
 
 ```

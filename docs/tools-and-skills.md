@@ -26,7 +26,8 @@ Agents can navigate to any URL and extract page content using a headless Playwri
 ```json
 {
   "action": "browse_web",
-  "args": "https://example.com/article"
+  "command": "navigate",
+  "url": "https://example.com/article"
 }
 ```
 
@@ -34,6 +35,7 @@ Agents can navigate to any URL and extract page content using a headless Playwri
 - Full page content extraction
 - Headless Chromium via Playwright Core
 - Configurable via `workspace/browser.json`
+- **Native Chatbot Interaction:** The `type_and_enter` command mimics human typing speed natively (bypassing bot detection) and enforces an automatic 4-second delay after submission to accommodate for modern React chatbot response times.
 
 #### Bypassing Bot Detection (Cookie Injection)
 
