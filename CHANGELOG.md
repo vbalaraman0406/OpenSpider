@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/) and this 
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-04-01
+### Added
+- **Global Message Deduplication**: Introduced Cryptographic Rolling Hash (SHA-256) at the lowest Node-level pipeline layers (WhatsApp + Gmail) to mathematically prevent bot looping and identical duplicate cron job delivery.
+- **Native Chatbot Interaction**: Enforced the `type_and_enter` framework with built-in 4-second implicit delays mimicking human-typing speed to bypass Recaptcha blocks and improve robust completion rates on complex React state inputs.
+- **Upgraded LLM Intelligence Routing**: Deployed `gemini-3.1-pro` into the unified failover capacity array as the primary backup to Claude Opuses.
+
+### Fixed
+- **LLM Outage Resilience**: Enhanced Internal IDE model API resiliency against `503 MODEL_CAPACITY_EXHAUSTED` outages on heavy endpoints.
+
 ## [2.3.1] - 2026-03-17
 ### Fixed
 - **WhatsApp Group Messaging**: Upgraded Baileys from 6.17.16 to 7.0.0-rc.9 to fix group message delivery (LID-based group addressing)
