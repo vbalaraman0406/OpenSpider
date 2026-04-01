@@ -1242,7 +1242,12 @@ export async function typeAndEnter(selector: string, text: string): Promise<stri
     await sendCommand('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter' });
 
     console.log(`[RelayBridge] ⏎ Pressed Enter after typing into ${selector}`);
-    return `${result} and pressed Enter`;
+    
+    // Wait 4-5 seconds to allow the chatbot to generate and render its response
+    console.log(`[RelayBridge] ⏳ Waiting ~4s for chatbot response after Type&Enter...`);
+    await new Promise(r => setTimeout(r, 3500 + Math.floor(Math.random() * 1500)));
+    
+    return `${result} and pressed Enter (Automatically waited 4s for chatbot to reply).`;
 }
 
 /**

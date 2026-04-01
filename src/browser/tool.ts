@@ -613,8 +613,13 @@ export class BrowserTool {
             await humanDelay(300, 600);
             await loc.press('Enter', { delay: 100 });
             await humanDelay(300, 600);
+            
+            // Wait 4-5 seconds to allow the chatbot to generate and render its response
+            console.log(`[BrowserTool] ⏳ Waiting ~4s for chatbot response after Type&Enter...`);
+            await humanDelay(3500, 5000);
+            
             logBrowserAccess({ action: 'type_and_enter', target: selector, path: 'headless', result: 'ok', ms: Date.now() - startMs });
-            return `Typed "${text}" into ${selector} and pressed Enter [via headless browser]`;
+            return `Typed "${text}" into ${selector} and pressed Enter [via headless] (Automatically waited 4s for chatbot to reply).`;
         } catch (e: any) {
             logBrowserAccess({ action: 'type_and_enter', target: selector, path: 'headless', result: 'error', ms: Date.now() - startMs, error: e.message });
             return `⚠️ TypeAndEnter failed on all browser paths. Target: ${selector}. Error: ${e.message}`;

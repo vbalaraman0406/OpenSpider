@@ -1,3 +1,4 @@
+import * as crypto from 'crypto';
 import makeWASocket, { DisconnectReason, useMultiFileAuthState, fetchLatestBaileysVersion, WAMessageStubType, makeCacheableSignalKeyStore } from '@whiskeysockets/baileys';
 import * as qrcode from 'qrcode-terminal';
 import { Boom } from '@hapi/boom';
@@ -284,6 +285,22 @@ export async function getParticipatingGroups(): Promise<Array<{ id: string, subj
 }
 
 export async function sendWhatsAppMessage(jid: string, text: string) {
+    const hash = crypto.createHash('sha256').update(jid + ':' + text).digest('hex');
+    const now = Date.now();
+    if ((globalThis as any).recentSentMessages?.has(hash)) {
+        const lastSent = (globalThis as any).recentSentMessages.get(hash)!;
+        if (now - lastSent < 10 * 60 * 1000) {
+            console.log(`[WhatsApp] 🛑 DEDUPLICATED: Suppressed identical message to ${jid} sent less than 10 minutes ago.`);
+            return { key: { id: "dedup" }, message: {} };
+        }
+    } else if (!(globalThis as any).recentSentMessages) {
+        (globalThis as any).recentSentMessages = new Map<string, number>();
+    }
+    (globalThis as any).recentSentMessages.set(hash, now);
+    
+    for (const [k, v] of (globalThis as any).recentSentMessages.entries()) {
+        if (now - v > 15 * 60 * 1000) (globalThis as any).recentSentMessages.delete(k);
+    }
     if (!globalSocket) throw new Error("WhatsApp socket not connected");
 
     // For group messages, clear stale sender-key-memory to force fresh

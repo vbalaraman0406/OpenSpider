@@ -1,3 +1,4 @@
+import * as crypto from 'crypto';
 import { google } from 'googleapis';
 import * as fs from 'fs';
 import * as path from 'path'; export class GmailService {
@@ -167,6 +168,22 @@ import * as path from 'path'; export class GmailService {
       this.init();
 
       const raw = this.buildRawMessage(params);
+      const hash = crypto.createHash('sha256').update(`${params.to}:${params.subject}:${params.body}`).digest('hex');
+      const now = Date.now();
+      if ((globalThis as any).recentSentEmails?.has(hash)) {
+          const lastSent = (globalThis as any).recentSentEmails.get(hash)!;
+          if (now - lastSent < 10 * 60 * 1000) {
+              console.log(`[GmailService] 🛑 DEDUPLICATED: Suppressed identical email to ${params.to} sent less than 10 minutes ago.`);
+              return { success: true, messageId: 'deduplicated' };
+          }
+      } else if (!(globalThis as any).recentSentEmails) {
+          (globalThis as any).recentSentEmails = new Map<string, number>();
+      }
+      (globalThis as any).recentSentEmails.set(hash, now);
+      
+      for (const [k, v] of (globalThis as any).recentSentEmails.entries()) {
+          if (now - v > 15 * 60 * 1000) (globalThis as any).recentSentEmails.delete(k);
+      }
 
       const response = await this.gmail.users.messages.send({
         userId: 'me',
