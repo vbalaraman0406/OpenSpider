@@ -317,3 +317,39 @@ workspace/
 8. **Keep OpenSpider local** — The dashboard runs on `localhost:4001` by default. If you must expose it externally, use a reverse proxy with TLS and keep the API key secret.
 
 9. **Don't trust page content** — When the agent reads content from the web, it is sanitized automatically. Avoid disabling or bypassing this guard.
+# OpenSpider Role-Based Access Control (RBAC) Security Upgrade
+
+The OpenSpider autonomous agent network has been fundamentally hardened with a strict, multi-tiered access control gateway based on WhatsApp sender profiles. This closes a critical vulnerability inherited from OpenClaw where any whitelisted contact was given root-level execution capability.
+
+## What Was Deployed
+
+1. **Dashboard UI Manager (`dashboard/src/components/WhatsAppSecurity.tsx`)**
+   The browser-based management dashboard has been upgraded to natively manage RBAC routing. Next to every whitelisted Contact and Group, you will find toggles to restrict them to **Guest** policies, or elevate them to **Admin** policies. New contacts added via the UI default to `guest` to ensure opt-in security.
+
+2. **Gateway Interception (`src/whatsapp.ts`)**
+   We updated the WhatsApp ingestion engine to parse the new `role: 'admin' | 'guest'` state from the Dashboard, injecting this context before routing an interaction to the LLM Manager.
+
+3. **Manager Context Relay (`src/agents/ManagerAgent.ts`)**
+   The Manager Agent now acts as an authoritative proxy, receiving the `issuerRole` directly from the secure gateway and forcing it onto any `WorkerAgent` spun up during that specific chat session.
+
+4. **Total Tool Firewalling (`src/agents/WorkerAgent.ts`)**
+   The Worker agent evaluates the inherited `issuerRole`. If the user is flagged as a `guest`, it **instantly strips the following destructive host-level tools** from the LLM's capability context window before the LLM is even prompted:
+   - `run_command`
+   - `write_script`
+   - `execute_script`
+   - `update_whatsapp_whitelist`
+   - `schedule_task`
+   - `create_workflow`
+   - `create_event_trigger`
+
+## How To Use It
+
+By default, the legacy OpenSpider policy holds: if `role` is missing from disk, you are assumed to be an `admin`. 
+To add restricted friends, family, or colleagues into your WhatsApp instance:
+1. Open your **localhost OpenSpider Dashboard** in your browser.
+2. Navigate to the **WhatsApp Security & Flow** tab.
+3. Click the `Guest` toggle next to their profile. 
+4. Hit **Apply Security Rules**.
+
+> [!WARNING]
+> Guests can still chat conversationally and trigger safe, read-only tools like web browsing. They fundamentally *cannot* execute scripts, launch bash commands, alter file contents, or mutate cron schedules!

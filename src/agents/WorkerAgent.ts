@@ -16,8 +16,9 @@ export class WorkerAgent {
     private role: string;
     private cancelChecker: (() => boolean) | undefined;
     private isCron: boolean;
+    private issuerRole: 'admin' | 'guest';
 
-    constructor(llm: LLMProvider, role: string, cancelChecker?: () => boolean, isCron: boolean = false, analysisLlm?: LLMProvider) {
+    constructor(llm: LLMProvider, role: string, cancelChecker?: () => boolean, isCron: boolean = false, analysisLlm?: LLMProvider, issuerRole: 'admin' | 'guest' = 'admin') {
         this.llm = llm;
         this.analysisLlm = analysisLlm;
         this.executor = new DynamicExecutor();
@@ -25,6 +26,7 @@ export class WorkerAgent {
         this.role = role;
         this.cancelChecker = cancelChecker;
         this.isCron = isCron;
+        this.issuerRole = issuerRole;
     }
 
     async executeTask(instruction: string, context: string[], imagesBase64: string[] = []): Promise<string> {
@@ -59,7 +61,18 @@ export class WorkerAgent {
         const compiledPersonaPrompt = persona.compileSystemPrompt();
 
         const caps = persona.getCapabilities();
-        const allowedTools = caps?.allowedTools || ['read_file', 'write_file', 'execute_command', 'search_codebase'];
+        let allowedTools = caps?.allowedTools || ['read_file', 'write_file', 'execute_command', 'search_codebase'];
+
+        // RBAC Enforcement: Strip destructive and local interaction tools from Guest users
+        if (this.issuerRole === 'guest') {
+            const blockedGuestTools = [
+                'run_command', 'write_script', 'execute_script', 'create_workflow', 
+                'create_event_trigger', 'schedule_task', 'update_whatsapp_whitelist', 
+                'send_email'
+            ];
+            allowedTools = allowedTools.filter((t: string) => !blockedGuestTools.includes(t));
+        }
+
         // Ensure final_answer is always available so the agent can conclude
         if (!allowedTools.includes('final_answer')) allowedTools.push('final_answer');
 

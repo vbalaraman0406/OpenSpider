@@ -95,7 +95,7 @@ export function WhatsAppSecurity({ isRunning }: { isRunning: boolean }) {
                 (entry.number || '').replace(/\D/g, '') === val
             );
             if (!exists) {
-                setConfig({ ...config, allowedDMs: [...config.allowedDMs, { number: val, mode: 'mention' }] });
+                setConfig({ ...config, allowedDMs: [...config.allowedDMs, { number: val, mode: 'mention', role: 'guest' }] });
             }
             setDmInput('');
             setDmError('');
@@ -113,6 +113,13 @@ export function WhatsAppSecurity({ isRunning }: { isRunning: boolean }) {
         });
     };
 
+    const setDmRole = (number: string, role: string) => {
+        setConfig({
+            ...config,
+            allowedDMs: config.allowedDMs.map((entry: any) => (entry.number || entry) === number ? { ...entry, role } : entry)
+        });
+    };
+
     const addGroupTag = (e?: React.KeyboardEvent, val?: string) => {
         const targetValue = val || (e ? groupInput.trim() : '');
         if ((!e || e.key === 'Enter') && targetValue !== '') {
@@ -120,7 +127,7 @@ export function WhatsAppSecurity({ isRunning }: { isRunning: boolean }) {
             const jid = targetValue.includes('@') ? targetValue : `${targetValue}@g.us`;
             const alreadyExists = config.allowedGroups.some((g: any) => g.jid === jid);
             if (!alreadyExists) {
-                setConfig({ ...config, allowedGroups: [...config.allowedGroups, { jid, mode: 'mention' }] });
+                setConfig({ ...config, allowedGroups: [...config.allowedGroups, { jid, mode: 'mention', role: 'guest' }] });
             }
             if (!val) setGroupInput('');
         }
@@ -134,6 +141,13 @@ export function WhatsAppSecurity({ isRunning }: { isRunning: boolean }) {
         setConfig({
             ...config,
             allowedGroups: config.allowedGroups.map((g: any) => g.jid === jid ? { ...g, mode } : g)
+        });
+    };
+
+    const setGroupRole = (jid: string, role: string) => {
+        setConfig({
+            ...config,
+            allowedGroups: config.allowedGroups.map((g: any) => g.jid === jid ? { ...g, role } : g)
         });
     };
 
@@ -236,6 +250,20 @@ export function WhatsAppSecurity({ isRunning }: { isRunning: boolean }) {
                                                                 Always
                                                             </button>
                                                         </div>
+                                                        <div className="flex bg-slate-950 rounded-lg p-0.5 border border-slate-800">
+                                                            <button
+                                                                onClick={() => setDmRole(number, 'guest')}
+                                                                className={`px-3 py-1 text-[10px] uppercase tracking-wider font-bold rounded-md transition-all ${(entry.role === 'guest') ? 'bg-amber-600/20 text-amber-400 border border-amber-500/30 shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
+                                                            >
+                                                                Guest
+                                                            </button>
+                                                            <button
+                                                                onClick={() => setDmRole(number, 'admin')}
+                                                                className={`px-3 py-1 text-[10px] uppercase tracking-wider font-bold rounded-md transition-all ${(entry.role !== 'guest') ? 'bg-rose-600/20 text-rose-400 border border-rose-500/30 shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
+                                                            >
+                                                                Admin
+                                                            </button>
+                                                        </div>
                                                         <button
                                                             onClick={() => removeDmTag(number)}
                                                             className="p-1 text-slate-600 hover:text-red-400 transition-colors"
@@ -329,6 +357,20 @@ export function WhatsAppSecurity({ isRunning }: { isRunning: boolean }) {
                                                                     }`}
                                                             >
                                                                 Listen
+                                                            </button>
+                                                        </div>
+                                                        <div className="flex bg-slate-950 rounded-lg p-0.5 border border-slate-800">
+                                                            <button
+                                                                onClick={() => setGroupRole(group.jid, 'guest')}
+                                                                className={`px-3 py-1 text-[10px] uppercase tracking-wider font-bold rounded-md transition-all ${(group.role === 'guest') ? 'bg-amber-600/20 text-amber-400 border border-amber-500/30 shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
+                                                            >
+                                                                Guest
+                                                            </button>
+                                                            <button
+                                                                onClick={() => setGroupRole(group.jid, 'admin')}
+                                                                className={`px-3 py-1 text-[10px] uppercase tracking-wider font-bold rounded-md transition-all ${(group.role !== 'guest') ? 'bg-rose-600/20 text-rose-400 border border-rose-500/30 shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
+                                                            >
+                                                                Admin
                                                             </button>
                                                         </div>
                                                         <button

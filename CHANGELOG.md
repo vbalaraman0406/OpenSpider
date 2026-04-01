@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/) and this 
 
 ## [Unreleased]
 
+## [2.5.0] - 2026-04-01
+### Added
+- **Native WhatsApp Role-Based Access Control (RBAC)**: Added 'admin' and 'guest' roles to WhatsApp senders. Guests are tightly firewalled from utilizing host system tools like \`run_command\`, \`schedule_task\`, and \`execute_script\`.
+- **Dashboard RBAC UI**: Upgraded the local web dashboard with strict Admin vs. Guest toggles for both Direct Messages and WhatsApp Group Chats. New contacts explicitly default to Guest.
+
 ## [2.4.0] - 2026-04-01
 ### Added
 - **Global Message Deduplication**: Introduced Cryptographic Rolling Hash (SHA-256) at the lowest Node-level pipeline layers (WhatsApp + Gmail) to mathematically prevent bot looping and identical duplicate cron job delivery.

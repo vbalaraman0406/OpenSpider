@@ -978,6 +978,7 @@ export async function startWhatsApp() {
             }
         }
 
+        let issuerRole: 'admin' | 'guest' = 'admin';
         // --- SECURITY FIREWALL ---
         if (isGroup) {
             // Group Policy Check
@@ -998,6 +999,7 @@ export async function startWhatsApp() {
                 const groupMode = typeof matchedGroup === 'string'
                     ? (config.botMode || 'mention')
                     : (matchedGroup.mode || config.botMode || 'mention');
+                issuerRole = (typeof matchedGroup === 'object' && matchedGroup.role === 'guest') ? 'guest' : 'admin';
 
                 // Group Chat Mentions logic (per-group)
                 if (groupMode === 'mention') {
@@ -1202,6 +1204,7 @@ export async function startWhatsApp() {
 
                 // Per-contact mention mode check
                 const contactMode = matchedContact.mode || 'always';
+                issuerRole = (typeof matchedContact === 'object' && matchedContact && matchedContact.role === 'guest') ? 'guest' : 'admin';
                 if (!isNoteToSelf && contactMode === 'mention') {
                     // Check both protobuf @mentions AND plain text @name (users often type @Name without using WhatsApp's suggestion popup)
                     const mentionedJidList = msg.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
@@ -1407,7 +1410,7 @@ export async function startWhatsApp() {
             incrementUserSession();
             let response;
             try {
-                response = await manager.processUserRequest(fullContext, mediaBase64String ? [mediaBase64String] : []);
+                response = await manager.processUserRequest(fullContext, mediaBase64String ? [mediaBase64String] : [], issuerRole);
             } finally {
                 decrementUserSession();
             }
