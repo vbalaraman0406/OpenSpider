@@ -11,6 +11,8 @@ export class AntigravityInternalProvider implements LLMProvider {
     private static readonly MODEL_FALLBACKS: string[] = [
         'claude-opus-4-6-thinking',
         'claude-sonnet-4-6',
+        'gemini-3.1-pro',
+        'gemini-3.0-flash',
         'gemini-2.5-pro',
         'gemini-2.5-flash',
     ];
