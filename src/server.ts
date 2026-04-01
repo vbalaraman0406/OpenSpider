@@ -10,7 +10,7 @@ import { ManagerAgent } from './agents/ManagerAgent';
 import { getProvider } from './llm';
 import { ChatMessage } from './llm/BaseProvider';
 import { logMemory } from './memory';
-import { initScheduler, runJobForcefully, activeCronJobs } from './scheduler';
+import { initScheduler, runJobForcefully, activeCronJobs, incrementUserSession, decrementUserSession } from './scheduler';
 import { logUsage, getUsageSummary } from './usage';
 import { readJobsSync, writeJobsSync } from './CronStore';
 import { PersonaShell } from './agents/PersonaShell';
@@ -375,7 +375,13 @@ export function startServer() {
                     if (uploadedFilePaths.length > 0) {
                         userText += `\n\n[UPLOADED FILES - saved to disk, Workers can read these paths directly]\n${uploadedFilePaths.map(p => `- ${p}`).join('\n')}`;
                     }
-                    const response = await manager.processUserRequest(userText, images);
+                    incrementUserSession();
+                    let response;
+                    try {
+                        response = await manager.processUserRequest(userText, images);
+                    } finally {
+                        decrementUserSession();
+                    }
 
                     // Log agent response to session memory
                     logMemory('Agent', response, 'dashboard');
@@ -562,7 +568,7 @@ export function startServer() {
             const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf-8'));
             const currentVersion = pkg.version;
             const repoUrl = pkg.repository?.url || pkg.repository || '';
-            
+
             // Extract owner/repo from GitHub URL
             const repoMatch = (typeof repoUrl === 'string' ? repoUrl : '').match(/github\.com[/:]([^/]+)\/([^/.]+)/);
             const owner = repoMatch?.[1] || 'vbalaraman0406';
@@ -1069,16 +1075,16 @@ export function startServer() {
         try {
             const { apiKey } = req.body;
             if (!apiKey) return res.status(400).json({ error: 'API key required' });
-            
+
             const response = await fetch('https://api.elevenlabs.io/v1/voices', {
                 headers: { 'xi-api-key': apiKey }
             });
-            
+
             if (!response.ok) {
                 const errorStr = await response.text();
                 return res.status(response.status).json({ error: errorStr });
             }
-            
+
             const data = await response.json();
             res.json(data);
         } catch (e: any) {
@@ -1934,12 +1940,12 @@ Return ONLY the raw Python code.`;
             if (jobIndex === -1) return res.status(404).json({ error: 'Job not found' });
 
             jobs[jobIndex] = { ...jobs[jobIndex], ...req.body };
-            
+
             // Clean up: empty strings should delete the key (e.g. clearing modelOverride or preferredTime)
             const updatedJob = jobs[jobIndex]!;
             if (updatedJob.modelOverride === '') delete updatedJob.modelOverride;
             if (updatedJob.preferredTime === '') delete updatedJob.preferredTime;
-            
+
             writeJobsSync(jobs);
             res.json({ success: true, job: jobs[jobIndex] });
         } catch (e: any) {

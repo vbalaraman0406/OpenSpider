@@ -13,11 +13,16 @@ export function getProvider(modelNameOverride?: string): LLMProvider {
 
     // Helper to instantiate the actual provider
     const instantiateProvider = (p: string): LLMProvider => {
-        switch (p) {
+        let providerType = p;
+        if (p === 'gemini-2.5-flash' || p === 'gemini-2.5-pro' || p.includes('claude-')) {
+            providerType = 'antigravity-internal';
+        }
+
+        switch (providerType) {
             case 'antigravity':
                 return new AntigravityProvider();
             case 'antigravity-internal':
-                return new AntigravityInternalProvider();
+                return new AntigravityInternalProvider(p !== providerType ? p : undefined);
             case 'ollama':
                 return new OllamaProvider();
             case 'openai':

@@ -82,7 +82,18 @@ interface QueuedContext {
 const jobQueue: QueuedContext[] = [];
 let isProcessingQueue = false;
 
+export let activeUserSessions = 0;
+export function incrementUserSession() {
+    activeUserSessions++;
+}
+export function decrementUserSession() {
+    activeUserSessions--;
+    if (activeUserSessions < 0) activeUserSessions = 0;
+    if (activeUserSessions === 0) processJobQueue();
+}
+
 async function processJobQueue() {
+    if (activeUserSessions > 0) return;
     if (isProcessingQueue || jobQueue.length === 0) return;
     isProcessingQueue = true;
 
@@ -146,7 +157,7 @@ async function executeQueuedContext(ctx: QueuedContext) {
         const result = await manager.processUserRequest(ctx.cronPrompt);
         activeCronJobs--;
         console.log(`[Scheduler] ${prefix} "${job.description}" completed. Result:\n${result}`);
-        
+
         console.log(JSON.stringify({
             type: 'cron_result',
             jobName: job.description,

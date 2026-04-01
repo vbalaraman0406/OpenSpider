@@ -172,7 +172,7 @@ function sanitizePageContent(content: string): string {
 
 export interface BrowseAction {
     /** The sub-action to perform */
-    action: 'navigate' | 'click' | 'type' | 'read_content' | 'screenshot' | 'wait_for_user' | 'scroll' | 'close' | 'execute_js' | 'list_elements';
+    action: 'navigate' | 'click' | 'type' | 'type_and_enter' | 'read_content' | 'screenshot' | 'wait_for_user' | 'scroll' | 'close' | 'execute_js' | 'list_elements';
     /** URL to navigate to (for 'navigate') */
     url?: string | undefined;
     /** CSS selector for click/type targets */
@@ -295,6 +295,8 @@ export class BrowserTool {
                     return await this.doClick(action.selector || '');
                 case 'type':
                     return await this.doType(action.selector || '', action.text || '');
+                case 'type_and_enter':
+                    return await this.doTypeAndEnter(action.selector || '', action.text || '');
                 case 'read_content':
                     return await this.doReadContent(action.selector);
                 case 'screenshot':
@@ -562,13 +564,60 @@ export class BrowserTool {
         // ─── TIER 3: Headless Playwright ───
         try {
             const page = await this.ensurePage();
-            await page.fill(selector, text, { timeout: 10000 });
+            const loc = page.locator(selector).first();
+            await loc.fill('', { timeout: 10000 });
+            await loc.pressSequentially(text, { delay: 75 });
             await humanDelay(300, 600);
             logBrowserAccess({ action: 'type', target: selector, path: 'headless', result: 'ok', ms: Date.now() - startMs });
             return `Typed "${text}" into ${selector} [via headless browser]`;
         } catch (e: any) {
             logBrowserAccess({ action: 'type', target: selector, path: 'headless', result: 'error', ms: Date.now() - startMs, error: e.message });
             return `⚠️ Type failed on all browser paths. Target: ${selector}. Error: ${e.message}`;
+        }
+    }
+
+    private async doTypeAndEnter(selector: string, text: string): Promise<string> {
+        if (!selector) return 'Error: No selector provided for type action.';
+        if (!text) return 'Error: No text provided for type action.';
+        const startMs = Date.now();
+
+        // ─── TIER 1: Try Chrome Relay ───
+        if (relayBridge.isRelayConnected()) {
+            try {
+                const result = await relayBridge.typeAndEnter(selector, text);
+                logBrowserAccess({ action: 'type_and_enter', target: selector, path: 'relay', result: 'ok', ms: Date.now() - startMs });
+                return result;
+            } catch (e: any) {
+                console.warn(`[BrowserTool] Relay typeAndEnter failed: ${e.message}`);
+            }
+        }
+
+        // ─── TIER 2: Wait for relay reconnect ───
+        const reconnected = await relayBridge.waitForRelay(15000);
+        if (reconnected) {
+            try {
+                const result = await relayBridge.typeAndEnter(selector, text);
+                logBrowserAccess({ action: 'type_and_enter', target: selector, path: 'relay_retry', result: 'ok', ms: Date.now() - startMs });
+                return result;
+            } catch (e: any) {
+                console.warn(`[BrowserTool] Relay retry typeAndEnter failed: ${e.message}`);
+            }
+        }
+
+        // ─── TIER 3: Headless Playwright ───
+        try {
+            const page = await this.ensurePage();
+            const loc = page.locator(selector).first();
+            await loc.fill('', { timeout: 10000 });
+            await loc.pressSequentially(text, { delay: 75 });
+            await humanDelay(300, 600);
+            await loc.press('Enter', { delay: 100 });
+            await humanDelay(300, 600);
+            logBrowserAccess({ action: 'type_and_enter', target: selector, path: 'headless', result: 'ok', ms: Date.now() - startMs });
+            return `Typed "${text}" into ${selector} and pressed Enter [via headless browser]`;
+        } catch (e: any) {
+            logBrowserAccess({ action: 'type_and_enter', target: selector, path: 'headless', result: 'error', ms: Date.now() - startMs, error: e.message });
+            return `⚠️ TypeAndEnter failed on all browser paths. Target: ${selector}. Error: ${e.message}`;
         }
     }
 

@@ -70,7 +70,7 @@ export class WorkerAgent {
             'search_skills': '- search_skills: { "content": "stock market" } (Search the skills catalog for existing curated scripts. ALWAYS search before writing a new script!)',
             'create_workflow': '- create_workflow: { "filename": "id", "content": "Name", "args": "JSON steps array" } (Create a reusable multi-step pipeline.)',
             'create_event_trigger': '- create_event_trigger: { "filename": "id", "content": "Name", "args": "JSON config" } (Create an event trigger.)',
-            'browse_web': '- browse_web: Open a REAL browser.\n  To use browse_web, set "command" to the sub-action and use other fields:\n    - Navigate: { "action": "browse_web", "command": "navigate", "url": "https://google.com" }\n    - Click:    { "action": "browse_web", "command": "click", "args": "button.submit" }\n    - Type:     { "action": "browse_web", "command": "type", "args": "input[name=q]", "content": "search query" }\n    - Read:     { "action": "browse_web", "command": "read_content" }\n    - Read targeted section: { "action": "browse_web", "command": "read_content", "args": "main" } (Use CSS selector to focus extraction)\n    - Scroll:   { "action": "browse_web", "command": "scroll", "args": "down" }\n    - List:     { "action": "browse_web", "command": "list_elements" }\n    - Run JS:   { "action": "browse_web", "command": "execute_js", "content": "return document.querySelector(\'.score\').innerText" }\n    - Close:    { "action": "browse_web", "command": "close" }',
+            'browse_web': '- browse_web: Open a REAL browser.\n  To use browse_web, set "command" to the sub-action and use other fields:\n    - Navigate: { "action": "browse_web", "command": "navigate", "url": "https://google.com" }\n    - Click:    { "action": "browse_web", "command": "click", "args": "button.submit" }\n    - Type:     { "action": "browse_web", "command": "type", "args": "input[name=q]", "content": "search query" } (Do NOT use for chatbots)\n    - Type & Enter: { "action": "browse_web", "command": "type_and_enter", "args": "input.chat", "content": "hello" } (CRITICAL: MUST use this for all chatbots! NEVER just click chatboxes!)\n    - Read:     { "action": "browse_web", "command": "read_content" }\n    - Read targeted section: { "action": "browse_web", "command": "read_content", "args": "main" } (Use CSS selector to focus extraction)\n    - Scroll:   { "action": "browse_web", "command": "scroll", "args": "down" }\n    - List:     { "action": "browse_web", "command": "list_elements" }\n    - Run JS:   { "action": "browse_web", "command": "execute_js", "content": "return document.querySelector(\'.score\').innerText" }\n    - Close:    { "action": "browse_web", "command": "close" }',
             'wait_for_user': '- wait_for_user: { "message": "Please log in to your account" } (Pause and ask the user to do something in the browser.)',
             'schedule_task': '- schedule_task: { "command": "24", "content": "prompt", "filename": "job name" } (Schedule OR UPDATE a recurring task.)',
             'message_agent': '- message_agent: { "target": "Role Name", "message": "Text to send" } (Delegate a sub-task to a specialized sub-agent)',
@@ -303,10 +303,10 @@ ${context.join('\n')}
 
             if (response.action === 'final_answer') {
                 const draftResult = response.result || response.summary_of_findings || "Task completed without explicit result.";
-                
+
                 if (this.analysisLlm) {
                     console.log(`[Worker - ${this.role}] 🧠 Invoking dedicated Analysis Model (${this.analysisLlm.providerName || 'unknown'}) for final synthesis...`);
-                    
+
                     try {
                         // Create a dynamically optimized copy of the context history
                         // We strip massive HTML blobs and raw data dumps so the thinking model only sees the high-level reasoning path
@@ -321,9 +321,9 @@ ${context.join('\n')}
                                     try {
                                         const jsonStr = msg.content.replace('[PRIOR AGENT ACTION HISTORY]: \n', '');
                                         const parsed = JSON.parse(jsonStr);
-                                        return { 
-                                            role: 'user', 
-                                            content: `[AGENT ACTION]: ${parsed.action}\n[THOUGHT]: ${parsed.thought}\n[FINDING]: ${parsed.summary_of_findings}` 
+                                        return {
+                                            role: 'user',
+                                            content: `[AGENT ACTION]: ${parsed.action}\n[THOUGHT]: ${parsed.thought}\n[FINDING]: ${parsed.summary_of_findings}`
                                         } as any;
                                     } catch (e) {
                                         // Fallback
@@ -333,9 +333,9 @@ ${context.join('\n')}
                             return msg;
                         });
 
-                        analysisMessages.push({ 
-                            role: 'user', 
-                            content: `SYSTEM INSTRUCTION: You are the specialized Analysis & Synthesis model for this task. The primary task execution agent has concluded its data gathering phase and outputted the following raw findings:\n\n---\n${draftResult}\n---\n\nYour job is to read through the entire action history above (which has been optimized to only show the agent's intent and conclusions), verify the findings, and rewrite the final response to be extremely comprehensive, accurate, and formatted beautifully in Markdown tables or lists as requested by the initial prompt. Do NOT wrap your output in JSON, just output direct markdown.` 
+                        analysisMessages.push({
+                            role: 'user',
+                            content: `SYSTEM INSTRUCTION: You are the specialized Analysis & Synthesis model for this task. The primary task execution agent has concluded its data gathering phase and outputted the following raw findings:\n\n---\n${draftResult}\n---\n\nYour job is to read through the entire action history above (which has been optimized to only show the agent's intent and conclusions), verify the findings, and rewrite the final response to be extremely comprehensive, accurate, and formatted beautifully in Markdown tables or lists as requested by the initial prompt. Do NOT wrap your output in JSON, just output direct markdown.`
                         });
 
                         const analysisResponse = await this.analysisLlm.generateResponse(analysisMessages, this.role);
@@ -345,17 +345,17 @@ ${context.join('\n')}
                         return draftResult;
                     }
                 }
-                
+
                 return draftResult;
             }
 
             let toolOutput = "";
             let cacheHit = false;
-            
+
             const CACHEABLE_ACTIONS = ['execute_script', 'run_command', 'search_skills', 'read_emails'];
             const CACHEABLE_BROWSER = ['read_content', 'list_elements'];
-            const isCacheable = CACHEABLE_ACTIONS.includes(response.action) || 
-                                (response.action === 'browse_web' && CACHEABLE_BROWSER.includes(response.command || ''));
+            const isCacheable = CACHEABLE_ACTIONS.includes(response.action) ||
+                (response.action === 'browse_web' && CACHEABLE_BROWSER.includes(response.command || ''));
             const cacheKey = JSON.stringify([response.action, response.command, response.args, response.filename, response.content, response.target, response.url]);
 
             if (isCacheable) {
@@ -369,652 +369,652 @@ ${context.join('\n')}
 
             if (!cacheHit) {
                 try {
-                if (response.action === 'run_command' && response.command) {
-                    console.log(`[Worker - ${this.role}] Running command: ${response.command}`);
-                    const res = await this.executor.runCommand(response.command);
-                    toolOutput = `stdout: ${res.stdout}\nstderr: ${res.stderr}\nerror: ${res.error || 'none'}`;
-                } else if (response.action === 'write_script' && response.filename && (response.content || response.result)) {
-                    const content = response.content || response.result;
-                    console.log(`[Worker - ${this.role}] Writing script: ${response.filename}`);
-                    toolOutput = await this.executor.writeScript(response.filename, content as string);
-                } else if (response.action === 'execute_script' && response.filename) {
-                    console.log(`[Worker - ${this.role}] Executing script: ${response.filename}`);
-                    const res = await this.executor.executeScript(response.filename, response.args);
-                    toolOutput = `stdout: ${res.stdout}\nstderr: ${res.stderr}\nerror: ${res.error || 'none'}`;
-                } else if (response.action === 'search_skills' && response.content) {
-                    console.log(`[Worker - ${this.role}] Searching skills catalog: ${response.content}`);
-                    const { SkillsCatalog } = await import('../skills/SkillsCatalog');
-                    const catalog = new SkillsCatalog();
-                    const results = catalog.search(response.content);
-                    if (results.length === 0) {
-                        toolOutput = `No curated skills found matching "${response.content}". You may write a new script.`;
-                    } else {
-                        toolOutput = `Found ${results.length} curated skill(s):\n` + results.map(s =>
-                            `• ${s.name} (${s.language}) — ${s.description}\n  Usage: ${s.instructions}`
-                        ).join('\n');
-                    }
-                } else if (response.action === 'create_workflow' && response.filename && response.content && response.args) {
-                    console.log(`[Worker - ${this.role}] Creating workflow: ${response.content}`);
-                    try {
-                        const { WorkflowEngine } = await import('../WorkflowEngine');
-                        const steps = JSON.parse(response.args);
-                        const workflow = WorkflowEngine.saveWorkflow({
-                            id: response.filename,
-                            name: response.content,
-                            status: 'enabled',
-                            trigger: { type: 'manual' },
-                            steps: steps,
-                            createdAt: new Date().toISOString()
-                        });
-                        toolOutput = `Workflow "${workflow.name}" created successfully with ${workflow.steps.length} steps. ID: ${workflow.id}. View it in the Dashboard → Workflows tab.`;
-                    } catch (err: any) {
-                        toolOutput = `Failed to create workflow: ${err.message}`;
-                    }
-                } else if (response.action === 'create_event_trigger' && response.filename && response.content && response.args) {
-                    console.log(`[Worker - ${this.role}] Creating event trigger: ${response.content}`);
-                    try {
-                        const { EventBus } = await import('../EventBus');
-                        const config = JSON.parse(response.args);
-                        const trigger = EventBus.saveTrigger({
-                            id: response.filename,
-                            name: response.content,
-                            status: 'enabled',
-                            source: config.source,
-                            filter: config.filter || {},
-                            action: config.action,
-                            createdAt: new Date().toISOString(),
-                            fireCount: 0
-                        });
-                        toolOutput = `Event trigger "${trigger.name}" created successfully. Source: ${trigger.source}, Action: ${trigger.action.type}. View it in the Dashboard → Event Triggers tab.`;
-                    } catch (err: any) {
-                        toolOutput = `Failed to create event trigger: ${err.message}`;
-                    }
-                } else if (response.action === 'message_agent' && response.target && response.message) {
-                    console.log(`[Worker - ${this.role}] Delegating sub-task via message_agent to peer ${response.target}...`);
-                    console.log(JSON.stringify({
-                        type: 'agent_flow',
-                        event: 'task_start',
-                        taskId: `sub-${Date.now()}`,
-                        role: response.target,
-                        instruction: response.message
-                    }));
-
-                    // Recursively instantiate a Worker passing along the contextual dialogue
-                    const subWorker = new WorkerAgent(this.llm, response.target);
-                    const subWorkerContext = [...context, `Message from peer ${this.role}: ${response.message}`];
-                    const subResult = await subWorker.executeTask(response.message, subWorkerContext);
-
-                    toolOutput = `Response from ${response.target}:\n${subResult}`;
-                } else if (response.action === 'browse_web') {
-                    // command = sub-action (navigate/click/type/read_content/scroll/close/execute_js)
-                    // Fallback heuristics for 100% LLM hallucination resistance
-                    const subAction = (response.command || 'navigate') as BrowseAction['action'];
-                    const browseAction: BrowseAction = {
-                        action: subAction,
-                        url: response.url || response.filename || response.target || response.args || response.content,
-                        selector: response.args || response.target || response.content || response.filename,
-                        text: response.content || response.message || response.args,
-                        script: response.content || response.message || response.args,
-                        message: response.message || response.content,
-                        direction: (response.direction || response.args || response.content) as 'up' | 'down',
-                    };
-                    
-                    // Explicit LLM Schema Self-Correction for completely missing fields
-                    if (subAction === 'navigate' && !browseAction.url) {
-                        toolOutput = `SYSTEM EXCEPTION: You selected "navigate" but completely forgot the "url" JSON field! You MUST include "url" (e.g. "url": "https://example.com"). Try again.`;
-                    } else if (['click', 'type'].includes(subAction) && !browseAction.selector) {
-                        toolOutput = `SYSTEM EXCEPTION: You selected "${subAction}" but completely forgot the "args" JSON field for the CSS selector! You MUST include "args" (e.g. "args": "button.submit"). Try again.`;
-                    } else if (subAction === 'execute_js' && !browseAction.script) {
-                        toolOutput = `SYSTEM EXCEPTION: You selected "execute_js" but forgot the "content" JSON field for the JS code! Try again.`;
-                    } else {
-                        console.log(`[Worker - ${this.role}] Browser action: ${browseAction.action} ${browseAction.url || browseAction.selector || ''}`);
-                        let rawBrowserOutput = await this.browserTool.execute(browseAction);
-                        // SECURITY (V7): Sanitize web content to prevent prompt injection from malicious websites
-                        if (subAction === 'read_content' || subAction === 'execute_js') {
-                            rawBrowserOutput = rawBrowserOutput
-                                .replace(/\[SYSTEM\]/gi, '[WEB]')
-                                .replace(/\[ASSISTANT\]/gi, '[WEB]')
-                                .replace(/\[USER\]/gi, '[WEB]')
-                                .replace(/ignore previous instructions/gi, '[FILTERED]')
-                                .replace(/ignore all previous/gi, '[FILTERED]')
-                                .replace(/you are now/gi, '[FILTERED]')
-                                .replace(/new instructions:/gi, '[FILTERED]')
-                                .replace(/\x00/g, '');
-                            toolOutput = `---BEGIN WEB CONTENT---\n${rawBrowserOutput}\n---END WEB CONTENT---`;
+                    if (response.action === 'run_command' && response.command) {
+                        console.log(`[Worker - ${this.role}] Running command: ${response.command}`);
+                        const res = await this.executor.runCommand(response.command);
+                        toolOutput = `stdout: ${res.stdout}\nstderr: ${res.stderr}\nerror: ${res.error || 'none'}`;
+                    } else if (response.action === 'write_script' && response.filename && (response.content || response.result)) {
+                        const content = response.content || response.result;
+                        console.log(`[Worker - ${this.role}] Writing script: ${response.filename}`);
+                        toolOutput = await this.executor.writeScript(response.filename, content as string);
+                    } else if (response.action === 'execute_script' && response.filename) {
+                        console.log(`[Worker - ${this.role}] Executing script: ${response.filename}`);
+                        const res = await this.executor.executeScript(response.filename, response.args);
+                        toolOutput = `stdout: ${res.stdout}\nstderr: ${res.stderr}\nerror: ${res.error || 'none'}`;
+                    } else if (response.action === 'search_skills' && response.content) {
+                        console.log(`[Worker - ${this.role}] Searching skills catalog: ${response.content}`);
+                        const { SkillsCatalog } = await import('../skills/SkillsCatalog');
+                        const catalog = new SkillsCatalog();
+                        const results = catalog.search(response.content);
+                        if (results.length === 0) {
+                            toolOutput = `No curated skills found matching "${response.content}". You may write a new script.`;
                         } else {
-                            toolOutput = rawBrowserOutput;
+                            toolOutput = `Found ${results.length} curated skill(s):\n` + results.map(s =>
+                                `• ${s.name} (${s.language}) — ${s.description}\n  Usage: ${s.instructions}`
+                            ).join('\n');
                         }
-                    }
-                } else if (response.action === 'wait_for_user') {
-                    const waitMessage = response.message || 'Please complete the required action in the browser.';
-                    console.log(`[Worker - ${this.role}] Requesting user interaction: ${waitMessage}`);
-                    toolOutput = await this.browserTool.execute({ action: 'wait_for_user', message: waitMessage });
-                } else if (response.action === 'schedule_task') {
-                    // command = interval in hours OR "preferredTime:HH:MM" for time-of-day scheduling
-                    // content = the prompt, filename = job name (used as upsert key)
-                    const rawCommand = (response.command || '').trim();
-                    const MIN_INTERVAL_HOURS = 0.25; // 15 minutes minimum to prevent LLM spam
+                    } else if (response.action === 'create_workflow' && response.filename && response.content && response.args) {
+                        console.log(`[Worker - ${this.role}] Creating workflow: ${response.content}`);
+                        try {
+                            const { WorkflowEngine } = await import('../WorkflowEngine');
+                            const steps = JSON.parse(response.args);
+                            const workflow = WorkflowEngine.saveWorkflow({
+                                id: response.filename,
+                                name: response.content,
+                                status: 'enabled',
+                                trigger: { type: 'manual' },
+                                steps: steps,
+                                createdAt: new Date().toISOString()
+                            });
+                            toolOutput = `Workflow "${workflow.name}" created successfully with ${workflow.steps.length} steps. ID: ${workflow.id}. View it in the Dashboard → Workflows tab.`;
+                        } catch (err: any) {
+                            toolOutput = `Failed to create workflow: ${err.message}`;
+                        }
+                    } else if (response.action === 'create_event_trigger' && response.filename && response.content && response.args) {
+                        console.log(`[Worker - ${this.role}] Creating event trigger: ${response.content}`);
+                        try {
+                            const { EventBus } = await import('../EventBus');
+                            const config = JSON.parse(response.args);
+                            const trigger = EventBus.saveTrigger({
+                                id: response.filename,
+                                name: response.content,
+                                status: 'enabled',
+                                source: config.source,
+                                filter: config.filter || {},
+                                action: config.action,
+                                createdAt: new Date().toISOString(),
+                                fireCount: 0
+                            });
+                            toolOutput = `Event trigger "${trigger.name}" created successfully. Source: ${trigger.source}, Action: ${trigger.action.type}. View it in the Dashboard → Event Triggers tab.`;
+                        } catch (err: any) {
+                            toolOutput = `Failed to create event trigger: ${err.message}`;
+                        }
+                    } else if (response.action === 'message_agent' && response.target && response.message) {
+                        console.log(`[Worker - ${this.role}] Delegating sub-task via message_agent to peer ${response.target}...`);
+                        console.log(JSON.stringify({
+                            type: 'agent_flow',
+                            event: 'task_start',
+                            taskId: `sub-${Date.now()}`,
+                            role: response.target,
+                            instruction: response.message
+                        }));
 
-                    // Parse preferredTime syntax: "preferredTime:07:00"
-                    let preferredTime: string | undefined;
-                    let intervalHours: number | undefined;
-                    let scheduleExplicitlyProvided = false;
-                    const preferredTimeMatch = rawCommand.match(/^preferredTime:(\d{1,2}:\d{2})$/i);
-                    if (preferredTimeMatch && preferredTimeMatch[1]) {
-                        preferredTime = preferredTimeMatch[1];
-                        scheduleExplicitlyProvided = true;
-                    } else if (rawCommand && rawCommand !== '24') {
-                        // Only set interval if explicitly provided AND not the default
-                        const rawInterval = parseFloat(rawCommand);
-                        if (!isNaN(rawInterval) && rawInterval >= MIN_INTERVAL_HOURS) {
-                            intervalHours = rawInterval;
+                        // Recursively instantiate a Worker passing along the contextual dialogue
+                        const subWorker = new WorkerAgent(this.llm, response.target);
+                        const subWorkerContext = [...context, `Message from peer ${this.role}: ${response.message}`];
+                        const subResult = await subWorker.executeTask(response.message, subWorkerContext);
+
+                        toolOutput = `Response from ${response.target}:\n${subResult}`;
+                    } else if (response.action === 'browse_web') {
+                        // command = sub-action (navigate/click/type/read_content/scroll/close/execute_js)
+                        // Fallback heuristics for 100% LLM hallucination resistance
+                        const subAction = (response.command || 'navigate') as BrowseAction['action'];
+                        const browseAction: BrowseAction = {
+                            action: subAction,
+                            url: response.url || response.filename || response.target || response.args || response.content,
+                            selector: response.args || response.target || response.content || response.filename,
+                            text: response.content || response.message || response.args,
+                            script: response.content || response.message || response.args,
+                            message: response.message || response.content,
+                            direction: (response.direction || response.args || response.content) as 'up' | 'down',
+                        };
+
+                        // Explicit LLM Schema Self-Correction for completely missing fields
+                        if (subAction === 'navigate' && !browseAction.url) {
+                            toolOutput = `SYSTEM EXCEPTION: You selected "navigate" but completely forgot the "url" JSON field! You MUST include "url" (e.g. "url": "https://example.com"). Try again.`;
+                        } else if (['click', 'type'].includes(subAction) && !browseAction.selector) {
+                            toolOutput = `SYSTEM EXCEPTION: You selected "${subAction}" but completely forgot the "args" JSON field for the CSS selector! You MUST include "args" (e.g. "args": "button.submit"). Try again.`;
+                        } else if (subAction === 'execute_js' && !browseAction.script) {
+                            toolOutput = `SYSTEM EXCEPTION: You selected "execute_js" but forgot the "content" JSON field for the JS code! Try again.`;
+                        } else {
+                            console.log(`[Worker - ${this.role}] Browser action: ${browseAction.action} ${browseAction.url || browseAction.selector || ''}`);
+                            let rawBrowserOutput = await this.browserTool.execute(browseAction);
+                            // SECURITY (V7): Sanitize web content to prevent prompt injection from malicious websites
+                            if (subAction === 'read_content' || subAction === 'execute_js') {
+                                rawBrowserOutput = rawBrowserOutput
+                                    .replace(/\[SYSTEM\]/gi, '[WEB]')
+                                    .replace(/\[ASSISTANT\]/gi, '[WEB]')
+                                    .replace(/\[USER\]/gi, '[WEB]')
+                                    .replace(/ignore previous instructions/gi, '[FILTERED]')
+                                    .replace(/ignore all previous/gi, '[FILTERED]')
+                                    .replace(/you are now/gi, '[FILTERED]')
+                                    .replace(/new instructions:/gi, '[FILTERED]')
+                                    .replace(/\x00/g, '');
+                                toolOutput = `---BEGIN WEB CONTENT---\n${rawBrowserOutput}\n---END WEB CONTENT---`;
+                            } else {
+                                toolOutput = rawBrowserOutput;
+                            }
+                        }
+                    } else if (response.action === 'wait_for_user') {
+                        const waitMessage = response.message || 'Please complete the required action in the browser.';
+                        console.log(`[Worker - ${this.role}] Requesting user interaction: ${waitMessage}`);
+                        toolOutput = await this.browserTool.execute({ action: 'wait_for_user', message: waitMessage });
+                    } else if (response.action === 'schedule_task') {
+                        // command = interval in hours OR "preferredTime:HH:MM" for time-of-day scheduling
+                        // content = the prompt, filename = job name (used as upsert key)
+                        const rawCommand = (response.command || '').trim();
+                        const MIN_INTERVAL_HOURS = 0.25; // 15 minutes minimum to prevent LLM spam
+
+                        // Parse preferredTime syntax: "preferredTime:07:00"
+                        let preferredTime: string | undefined;
+                        let intervalHours: number | undefined;
+                        let scheduleExplicitlyProvided = false;
+                        const preferredTimeMatch = rawCommand.match(/^preferredTime:(\d{1,2}:\d{2})$/i);
+                        if (preferredTimeMatch && preferredTimeMatch[1]) {
+                            preferredTime = preferredTimeMatch[1];
                             scheduleExplicitlyProvided = true;
+                        } else if (rawCommand && rawCommand !== '24') {
+                            // Only set interval if explicitly provided AND not the default
+                            const rawInterval = parseFloat(rawCommand);
+                            if (!isNaN(rawInterval) && rawInterval >= MIN_INTERVAL_HOURS) {
+                                intervalHours = rawInterval;
+                                scheduleExplicitlyProvided = true;
+                            }
+                        } else if (rawCommand === '24') {
+                            // Default value — only use for NEW jobs, not updates
+                            intervalHours = 24;
                         }
-                    } else if (rawCommand === '24') {
-                        // Default value — only use for NEW jobs, not updates
-                        intervalHours = 24;
-                    }
 
-                    const taskPrompt = (response.content || response.message || '').substring(0, 2000);
-                    const jobName = (response.filename || 'Scheduled Task').substring(0, 200);
+                        const taskPrompt = (response.content || response.message || '').substring(0, 2000);
+                        const jobName = (response.filename || 'Scheduled Task').substring(0, 200);
 
-                    if (!taskPrompt) {
-                        toolOutput = 'Error: No task prompt provided for schedule_task. Provide the task description in the "content" field.';
-                    } else {
-                        try {
-                            let result = '';
-                            await withJobs((jobs: CronJob[]) => {
-                                // Upsert: check for existing job with the same name (case-insensitive)
-                                const existingIndex = jobs.findIndex(
-                                    (j: any) => j.description.toLowerCase() === jobName.toLowerCase()
-                                );
-
-                                if (existingIndex !== -1) {
-                                    // ─── UPDATE existing job — APPEND, don't replace ───
-                                    // The agent often rewrites the entire prompt from scratch,
-                                    // losing critical details (URLs, site names, check logic).
-                                    // Instead: keep the existing prompt and APPEND new instructions.
-                                    const existing = jobs[existingIndex]!;
-                                    const oldPrompt = existing.prompt || '';
-
-                                    // Determine if this is a FULL rewrite or a PARTIAL update:
-                                    // - If the new prompt is very long (>80% of old), treat as full rewrite
-                                    // - If the new prompt is short (a modification), append it
-                                    const isFullRewrite = taskPrompt.length > oldPrompt.length * 0.8;
-
-                                    let mergedPrompt: string;
-                                    if (isFullRewrite) {
-                                        // Full rewrite — use new prompt but preserve delivery instructions
-                                        mergedPrompt = taskPrompt;
-                                        console.log(`[Worker - ${this.role}] Full prompt rewrite detected (${taskPrompt.length} chars vs ${oldPrompt.length} old).`);
-                                    } else {
-                                        // Partial update — append new instructions to existing prompt
-                                        // Remove any trailing period/whitespace and add the addendum
-                                        const cleanOld = oldPrompt.replace(/\s*$/, '');
-                                        mergedPrompt = `${cleanOld}\n\nADDITIONAL INSTRUCTIONS: ${taskPrompt}`;
-                                        console.log(`[Worker - ${this.role}] Appended modification to existing prompt (kept ${oldPrompt.length} chars, added ${taskPrompt.length} chars).`);
-                                    }
-
-                                    // Extract and preserve delivery instructions from old prompt
-                                    const deliveryPatterns = [
-                                        /Also send (?:the results |this |)(?:to |via )(?:the )?WhatsApp group\s+"[^"]+"\s*\(group JID:\s*\d+@g\.us\)\./gi,
-                                        /Also send via WhatsApp to \d+@s\.whatsapp\.net\./gi,
-                                        /Send (?:this |the results |)(?:to |via )(?:the )?WhatsApp group\s+"[^"]+"\s*\(group JID:\s*\d+@g\.us\)\./gi,
-                                        /(?:Also )?[Ss]end (?:this |the |a |)(?:message |results? |report |update |)(?:to |via )(?:email |)(?:to )?[a-zA-Z0-9._%+-]+@(?:gmail|yahoo|hotmail|outlook|icloud|protonmail|aol)\.[a-z]{2,}/gi,
-                                    ];
-
-                                    const oldDeliveryInstructions: string[] = [];
-                                    for (const pattern of deliveryPatterns) {
-                                        const matches = oldPrompt.match(pattern);
-                                        if (matches) oldDeliveryInstructions.push(...matches);
-                                    }
-
-                                    // Re-append delivery instructions if they're missing from merged prompt
-                                    const hasGroupJid = /\d+@g\.us/.test(mergedPrompt);
-                                    const hasDmJid = /\d+@s\.whatsapp\.net/.test(mergedPrompt);
-                                    if (oldDeliveryInstructions.length > 0 && !hasGroupJid && !hasDmJid) {
-                                        const uniqueDelivery = [...new Set(oldDeliveryInstructions)];
-                                        mergedPrompt = mergedPrompt.replace(/\s*$/, '') + ' ' + uniqueDelivery.join(' ');
-                                        console.log(`[Worker - ${this.role}] Preserved ${uniqueDelivery.length} delivery instruction(s).`);
-                                    }
-
-                                    existing.prompt = mergedPrompt;
-
-                                    // Only update schedule if explicitly provided — don't overwrite with defaults
-                                    if (scheduleExplicitlyProvided) {
-                                        if (preferredTime) {
-                                            existing.preferredTime = preferredTime;
-                                            existing.intervalHours = 24;
-                                        } else if (intervalHours) {
-                                            existing.intervalHours = intervalHours;
-                                            delete existing.preferredTime;
-                                        }
-                                    }
-
-                                    const scheduleStr = existing.preferredTime
-                                        ? `daily at ${existing.preferredTime}`
-                                        : `every ${existing.intervalHours}h`;
-                                    console.log(`[Worker - ${this.role}] Updated existing cron job: "${jobName}" → ${scheduleStr}`);
-                                    result = `✅ Successfully updated existing cron job!\n- Name: ${jobName}\n- Schedule: ${scheduleStr} (${scheduleExplicitlyProvided ? 'updated' : 'preserved'})\n- Update type: ${isFullRewrite ? 'full rewrite' : 'appended to existing prompt'}\n- Recipients: ${oldDeliveryInstructions.length > 0 && !hasGroupJid && !hasDmJid ? 'preserved from existing job' : 'as specified'}\n- Status: ${existing.status || 'enabled'}\n- ID: ${existing.id}`;
-                                } else {
-                                    // CREATE new job
-                                    const cronConfigPath = path.join(process.cwd(), 'workspace', 'cron_config.json');
-                                    let maxJobs = 50;
-                                    try {
-                                        if (fs.existsSync(cronConfigPath)) {
-                                            const cfg = JSON.parse(fs.readFileSync(cronConfigPath, 'utf-8'));
-                                            if (cfg.maxJobs && typeof cfg.maxJobs === 'number') maxJobs = cfg.maxJobs;
-                                        }
-                                    } catch { }
-
-                                    if (jobs.length >= maxJobs) {
-                                        result = `Error: Maximum of ${maxJobs} cron jobs reached. Delete an existing job before scheduling a new one.`;
-                                    } else {
-                                        const effectiveInterval = intervalHours || 24;
-                                        const newJob: any = {
-                                            id: 'cron-' + Math.random().toString(36).substr(2, 9),
-                                            description: jobName,
-                                            prompt: taskPrompt,
-                                            intervalHours: effectiveInterval,
-                                            lastRunTimestamp: 0,
-                                            agentId: 'manager',
-                                            status: 'enabled'
-                                        };
-                                        if (preferredTime) newJob.preferredTime = preferredTime;
-                                        jobs.push(newJob);
-                                        const scheduleStr = preferredTime ? `daily at ${preferredTime}` : `every ${effectiveInterval}h`;
-                                        console.log(`[Worker - ${this.role}] Scheduled new recurring task: "${jobName}" ${scheduleStr}`);
-                                        result = `✅ Successfully scheduled recurring task!\n- Name: ${jobName}\n- Schedule: ${scheduleStr}\n- Task: ${taskPrompt.substring(0, 100)}...\n- Status: Enabled\n- ID: ${newJob.id}`;
-                                    }
-                                }
-                                return jobs;
-                            });
-                            toolOutput = result;
-                        } catch (e: any) {
-                            toolOutput = `Failed to schedule task: ${e.message}`;
-                        }
-                    }
-                } else if (response.action === 'update_whatsapp_whitelist' && response.command && response.target) {
-                    // SECURITY (V3): Human-in-the-loop guard — allowlist changes are QUEUED, not applied immediately.
-                    // This prevents prompt injection attacks from modifying the allowlist without admin knowledge.
-                    try {
-                        const target = response.target.trim();
-                        const command = response.command;
-                        const validCommands = ['add_dm', 'remove_dm', 'add_group', 'remove_group'];
-                        if (!validCommands.includes(command)) {
-                            toolOutput = `Error: Invalid command "${command}". Valid: ${validCommands.join(', ')}`;
+                        if (!taskPrompt) {
+                            toolOutput = 'Error: No task prompt provided for schedule_task. Provide the task description in the "content" field.';
                         } else {
-                            // Queue the change to a pending file for dashboard/admin review
-                            const pendingPath = path.join(process.cwd(), 'workspace', 'pending_allowlist_changes.json');
-                            let pending: any[] = [];
-                            if (fs.existsSync(pendingPath)) {
-                                try { pending = JSON.parse(fs.readFileSync(pendingPath, 'utf8')); } catch { pending = []; }
-                            }
-                            pending.push({
-                                id: 'awl-' + Math.random().toString(36).substr(2, 9),
-                                command,
-                                target,
-                                requestedBy: this.role,
-                                requestedAt: new Date().toISOString(),
-                                status: 'pending'
-                            });
-                            fs.writeFileSync(pendingPath, JSON.stringify(pending, null, 2));
-                            console.log(`[Worker - ${this.role}] SECURITY: Allowlist change QUEUED (not applied): ${command} → ${target}`);
-
-                            // Notify admin via WhatsApp
-                            const ownerJid = process.env.OWNER_JID || process.env.WHATSAPP_OWNER_NUMBER;
-                            if (ownerJid) {
-                                try {
-                                    await sendWhatsAppMessage(ownerJid.includes('@') ? ownerJid : `${ownerJid}@s.whatsapp.net`,
-                                        `🔐 *Security Alert*\n\nAn agent requested a WhatsApp allowlist change:\n• Action: ${command}\n• Target: ${target}\n• Requested by: ${this.role}\n\n⚠️ This change was NOT applied automatically. Please review and approve via the Dashboard.`
+                            try {
+                                let result = '';
+                                await withJobs((jobs: CronJob[]) => {
+                                    // Upsert: check for existing job with the same name (case-insensitive)
+                                    const existingIndex = jobs.findIndex(
+                                        (j: any) => j.description.toLowerCase() === jobName.toLowerCase()
                                     );
-                                } catch { /* non-critical if notification fails */ }
-                            }
-                            toolOutput = `✅ Allowlist change request queued for admin review.\n- Action: ${command}\n- Target: ${target}\n\nFor security, allowlist modifications require manual admin approval via the Dashboard.`;
-                        }
-                    } catch (e: any) {
-                        toolOutput = `Failed to queue allowlist change: ${e.message}`;
-                    }
-                } else if (response.action === 'send_email' && response.to && response.subject && response.body) {
-                    console.log(`[Worker - ${this.role}] Dispatching email to ${response.to}...`);
-                    
-                    // LLM Context Guardrail: The LLM frequently mistakes WhatsApp JIDs for email addresses due to the @ symbol.
-                    if (response.to.includes('@s.whatsapp.net') || response.to.includes('@g.us')) {
-                        console.warn(`[Worker - ${this.role}] Blocked attempt to send email to WhatsApp JID: ${response.to}`);
-                        toolOutput = `CRITICAL ERROR: '${response.to}' is a WhatsApp ID, NOT an email address! You MUST use the 'send_whatsapp' tool (with the 'message' field) to send this message. Do NOT use send_email for WhatsApp targets.`;
-                    } else {
-                        try {
-                            const rootDir = __dirname.endsWith('src') ? path.join(__dirname, '..', '..') : path.join(__dirname, '..', '..');
-                        const pythonScript = path.join(rootDir, 'skills', 'send_email.py');
 
-                        // SECURITY FIX (CRIT-2): Use spawnSync with argument array instead of execSync
-                        // template string to completely eliminate shell injection risk.
-                        const args = [
-                            pythonScript,
-                            '--to', response.to,
-                            '--subject', response.subject,
-                            '--body', response.body
-                        ];
+                                    if (existingIndex !== -1) {
+                                        // ─── UPDATE existing job — APPEND, don't replace ───
+                                        // The agent often rewrites the entire prompt from scratch,
+                                        // losing critical details (URLs, site names, check logic).
+                                        // Instead: keep the existing prompt and APPEND new instructions.
+                                        const existing = jobs[existingIndex]!;
+                                        const oldPrompt = existing.prompt || '';
 
-                        // Determine the From address:
-                        // 1. LLM-specified from (only if explicitly set)
-                        // 2. cronFromEmail from config if this is a cron job (code-enforced)
-                        let fromEmail: string | null = response.from || null;
-                        if (!fromEmail && this.isCron) {
-                            try {
-                                const emailConfigPath = path.join(process.cwd(), 'workspace', 'email_config.json');
-                                if (fs.existsSync(emailConfigPath)) {
-                                    const emailConfig = JSON.parse(fs.readFileSync(emailConfigPath, 'utf-8'));
-                                    if (emailConfig.cronFromEmail) fromEmail = emailConfig.cronFromEmail;
-                                }
-                            } catch (e) { /* ignore, use default */ }
-                        }
-                        if (fromEmail) args.push('--from', fromEmail);
+                                        // Determine if this is a FULL rewrite or a PARTIAL update:
+                                        // - If the new prompt is very long (>80% of old), treat as full rewrite
+                                        // - If the new prompt is short (a modification), append it
+                                        const isFullRewrite = taskPrompt.length > oldPrompt.length * 0.8;
 
-                        const result = spawnSync('python3', args, { timeout: 30000, encoding: 'utf-8' });
+                                        let mergedPrompt: string;
+                                        if (isFullRewrite) {
+                                            // Full rewrite — use new prompt but preserve delivery instructions
+                                            mergedPrompt = taskPrompt;
+                                            console.log(`[Worker - ${this.role}] Full prompt rewrite detected (${taskPrompt.length} chars vs ${oldPrompt.length} old).`);
+                                        } else {
+                                            // Partial update — append new instructions to existing prompt
+                                            // Remove any trailing period/whitespace and add the addendum
+                                            const cleanOld = oldPrompt.replace(/\s*$/, '');
+                                            mergedPrompt = `${cleanOld}\n\nADDITIONAL INSTRUCTIONS: ${taskPrompt}`;
+                                            console.log(`[Worker - ${this.role}] Appended modification to existing prompt (kept ${oldPrompt.length} chars, added ${taskPrompt.length} chars).`);
+                                        }
 
-                        if (result.error) throw result.error;
-                        if (result.status !== 0) throw new Error(result.stderr || 'python3 exited non-zero');
-                        toolOutput = `Email sent successfully:\n${result.stdout}`;
-                    } catch (e: any) {
-                        toolOutput = `Failed to send email. Ensure OAuth is configured via 'openspider tools email setup'. Error: ${e.message}`;
-                    }
-                }
-            } else if (response.action === 'read_emails') {
-                console.log(`[Worker - ${this.role}] Scanning Gmail Inbox...`);
-                    // Support optional search queries via args or content, and maxResults via target (stringified number)
-                    const query = response.args || response.content || 'is:unread';
-                    const maxResults = response.target ? parseInt(response.target, 10) : 5;
+                                        // Extract and preserve delivery instructions from old prompt
+                                        const deliveryPatterns = [
+                                            /Also send (?:the results |this |)(?:to |via )(?:the )?WhatsApp group\s+"[^"]+"\s*\(group JID:\s*\d+@g\.us\)\./gi,
+                                            /Also send via WhatsApp to \d+@s\.whatsapp\.net\./gi,
+                                            /Send (?:this |the results |)(?:to |via )(?:the )?WhatsApp group\s+"[^"]+"\s*\(group JID:\s*\d+@g\.us\)\./gi,
+                                            /(?:Also )?[Ss]end (?:this |the |a |)(?:message |results? |report |update |)(?:to |via )(?:email |)(?:to )?[a-zA-Z0-9._%+-]+@(?:gmail|yahoo|hotmail|outlook|icloud|protonmail|aol)\.[a-z]{2,}/gi,
+                                        ];
 
-                    const scanResult = await require('../services/GmailService').GmailService.getInstance().readEmails({ query, maxResults });
+                                        const oldDeliveryInstructions: string[] = [];
+                                        for (const pattern of deliveryPatterns) {
+                                            const matches = oldPrompt.match(pattern);
+                                            if (matches) oldDeliveryInstructions.push(...matches);
+                                        }
 
-                    if (!scanResult.success) {
-                        toolOutput = `Failed to read emails: ${scanResult.error}. Ensure OAuth is configured via 'openspider tools email setup'.`;
-                    } else if (!scanResult.emails || scanResult.emails.length === 0) {
-                        toolOutput = `Inbox Scan Complete: No emails found matching query "${query}".`;
-                    } else {
-                        toolOutput = `Inbox Scan Complete. Found ${scanResult.emails.length} emails matching "${query}":\n\n`;
-                        scanResult.emails.forEach((email: any, index: number) => {
-                            toolOutput += `[${index + 1}] Date: ${email.date}\n    From: ${email.from}\n    Subject: ${email.subject}\n    Snippet: ${email.snippet}\n\n`;
-                        });
-                    }
-                } else if (response.action === 'send_whatsapp' && response.message) {
-                    console.log(`[Worker - ${this.role}] Sending WhatsApp message...`);
-                    try {
-                        let targetJids: string[] = [];
+                                        // Re-append delivery instructions if they're missing from merged prompt
+                                        const hasGroupJid = /\d+@g\.us/.test(mergedPrompt);
+                                        const hasDmJid = /\d+@s\.whatsapp\.net/.test(mergedPrompt);
+                                        if (oldDeliveryInstructions.length > 0 && !hasGroupJid && !hasDmJid) {
+                                            const uniqueDelivery = [...new Set(oldDeliveryInstructions)];
+                                            mergedPrompt = mergedPrompt.replace(/\s*$/, '') + ' ' + uniqueDelivery.join(' ');
+                                            console.log(`[Worker - ${this.role}] Preserved ${uniqueDelivery.length} delivery instruction(s).`);
+                                        }
 
-                        // Determine the user's default WhatsApp JID and group policies from the config
-                        const configPath = path.join(process.cwd(), 'workspace', 'whatsapp_config.json');
-                        let defaultJid = '';
-                        let groupPolicy = 'disabled';
-                        let allowedGroupJids: string[] = [];
+                                        existing.prompt = mergedPrompt;
 
-                        if (fs.existsSync(configPath)) {
-                            const waConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-                            if (waConfig.allowedDMs && waConfig.allowedDMs.length > 0) {
-                                const firstEntry = waConfig.allowedDMs[0];
-                                const rawNumber = (typeof firstEntry === 'string' ? firstEntry : firstEntry.number || '').replace(/\D/g, '');
-                                defaultJid = `${rawNumber}@s.whatsapp.net`;
-                            }
-                            if (waConfig.groupPolicy) groupPolicy = waConfig.groupPolicy;
-                            if (waConfig.allowedGroups && Array.isArray(waConfig.allowedGroups)) {
-                                allowedGroupJids = waConfig.allowedGroups.map((g: any) => g.jid);
-                            }
-                        }
+                                        // Only update schedule if explicitly provided — don't overwrite with defaults
+                                        if (scheduleExplicitlyProvided) {
+                                            if (preferredTime) {
+                                                existing.preferredTime = preferredTime;
+                                                existing.intervalHours = 24;
+                                            } else if (intervalHours) {
+                                                existing.intervalHours = intervalHours;
+                                                delete existing.preferredTime;
+                                            }
+                                        }
 
-                        // If the agent explicitly provided a 'to' string, parse it for numbers, keywords, or group names
-                        if (response.to && response.to.trim().length > 0) {
-                            // Fetch groups once just in case we need them
-                            let participatingGroups: Array<{ id: string, subject: string }> = [];
-                            try {
-                                if (groupPolicy !== 'disabled') {
-                                    const allGroups = await getParticipatingGroups();
-                                    if (groupPolicy === 'allowlist') {
-                                        participatingGroups = allGroups.filter((g: any) => allowedGroupJids.includes(g.id));
+                                        const scheduleStr = existing.preferredTime
+                                            ? `daily at ${existing.preferredTime}`
+                                            : `every ${existing.intervalHours}h`;
+                                        console.log(`[Worker - ${this.role}] Updated existing cron job: "${jobName}" → ${scheduleStr}`);
+                                        result = `✅ Successfully updated existing cron job!\n- Name: ${jobName}\n- Schedule: ${scheduleStr} (${scheduleExplicitlyProvided ? 'updated' : 'preserved'})\n- Update type: ${isFullRewrite ? 'full rewrite' : 'appended to existing prompt'}\n- Recipients: ${oldDeliveryInstructions.length > 0 && !hasGroupJid && !hasDmJid ? 'preserved from existing job' : 'as specified'}\n- Status: ${existing.status || 'enabled'}\n- ID: ${existing.id}`;
                                     } else {
-                                        participatingGroups = allGroups; // open policy
+                                        // CREATE new job
+                                        const cronConfigPath = path.join(process.cwd(), 'workspace', 'cron_config.json');
+                                        let maxJobs = 50;
+                                        try {
+                                            if (fs.existsSync(cronConfigPath)) {
+                                                const cfg = JSON.parse(fs.readFileSync(cronConfigPath, 'utf-8'));
+                                                if (cfg.maxJobs && typeof cfg.maxJobs === 'number') maxJobs = cfg.maxJobs;
+                                            }
+                                        } catch { }
+
+                                        if (jobs.length >= maxJobs) {
+                                            result = `Error: Maximum of ${maxJobs} cron jobs reached. Delete an existing job before scheduling a new one.`;
+                                        } else {
+                                            const effectiveInterval = intervalHours || 24;
+                                            const newJob: any = {
+                                                id: 'cron-' + Math.random().toString(36).substr(2, 9),
+                                                description: jobName,
+                                                prompt: taskPrompt,
+                                                intervalHours: effectiveInterval,
+                                                lastRunTimestamp: 0,
+                                                agentId: 'manager',
+                                                status: 'enabled'
+                                            };
+                                            if (preferredTime) newJob.preferredTime = preferredTime;
+                                            jobs.push(newJob);
+                                            const scheduleStr = preferredTime ? `daily at ${preferredTime}` : `every ${effectiveInterval}h`;
+                                            console.log(`[Worker - ${this.role}] Scheduled new recurring task: "${jobName}" ${scheduleStr}`);
+                                            result = `✅ Successfully scheduled recurring task!\n- Name: ${jobName}\n- Schedule: ${scheduleStr}\n- Task: ${taskPrompt.substring(0, 100)}...\n- Status: Enabled\n- ID: ${newJob.id}`;
+                                        }
                                     }
+                                    return jobs;
+                                });
+                                toolOutput = result;
+                            } catch (e: any) {
+                                toolOutput = `Failed to schedule task: ${e.message}`;
+                            }
+                        }
+                    } else if (response.action === 'update_whatsapp_whitelist' && response.command && response.target) {
+                        // SECURITY (V3): Human-in-the-loop guard — allowlist changes are QUEUED, not applied immediately.
+                        // This prevents prompt injection attacks from modifying the allowlist without admin knowledge.
+                        try {
+                            const target = response.target.trim();
+                            const command = response.command;
+                            const validCommands = ['add_dm', 'remove_dm', 'add_group', 'remove_group'];
+                            if (!validCommands.includes(command)) {
+                                toolOutput = `Error: Invalid command "${command}". Valid: ${validCommands.join(', ')}`;
+                            } else {
+                                // Queue the change to a pending file for dashboard/admin review
+                                const pendingPath = path.join(process.cwd(), 'workspace', 'pending_allowlist_changes.json');
+                                let pending: any[] = [];
+                                if (fs.existsSync(pendingPath)) {
+                                    try { pending = JSON.parse(fs.readFileSync(pendingPath, 'utf8')); } catch { pending = []; }
                                 }
-                            } catch (e) {
-                                console.error('[Worker] Failed to fetch participating groups:', e);
+                                pending.push({
+                                    id: 'awl-' + Math.random().toString(36).substr(2, 9),
+                                    command,
+                                    target,
+                                    requestedBy: this.role,
+                                    requestedAt: new Date().toISOString(),
+                                    status: 'pending'
+                                });
+                                fs.writeFileSync(pendingPath, JSON.stringify(pending, null, 2));
+                                console.log(`[Worker - ${this.role}] SECURITY: Allowlist change QUEUED (not applied): ${command} → ${target}`);
+
+                                // Notify admin via WhatsApp
+                                const ownerJid = process.env.OWNER_JID || process.env.WHATSAPP_OWNER_NUMBER;
+                                if (ownerJid) {
+                                    try {
+                                        await sendWhatsAppMessage(ownerJid.includes('@') ? ownerJid : `${ownerJid}@s.whatsapp.net`,
+                                            `🔐 *Security Alert*\n\nAn agent requested a WhatsApp allowlist change:\n• Action: ${command}\n• Target: ${target}\n• Requested by: ${this.role}\n\n⚠️ This change was NOT applied automatically. Please review and approve via the Dashboard.`
+                                        );
+                                    } catch { /* non-critical if notification fails */ }
+                                }
+                                toolOutput = `✅ Allowlist change request queued for admin review.\n- Action: ${command}\n- Target: ${target}\n\nFor security, allowlist modifications require manual admin approval via the Dashboard.`;
+                            }
+                        } catch (e: any) {
+                            toolOutput = `Failed to queue allowlist change: ${e.message}`;
+                        }
+                    } else if (response.action === 'send_email' && response.to && response.subject && response.body) {
+                        console.log(`[Worker - ${this.role}] Dispatching email to ${response.to}...`);
+
+                        // LLM Context Guardrail: The LLM frequently mistakes WhatsApp JIDs for email addresses due to the @ symbol.
+                        if (response.to.includes('@s.whatsapp.net') || response.to.includes('@g.us')) {
+                            console.warn(`[Worker - ${this.role}] Blocked attempt to send email to WhatsApp JID: ${response.to}`);
+                            toolOutput = `CRITICAL ERROR: '${response.to}' is a WhatsApp ID, NOT an email address! You MUST use the 'send_whatsapp' tool (with the 'message' field) to send this message. Do NOT use send_email for WhatsApp targets.`;
+                        } else {
+                            try {
+                                const rootDir = __dirname.endsWith('src') ? path.join(__dirname, '..', '..') : path.join(__dirname, '..', '..');
+                                const pythonScript = path.join(rootDir, 'skills', 'send_email.py');
+
+                                // SECURITY FIX (CRIT-2): Use spawnSync with argument array instead of execSync
+                                // template string to completely eliminate shell injection risk.
+                                const args = [
+                                    pythonScript,
+                                    '--to', response.to,
+                                    '--subject', response.subject,
+                                    '--body', response.body
+                                ];
+
+                                // Determine the From address:
+                                // 1. LLM-specified from (only if explicitly set)
+                                // 2. cronFromEmail from config if this is a cron job (code-enforced)
+                                let fromEmail: string | null = response.from || null;
+                                if (!fromEmail && this.isCron) {
+                                    try {
+                                        const emailConfigPath = path.join(process.cwd(), 'workspace', 'email_config.json');
+                                        if (fs.existsSync(emailConfigPath)) {
+                                            const emailConfig = JSON.parse(fs.readFileSync(emailConfigPath, 'utf-8'));
+                                            if (emailConfig.cronFromEmail) fromEmail = emailConfig.cronFromEmail;
+                                        }
+                                    } catch (e) { /* ignore, use default */ }
+                                }
+                                if (fromEmail) args.push('--from', fromEmail);
+
+                                const result = spawnSync('python3', args, { timeout: 30000, encoding: 'utf-8' });
+
+                                if (result.error) throw result.error;
+                                if (result.status !== 0) throw new Error(result.stderr || 'python3 exited non-zero');
+                                toolOutput = `Email sent successfully:\n${result.stdout}`;
+                            } catch (e: any) {
+                                toolOutput = `Failed to send email. Ensure OAuth is configured via 'openspider tools email setup'. Error: ${e.message}`;
+                            }
+                        }
+                    } else if (response.action === 'read_emails') {
+                        console.log(`[Worker - ${this.role}] Scanning Gmail Inbox...`);
+                        // Support optional search queries via args or content, and maxResults via target (stringified number)
+                        const query = response.args || response.content || 'is:unread';
+                        const maxResults = response.target ? parseInt(response.target, 10) : 5;
+
+                        const scanResult = await require('../services/GmailService').GmailService.getInstance().readEmails({ query, maxResults });
+
+                        if (!scanResult.success) {
+                            toolOutput = `Failed to read emails: ${scanResult.error}. Ensure OAuth is configured via 'openspider tools email setup'.`;
+                        } else if (!scanResult.emails || scanResult.emails.length === 0) {
+                            toolOutput = `Inbox Scan Complete: No emails found matching query "${query}".`;
+                        } else {
+                            toolOutput = `Inbox Scan Complete. Found ${scanResult.emails.length} emails matching "${query}":\n\n`;
+                            scanResult.emails.forEach((email: any, index: number) => {
+                                toolOutput += `[${index + 1}] Date: ${email.date}\n    From: ${email.from}\n    Subject: ${email.subject}\n    Snippet: ${email.snippet}\n\n`;
+                            });
+                        }
+                    } else if (response.action === 'send_whatsapp' && response.message) {
+                        console.log(`[Worker - ${this.role}] Sending WhatsApp message...`);
+                        try {
+                            let targetJids: string[] = [];
+
+                            // Determine the user's default WhatsApp JID and group policies from the config
+                            const configPath = path.join(process.cwd(), 'workspace', 'whatsapp_config.json');
+                            let defaultJid = '';
+                            let groupPolicy = 'disabled';
+                            let allowedGroupJids: string[] = [];
+
+                            if (fs.existsSync(configPath)) {
+                                const waConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+                                if (waConfig.allowedDMs && waConfig.allowedDMs.length > 0) {
+                                    const firstEntry = waConfig.allowedDMs[0];
+                                    const rawNumber = (typeof firstEntry === 'string' ? firstEntry : firstEntry.number || '').replace(/\D/g, '');
+                                    defaultJid = `${rawNumber}@s.whatsapp.net`;
+                                }
+                                if (waConfig.groupPolicy) groupPolicy = waConfig.groupPolicy;
+                                if (waConfig.allowedGroups && Array.isArray(waConfig.allowedGroups)) {
+                                    allowedGroupJids = waConfig.allowedGroups.map((g: any) => g.jid);
+                                }
                             }
 
-                            // Split by commas or semicolons
-                            const recipients = response.to.split(/[,;]/);
-                            for (let r of recipients) {
-                                r = r.trim();
-                                if (!r) continue;
-                                const lowerR = r.toLowerCase();
+                            // If the agent explicitly provided a 'to' string, parse it for numbers, keywords, or group names
+                            if (response.to && response.to.trim().length > 0) {
+                                // Fetch groups once just in case we need them
+                                let participatingGroups: Array<{ id: string, subject: string }> = [];
+                                try {
+                                    if (groupPolicy !== 'disabled') {
+                                        const allGroups = await getParticipatingGroups();
+                                        if (groupPolicy === 'allowlist') {
+                                            participatingGroups = allGroups.filter((g: any) => allowedGroupJids.includes(g.id));
+                                        } else {
+                                            participatingGroups = allGroups; // open policy
+                                        }
+                                    }
+                                } catch (e) {
+                                    console.error('[Worker] Failed to fetch participating groups:', e);
+                                }
 
-                                if (lowerR === 'me' || lowerR === 'default' || lowerR === 'owner' || lowerR === 'user') {
-                                    if (defaultJid) targetJids.push(defaultJid);
-                                } else if (r.trim().endsWith('@g.us') || r.trim().endsWith('@s.whatsapp.net')) {
-                                    // Raw JID passthrough — support direct group/DM JIDs
-                                    const cleanJid = r.trim();
-                                    if (cleanJid.endsWith('@g.us')) {
-                                        if (groupPolicy === 'disabled') {
-                                            console.warn(`[Worker - ${this.role}] Warning: Group routing is disabled by policy. Skipping ${cleanJid}`);
-                                        } else if (groupPolicy === 'allowlist' && !allowedGroupJids.includes(cleanJid)) {
-                                            console.warn(`[Worker - ${this.role}] Warning: Group ${cleanJid} is not in the Allowlist. Skipping.`);
+                                // Split by commas or semicolons
+                                const recipients = response.to.split(/[,;]/);
+                                for (let r of recipients) {
+                                    r = r.trim();
+                                    if (!r) continue;
+                                    const lowerR = r.toLowerCase();
+
+                                    if (lowerR === 'me' || lowerR === 'default' || lowerR === 'owner' || lowerR === 'user') {
+                                        if (defaultJid) targetJids.push(defaultJid);
+                                    } else if (r.trim().endsWith('@g.us') || r.trim().endsWith('@s.whatsapp.net')) {
+                                        // Raw JID passthrough — support direct group/DM JIDs
+                                        const cleanJid = r.trim();
+                                        if (cleanJid.endsWith('@g.us')) {
+                                            if (groupPolicy === 'disabled') {
+                                                console.warn(`[Worker - ${this.role}] Warning: Group routing is disabled by policy. Skipping ${cleanJid}`);
+                                            } else if (groupPolicy === 'allowlist' && !allowedGroupJids.includes(cleanJid)) {
+                                                console.warn(`[Worker - ${this.role}] Warning: Group ${cleanJid} is not in the Allowlist. Skipping.`);
+                                            } else {
+                                                targetJids.push(cleanJid);
+                                            }
                                         } else {
                                             targetJids.push(cleanJid);
                                         }
                                     } else {
-                                        targetJids.push(cleanJid);
-                                    }
-                                } else {
-                                    // See if it has digits, treat as phone number
-                                    const rawNumber = r.replace(/\D/g, '');
-                                    if (rawNumber.length > 5 && /^\+?\d+$/.test(r.replace(/\s/g, ''))) {
-                                        targetJids.push(`${rawNumber}@s.whatsapp.net`);
-                                    } else {
-                                        // Assume it's a group name — robust two-way case-insensitive match
-                                        const cleanLowerR = lowerR.replace(/\bgroup\b/ig, '').trim();
-
-                                        // PASS 1: Exact Match (Case Insensitive)
-                                        let matchedGroup = participatingGroups.find(g => g.subject.toLowerCase() === lowerR || g.subject.toLowerCase() === cleanLowerR);
-
-                                        // PASS 2: Fuzzy Match (Only if exact match fails)
-                                        if (!matchedGroup) {
-                                            const fuzzyMatches = participatingGroups.filter(g => {
-                                                const sub = g.subject.toLowerCase();
-                                                return sub.includes(lowerR) || lowerR.includes(sub) || (cleanLowerR.length >= 3 && sub.includes(cleanLowerR));
-                                            });
-
-                                            if (fuzzyMatches.length === 1) {
-                                                matchedGroup = fuzzyMatches[0];
-                                            } else if (fuzzyMatches.length > 1) {
-                                                const options = fuzzyMatches.map(g => `"${g.subject}"`).join(', ');
-                                                console.warn(`[Worker - ${this.role}] Warning: Group name "${r}" is ambiguous and matches multiple groups: ${options}`);
-                                                // We intentionally do NOT define matchedGroup here; it will fall through to the warning block below and tell the agent it's ambiguous.
-                                            }
-                                        }
-
-                                        if (matchedGroup) {
-                                            targetJids.push(matchedGroup.id);
+                                        // See if it has digits, treat as phone number
+                                        const rawNumber = r.replace(/\D/g, '');
+                                        if (rawNumber.length > 5 && /^\+?\d+$/.test(r.replace(/\s/g, ''))) {
+                                            targetJids.push(`${rawNumber}@s.whatsapp.net`);
                                         } else {
-                                            // Provide the agent with the exact list of available group names to prevent hallucination
-                                            const availableGroups = participatingGroups.map(g => `"${g.subject}"`).join(', ');
-                                            console.warn(`[Worker - ${this.role}] Warning: Could not resolve WhatsApp target "${r}" to a unique Group Name. Evaluated against ${participatingGroups.length} groups.`);
-                                            // The agent will see this error injected into its context loop so it can ask for clarification
-                                            targetJids.push(`ERROR_NOT_FOUND:${r}`);
-                                        }
-                                    }
-                                }
-                            }
-                            // Also if the agent gave nothing extractable, try falling back
-                            if (targetJids.length === 0 && defaultJid) {
-                                targetJids.push(defaultJid);
-                            }
-                        } else {
-                            if (defaultJid) targetJids.push(defaultJid);
-                        }
+                                            // Assume it's a group name — robust two-way case-insensitive match
+                                            const cleanLowerR = lowerR.replace(/\bgroup\b/ig, '').trim();
 
-                        // Remove duplicates
-                        targetJids = [...new Set(targetJids)];
+                                            // PASS 1: Exact Match (Case Insensitive)
+                                            let matchedGroup = participatingGroups.find(g => g.subject.toLowerCase() === lowerR || g.subject.toLowerCase() === cleanLowerR);
 
-                        if (targetJids.length === 0) {
-                            toolOutput = 'Error: No WhatsApp target resolved! Could not map "' + response.to + '" to a known group name or phone number. Add a phone number to allowedDMs or ensure the exact group name is used.';
-                        } else if (targetJids.some(j => j.startsWith('ERROR_NOT_FOUND:'))) {
-                            const errs = targetJids.filter(j => j.startsWith('ERROR_NOT_FOUND:')).map(j => j.split(':')[1]);
-                            toolOutput = `Error: The requested WhatsApp target(s) [${errs.join(', ')}] were ambiguous or not found in the allowed group list. You MUST ask the user to clarify exactly which group they mean.`;
-                        } else {
-                            // ─── CRON SILENT GATE ───────────────────────────────────────
-                            // Hard code-level filter: If this is a cron job AND the message
-                            // content is a "no issues" report, SUPPRESS the send entirely.
-                            // This is needed because the LLM consistently ignores prompt-level
-                            // instructions to not send "all clear" messages.
-                            if (this.isCron) {
-                                const msgLower = (response.message as string).toLowerCase();
-                                const noActionPatterns = [
-                                    /no\s+(issues?|outages?|problems?|incidents?|alerts?|errors?|disruptions?)\s+(found|detected|reported|observed|noted|to report)/i,
-                                    /no\s+(current|active|ongoing|new|significant)\s+(issues?|outages?|problems?|incidents?)/i,
-                                    /all\s+(systems?|services?)\s+(are\s+)?(operational|running|normal|up|online|stable|healthy)/i,
-                                    /everything\s+(is\s+|looks?\s+)?(normal|fine|good|stable|operational|running\s+smoothly)/i,
-                                    /no\s+(action|notification|message)\s+(needed|required|necessary)/i,
-                                    /status:\s*(ok|normal|green|operational|no\s+issues)/i,
-                                    /nothing\s+(to\s+report|noteworthy|unusual|significant)/i,
-                                    /currently\s+(no|zero)\s+(issues?|outages?|problems?)/i,
-                                    /appears?\s+to\s+be\s+(working|functioning|running)\s+(normally|correctly|fine|properly)/i,
-                                ];
-                                const isNoAction = noActionPatterns.some(p => p.test(response.message as string));
-                                if (isNoAction) {
-                                    console.log(`[Worker - ${this.role}] 🔇 CRON SILENT GATE: Suppressed "no issues" WhatsApp message. Content: "${(response.message as string).substring(0, 100)}..."`);
-                                    toolOutput = `[SILENTLY SUPPRESSED] The "no issues" message was NOT sent to WhatsApp. This is a system-level rule for cron jobs: do not notify users when there is nothing to report. Proceed to final_answer.`;
-                                    // Skip all WhatsApp sending below
-                                    targetJids = [];
-                                }
-                            }
-                            // ────────────────────────────────────────────────────────────
+                                            // PASS 2: Fuzzy Match (Only if exact match fails)
+                                            if (!matchedGroup) {
+                                                const fuzzyMatches = participatingGroups.filter(g => {
+                                                    const sub = g.subject.toLowerCase();
+                                                    return sub.includes(lowerR) || lowerR.includes(sub) || (cleanLowerR.length >= 3 && sub.includes(cleanLowerR));
+                                                });
 
-                            if (targetJids.length > 0) {
-                                // Get agent persona name for the header
-                                let agentName = 'OpenSpider';
-                                try {
-                                    const persona = new PersonaShell('manager');
-                                    const caps = persona.getCapabilities();
-                                    if (caps && caps.name) agentName = caps.name;
-                                } catch (e) { }
+                                                if (fuzzyMatches.length === 1) {
+                                                    matchedGroup = fuzzyMatches[0];
+                                                } else if (fuzzyMatches.length > 1) {
+                                                    const options = fuzzyMatches.map(g => `"${g.subject}"`).join(', ');
+                                                    console.warn(`[Worker - ${this.role}] Warning: Group name "${r}" is ambiguous and matches multiple groups: ${options}`);
+                                                    // We intentionally do NOT define matchedGroup here; it will fall through to the warning block below and tell the agent it's ambiguous.
+                                                }
+                                            }
 
-                                const formattedMsg = `✨ *${agentName}*\n\n${response.message}`;
-
-                                let sentCount = 0;
-                                const failedJids: string[] = [];
-                                for (const jid of targetJids) {
-                                    let success = false;
-                                    let lastError: any = null;
-                                    const MAX_RETRIES = 3;
-
-                                    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-                                        try {
-                                            await sendWhatsAppMessage(jid, formattedMsg);
-                                            success = true;
-                                            sentCount++;
-                                            break; // Success, exit retry loop
-                                        } catch (e: any) {
-                                            lastError = e;
-                                            console.warn(`[Worker - ${this.role}] WhatsApp send attempt ${attempt}/${MAX_RETRIES} failed for ${jid}: ${e.message}`);
-                                            if (attempt < MAX_RETRIES) {
-                                                // Backoff: 3000ms, then 6000ms
-                                                const delayMs = attempt * 3000;
-                                                console.log(`[Worker - ${this.role}] Retrying sending to ${jid} in ${delayMs / 1000}s...`);
-                                                await new Promise(resolve => setTimeout(resolve, delayMs));
+                                            if (matchedGroup) {
+                                                targetJids.push(matchedGroup.id);
+                                            } else {
+                                                // Provide the agent with the exact list of available group names to prevent hallucination
+                                                const availableGroups = participatingGroups.map(g => `"${g.subject}"`).join(', ');
+                                                console.warn(`[Worker - ${this.role}] Warning: Could not resolve WhatsApp target "${r}" to a unique Group Name. Evaluated against ${participatingGroups.length} groups.`);
+                                                // The agent will see this error injected into its context loop so it can ask for clarification
+                                                targetJids.push(`ERROR_NOT_FOUND:${r}`);
                                             }
                                         }
                                     }
+                                }
+                                // Also if the agent gave nothing extractable, try falling back
+                                if (targetJids.length === 0 && defaultJid) {
+                                    targetJids.push(defaultJid);
+                                }
+                            } else {
+                                if (defaultJid) targetJids.push(defaultJid);
+                            }
 
-                                    if (!success) {
-                                        console.error(`[Worker - ${this.role}] Failed to send to ${jid} after ${MAX_RETRIES} attempts:`, lastError);
-                                        failedJids.push(`${jid}: ${lastError?.message || 'Unknown error'}`);
+                            // Remove duplicates
+                            targetJids = [...new Set(targetJids)];
+
+                            if (targetJids.length === 0) {
+                                toolOutput = 'Error: No WhatsApp target resolved! Could not map "' + response.to + '" to a known group name or phone number. Add a phone number to allowedDMs or ensure the exact group name is used.';
+                            } else if (targetJids.some(j => j.startsWith('ERROR_NOT_FOUND:'))) {
+                                const errs = targetJids.filter(j => j.startsWith('ERROR_NOT_FOUND:')).map(j => j.split(':')[1]);
+                                toolOutput = `Error: The requested WhatsApp target(s) [${errs.join(', ')}] were ambiguous or not found in the allowed group list. You MUST ask the user to clarify exactly which group they mean.`;
+                            } else {
+                                // ─── CRON SILENT GATE ───────────────────────────────────────
+                                // Hard code-level filter: If this is a cron job AND the message
+                                // content is a "no issues" report, SUPPRESS the send entirely.
+                                // This is needed because the LLM consistently ignores prompt-level
+                                // instructions to not send "all clear" messages.
+                                if (this.isCron) {
+                                    const msgLower = (response.message as string).toLowerCase();
+                                    const noActionPatterns = [
+                                        /no\s+(issues?|outages?|problems?|incidents?|alerts?|errors?|disruptions?)\s+(found|detected|reported|observed|noted|to report)/i,
+                                        /no\s+(current|active|ongoing|new|significant)\s+(issues?|outages?|problems?|incidents?)/i,
+                                        /all\s+(systems?|services?)\s+(are\s+)?(operational|running|normal|up|online|stable|healthy)/i,
+                                        /everything\s+(is\s+|looks?\s+)?(normal|fine|good|stable|operational|running\s+smoothly)/i,
+                                        /no\s+(action|notification|message)\s+(needed|required|necessary)/i,
+                                        /status:\s*(ok|normal|green|operational|no\s+issues)/i,
+                                        /nothing\s+(to\s+report|noteworthy|unusual|significant)/i,
+                                        /currently\s+(no|zero)\s+(issues?|outages?|problems?)/i,
+                                        /appears?\s+to\s+be\s+(working|functioning|running)\s+(normally|correctly|fine|properly)/i,
+                                    ];
+                                    const isNoAction = noActionPatterns.some(p => p.test(response.message as string));
+                                    if (isNoAction) {
+                                        console.log(`[Worker - ${this.role}] 🔇 CRON SILENT GATE: Suppressed "no issues" WhatsApp message. Content: "${(response.message as string).substring(0, 100)}..."`);
+                                        toolOutput = `[SILENTLY SUPPRESSED] The "no issues" message was NOT sent to WhatsApp. This is a system-level rule for cron jobs: do not notify users when there is nothing to report. Proceed to final_answer.`;
+                                        // Skip all WhatsApp sending below
+                                        targetJids = [];
                                     }
                                 }
+                                // ────────────────────────────────────────────────────────────
 
-                                if (failedJids.length > 0) {
-                                    toolOutput = `⚠️ Partial success or complete failure. Sent to ${sentCount} recipient(s). Failed to send to ${failedJids.length} recipient(s): \n${failedJids.join('\n')}`;
-                                } else {
-                                    toolOutput = `✅ WhatsApp message sent successfully to ${sentCount} recipient(s): ${targetJids.join(', ')}.`;
-                                }
-                            }
-                        }
-                    } catch (e: any) {
-                        toolOutput = `Failed to send WhatsApp message: ${e.message}`;
-                    }
-                } else if (response.action === 'send_voice' && response.message) {
-                    console.log(`[Worker - ${this.role}] Generating voice message via ElevenLabs TTS...`);
-                    try {
-                        // Determine the user's WhatsApp JID from the config
-                        const configPath = path.join(process.cwd(), 'workspace', 'whatsapp_config.json');
-                        let userJid = '';
-                        if (fs.existsSync(configPath)) {
-                            const waConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-                            if (waConfig.allowedDMs && waConfig.allowedDMs.length > 0) {
-                                const firstEntry = waConfig.allowedDMs[0];
-                                const rawNumber = (typeof firstEntry === 'string' ? firstEntry : firstEntry.number || '').replace(/\D/g, '');
-                                userJid = `${rawNumber}@s.whatsapp.net`;
-                            }
-                        }
-                        if (!userJid) {
-                            toolOutput = 'Error: No WhatsApp user configured. Add a phone number to the allowedDMs list in Channels > WhatsApp config.';
-                        } else {
-                            const rootDir = __dirname.endsWith('src') ? path.join(__dirname, '..', '..') : path.join(__dirname, '..', '..');
-                            const pythonScript = path.join(rootDir, 'skills', 'send_voice.py');
-
-                            // SECURITY FIX (CRIT-2): Build args array for spawnSync — no shell interpretation.
-                            // Read voice config: use agent-specified voice_id, or fall back to dashboard config
-                            const spawnArgs = [pythonScript, '--text', response.message];
-                            if (response.args) {
-                                spawnArgs.push('--voice_id', response.args);
-                            } else {
-                                const voiceConfigPath = path.join(process.cwd(), 'workspace', 'voice_config.json');
-                                if (fs.existsSync(voiceConfigPath)) {
+                                if (targetJids.length > 0) {
+                                    // Get agent persona name for the header
+                                    let agentName = 'OpenSpider';
                                     try {
-                                        const voiceConfig = JSON.parse(fs.readFileSync(voiceConfigPath, 'utf-8'));
-                                        if (voiceConfig.voiceId) { spawnArgs.push('--voice_id', voiceConfig.voiceId); }
+                                        const persona = new PersonaShell('manager');
+                                        const caps = persona.getCapabilities();
+                                        if (caps && caps.name) agentName = caps.name;
                                     } catch (e) { }
+
+                                    const formattedMsg = `✨ *${agentName}*\n\n${response.message}`;
+
+                                    let sentCount = 0;
+                                    const failedJids: string[] = [];
+                                    for (const jid of targetJids) {
+                                        let success = false;
+                                        let lastError: any = null;
+                                        const MAX_RETRIES = 3;
+
+                                        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+                                            try {
+                                                await sendWhatsAppMessage(jid, formattedMsg);
+                                                success = true;
+                                                sentCount++;
+                                                break; // Success, exit retry loop
+                                            } catch (e: any) {
+                                                lastError = e;
+                                                console.warn(`[Worker - ${this.role}] WhatsApp send attempt ${attempt}/${MAX_RETRIES} failed for ${jid}: ${e.message}`);
+                                                if (attempt < MAX_RETRIES) {
+                                                    // Backoff: 3000ms, then 6000ms
+                                                    const delayMs = attempt * 3000;
+                                                    console.log(`[Worker - ${this.role}] Retrying sending to ${jid} in ${delayMs / 1000}s...`);
+                                                    await new Promise(resolve => setTimeout(resolve, delayMs));
+                                                }
+                                            }
+                                        }
+
+                                        if (!success) {
+                                            console.error(`[Worker - ${this.role}] Failed to send to ${jid} after ${MAX_RETRIES} attempts:`, lastError);
+                                            failedJids.push(`${jid}: ${lastError?.message || 'Unknown error'}`);
+                                        }
+                                    }
+
+                                    if (failedJids.length > 0) {
+                                        toolOutput = `⚠️ Partial success or complete failure. Sent to ${sentCount} recipient(s). Failed to send to ${failedJids.length} recipient(s): \n${failedJids.join('\n')}`;
+                                    } else {
+                                        toolOutput = `✅ WhatsApp message sent successfully to ${sentCount} recipient(s): ${targetJids.join(', ')}.`;
+                                    }
                                 }
                             }
-                            const voiceResult = spawnSync('python3', spawnArgs, { timeout: 60000, encoding: 'utf-8' });
-                            if (voiceResult.error) throw voiceResult.error;
-                            if (voiceResult.status !== 0) throw new Error(voiceResult.stderr || 'send_voice.py exited non-zero');
-                            const stdout = voiceResult.stdout;
-
-                            // Extract audio file path from script output
-                            const pathMatch = stdout.match(/AUDIO_FILE_PATH:(.+)/);
-                            if (pathMatch && pathMatch[1]) {
-                                const audioFilePath = pathMatch[1].trim();
-                                await sendWhatsAppAudio(userJid, audioFilePath);
-
-                                // Clean up temp audio file
-                                try { fs.unlinkSync(audioFilePath); } catch (e) { }
-
-                                // Get agent persona name
-                                let agentName = 'OpenSpider';
-                                try {
-                                    const persona = new PersonaShell('manager');
-                                    const caps = persona.getCapabilities();
-                                    if (caps && caps.name) agentName = caps.name;
-                                } catch (e) { }
-
-                                toolOutput = `✅ Voice message sent successfully to ${userJid} via ElevenLabs TTS.`;
-                            } else {
-                                toolOutput = `Failed to generate voice message. Script output: ${stdout}`;
-                            }
+                        } catch (e: any) {
+                            toolOutput = `Failed to send WhatsApp message: ${e.message}`;
                         }
-                    } catch (e: any) {
-                        toolOutput = `Failed to send voice message: ${e.message}\n${e.stdout?.toString() || ''}\n${e.stderr?.toString() || ''}`;
+                    } else if (response.action === 'send_voice' && response.message) {
+                        console.log(`[Worker - ${this.role}] Generating voice message via ElevenLabs TTS...`);
+                        try {
+                            // Determine the user's WhatsApp JID from the config
+                            const configPath = path.join(process.cwd(), 'workspace', 'whatsapp_config.json');
+                            let userJid = '';
+                            if (fs.existsSync(configPath)) {
+                                const waConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+                                if (waConfig.allowedDMs && waConfig.allowedDMs.length > 0) {
+                                    const firstEntry = waConfig.allowedDMs[0];
+                                    const rawNumber = (typeof firstEntry === 'string' ? firstEntry : firstEntry.number || '').replace(/\D/g, '');
+                                    userJid = `${rawNumber}@s.whatsapp.net`;
+                                }
+                            }
+                            if (!userJid) {
+                                toolOutput = 'Error: No WhatsApp user configured. Add a phone number to the allowedDMs list in Channels > WhatsApp config.';
+                            } else {
+                                const rootDir = __dirname.endsWith('src') ? path.join(__dirname, '..', '..') : path.join(__dirname, '..', '..');
+                                const pythonScript = path.join(rootDir, 'skills', 'send_voice.py');
+
+                                // SECURITY FIX (CRIT-2): Build args array for spawnSync — no shell interpretation.
+                                // Read voice config: use agent-specified voice_id, or fall back to dashboard config
+                                const spawnArgs = [pythonScript, '--text', response.message];
+                                if (response.args) {
+                                    spawnArgs.push('--voice_id', response.args);
+                                } else {
+                                    const voiceConfigPath = path.join(process.cwd(), 'workspace', 'voice_config.json');
+                                    if (fs.existsSync(voiceConfigPath)) {
+                                        try {
+                                            const voiceConfig = JSON.parse(fs.readFileSync(voiceConfigPath, 'utf-8'));
+                                            if (voiceConfig.voiceId) { spawnArgs.push('--voice_id', voiceConfig.voiceId); }
+                                        } catch (e) { }
+                                    }
+                                }
+                                const voiceResult = spawnSync('python3', spawnArgs, { timeout: 60000, encoding: 'utf-8' });
+                                if (voiceResult.error) throw voiceResult.error;
+                                if (voiceResult.status !== 0) throw new Error(voiceResult.stderr || 'send_voice.py exited non-zero');
+                                const stdout = voiceResult.stdout;
+
+                                // Extract audio file path from script output
+                                const pathMatch = stdout.match(/AUDIO_FILE_PATH:(.+)/);
+                                if (pathMatch && pathMatch[1]) {
+                                    const audioFilePath = pathMatch[1].trim();
+                                    await sendWhatsAppAudio(userJid, audioFilePath);
+
+                                    // Clean up temp audio file
+                                    try { fs.unlinkSync(audioFilePath); } catch (e) { }
+
+                                    // Get agent persona name
+                                    let agentName = 'OpenSpider';
+                                    try {
+                                        const persona = new PersonaShell('manager');
+                                        const caps = persona.getCapabilities();
+                                        if (caps && caps.name) agentName = caps.name;
+                                    } catch (e) { }
+
+                                    toolOutput = `✅ Voice message sent successfully to ${userJid} via ElevenLabs TTS.`;
+                                } else {
+                                    toolOutput = `Failed to generate voice message. Script output: ${stdout}`;
+                                }
+                            }
+                        } catch (e: any) {
+                            toolOutput = `Failed to send voice message: ${e.message}\n${e.stdout?.toString() || ''}\n${e.stderr?.toString() || ''}`;
+                        }
+                    } else {
+                        toolOutput = `Invalid action or missing parameters. You requested '${response.action}'. Check the schema. run_command needs 'command', write_script needs 'filename' and 'content', send_email needs 'to', 'subject', and 'body', send_whatsapp needs 'message'. You provided: ${JSON.stringify(response)}`;
                     }
-                } else {
-                    toolOutput = `Invalid action or missing parameters. You requested '${response.action}'. Check the schema. run_command needs 'command', write_script needs 'filename' and 'content', send_email needs 'to', 'subject', and 'body', send_whatsapp needs 'message'. You provided: ${JSON.stringify(response)}`;
+                } catch (e: any) {
+                    toolOutput = `Tool execution failed: ${e.message}`;
                 }
-            } catch (e: any) {
-                toolOutput = `Tool execution failed: ${e.message}`;
-            }
-            
-            // Save successful executions to the cache
-            if (isCacheable && !toolOutput.startsWith('Tool execution failed') && !toolOutput.startsWith('Invalid action')) {
-                toolCache.set(cacheKey, { result: toolOutput, step: i });
-            }
-        } // End of !cacheHit block
+
+                // Save successful executions to the cache
+                if (isCacheable && !toolOutput.startsWith('Tool execution failed') && !toolOutput.startsWith('Invalid action')) {
+                    toolCache.set(cacheKey, { result: toolOutput, step: i });
+                }
+            } // End of !cacheHit block
 
             // [Token Optimization] Tool output cap: increased for relay browser content
             // which now prioritizes tables/data over nav chrome. The relay extracts up to
@@ -1038,10 +1038,10 @@ ${context.join('\n')}
 
             // Track consecutive errors (but NOT relay click/read failures — those are normal browser exploration)
             const isError = (toolOutput.startsWith('Tool execution failed')
-                         || toolOutput.startsWith('Invalid action'))
-                         && !toolOutput.includes('Element not found')  // Normal during click exploration
-                         && !toolOutput.includes('Relay')              // Relay retries are expected
-                         && !toolOutput.includes('TIP:');              // Helpful error, not a real failure
+                || toolOutput.startsWith('Invalid action'))
+                && !toolOutput.includes('Element not found')  // Normal during click exploration
+                && !toolOutput.includes('Relay')              // Relay retries are expected
+                && !toolOutput.includes('TIP:');              // Helpful error, not a real failure
             if (isError) {
                 consecutiveErrors++;
             } else {

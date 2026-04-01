@@ -123,11 +123,11 @@ async function autoDismissOverlays(): Promise<void> {
             ].join('\n'),
             returnByValue: true
         });
-        
+
         const data = JSON.parse(result.result?.value || '{"found":false}');
         if (data.found && data.w > 0 && data.h > 0) {
             console.log(`[RelayBridge] 🍪 Auto-dismissing overlay using Ghost Cursor: "${data.name}"`);
-            
+
             // Calculate center of target element
             const targetX = data.x + data.w / 2;
             const targetY = data.y + data.h / 2;
@@ -219,13 +219,13 @@ function generateBezierPath(
 
         // Cubic Bézier formula: B(t) = (1-t)³P₀ + 3(1-t)²tP₁ + 3(1-t)t²P₂ + t³P₃
         const x = u * u * u * startX
-                + 3 * u * u * t * cp1x
-                + 3 * u * t * t * cp2x
-                + t * t * t * endX;
+            + 3 * u * u * t * cp1x
+            + 3 * u * t * t * cp2x
+            + t * t * t * endX;
         const y = u * u * u * startY
-                + 3 * u * u * t * cp1y
-                + 3 * u * t * t * cp2y
-                + t * t * t * endY;
+            + 3 * u * u * t * cp1y
+            + 3 * u * t * t * cp2y
+            + t * t * t * endY;
 
         // Add micro-jitter to simulate hand tremor (±1.5px, decreasing near target)
         const noise = (1 - t) * 1.5;
@@ -761,7 +761,7 @@ export async function navigateAndRead(url: string): Promise<{ title: string; url
  */
 export async function readContent(selector?: string): Promise<{ title: string; url: string; content: string }> {
     const escapedSelector = selector ? selector.replace(/'/g, "\\'") : '';
-    
+
     const evalResult = await sendCommand('Runtime.evaluate', {
         expression: `JSON.stringify({
             title: document.title,
@@ -1153,9 +1153,6 @@ export async function typeText(selector: string, text: string): Promise<string> 
             if (!el) return JSON.stringify({ success: false, error: 'Element not found: ${escapedSelector}' });
             el.scrollIntoView({ behavior: 'smooth', block: 'center' });
             el.focus();
-            // Clear existing value
-            el.value = '';
-            el.dispatchEvent(new Event('input', { bubbles: true }));
             const rect = el.getBoundingClientRect();
             return JSON.stringify({
                 success: true,
@@ -1199,6 +1196,17 @@ export async function typeText(selector: string, text: string): Promise<string> 
         await new Promise(r => setTimeout(r, 200 + Math.floor(Math.random() * 200)));
     }
 
+    // Step 2.5: Clear the existing text NOW (after it's been clicked and focused natively)
+    await sendCommand('Runtime.evaluate', {
+        expression: `(() => {
+            const el = document.querySelector('${escapedSelector}');
+            if (el) {
+                el.value = '';
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+        })()`
+    });
+
     // Step 3: Type character-by-character via CDP Input.dispatchKeyEvent
     for (const char of text) {
         if (char === '\n') {
@@ -1218,6 +1226,23 @@ export async function typeText(selector: string, text: string): Promise<string> 
 
     console.log(`[RelayBridge] \u2328\uFE0F Typed ${text.length} chars into ${data.tag} (char-by-char CDP)`);
     return `Typed "${text}" into ${data.tag} [character-by-character]`;
+}
+
+/**
+ * Type text into an element and immediately press Enter. Useful for chatbots.
+ */
+export async function typeAndEnter(selector: string, text: string): Promise<string> {
+    const result = await typeText(selector, text);
+
+    // Press Enter immediately after typing completes
+    await new Promise(r => setTimeout(r, 100 + Math.floor(Math.random() * 100)));
+    await sendCommand('Input.dispatchKeyEvent', {
+        type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13
+    });
+    await sendCommand('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter' });
+
+    console.log(`[RelayBridge] ⏎ Pressed Enter after typing into ${selector}`);
+    return `${result} and pressed Enter`;
 }
 
 /**
