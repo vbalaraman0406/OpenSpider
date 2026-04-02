@@ -94,6 +94,54 @@ import * as path from 'path'; export class GmailService {
       .replace(/=+$/, '');
   }
 
+  private extractBody(payload: any): string {
+    let textBody = '';
+    let htmlBody = '';
+    let attachments: string[] = [];
+
+    function parseParts(parts: any[]) {
+      for (const part of parts) {
+        if (part.filename && part.filename.length > 0) {
+          attachments.push(part.filename);
+        }
+        if (part.mimeType === 'text/plain' && part.body && part.body.data) {
+          textBody += Buffer.from(part.body.data, 'base64').toString('utf8') + '\n';
+        } else if (part.mimeType === 'text/html' && part.body && part.body.data) {
+          htmlBody += Buffer.from(part.body.data, 'base64').toString('utf8') + '\n';
+        } else if (part.parts) {
+          parseParts(part.parts);
+        }
+      }
+    }
+
+    if (payload.parts) {
+      parseParts(payload.parts);
+    } else if (payload.body && payload.body.data) {
+      if (payload.mimeType === 'text/html') {
+         htmlBody = Buffer.from(payload.body.data, 'base64').toString('utf8');
+      } else {
+         textBody = Buffer.from(payload.body.data, 'base64').toString('utf8');
+      }
+    }
+
+    let finalBody = '';
+    if (textBody.trim()) {
+        finalBody = textBody;
+    } else {
+        // Strip <style> and <script> blocks completely, then strip remaining HTML tags
+        let cleanHtml = htmlBody.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+                                .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
+        finalBody = cleanHtml.replace(/<[^>]*>?/gm, ' ')
+                             .replace(/&nbsp;/g, ' ')
+                             .replace(/\s+/g, ' '); // Compress whitespace
+    }
+
+    if (attachments.length > 0) {
+       finalBody += `\n[Attachments detected: ${attachments.join(', ')}]`;
+    }
+    return finalBody.trim();
+  }
+
   async readEmails(params?: { maxResults?: number; query?: string }): Promise<{ success: boolean; emails?: any[]; error?: string }> {
     try {
       this.init();
@@ -124,6 +172,8 @@ import * as path from 'path'; export class GmailService {
           const subjectHeader = headers.find((h: any) => h.name.toLowerCase() === 'subject');
           const fromHeader = headers.find((h: any) => h.name.toLowerCase() === 'from');
           const dateHeader = headers.find((h: any) => h.name.toLowerCase() === 'date');
+          
+          let fullBody = this.extractBody(detail.data.payload);
 
           return {
             id: detail.data.id,
@@ -131,7 +181,8 @@ import * as path from 'path'; export class GmailService {
             snippet: detail.data.snippet,
             subject: subjectHeader ? subjectHeader.value : 'No Subject',
             from: fromHeader ? fromHeader.value : 'Unknown',
-            date: dateHeader ? dateHeader.value : 'Unknown'
+            date: dateHeader ? dateHeader.value : 'Unknown',
+            body: fullBody.substring(0, 6000)
           };
         })
       );

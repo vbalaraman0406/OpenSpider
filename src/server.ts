@@ -506,12 +506,14 @@ export function startServer() {
                     logEvent.data = `[CRON] ${logEvent.data}`;
                 }
 
+                // Buffer EVERYTHING into eventBuffer so System Telemetry retains the last N logs across refreshes
+                bufferEvent(logEvent);
+
                 // Buffer chat-relevant events for page refresh persistence
-                // Fix: Only buffer genuine user/agent conversation messages, not cron system logs
+                // Fix: Only buffer genuine user/agent conversation messages to chatBuffer, not cron system logs
                 // that happen to contain '[Agent]' (e.g. '[Agent] [AntigravityInternal] Sending structured request...')
                 const isCronNoise = activeCronJobs > 0 && !message.includes('[You]') && !message.includes('[Web Chat]');
                 if (!isCronNoise && (message.includes('[You]') || message.includes('[Agent]') || message.includes('[Web Chat]'))) {
-                    bufferEvent(logEvent);
                     // Also persist to chatBuffer so messages survive dashboard refresh
                     // This captures WhatsApp and all channel messages, not just dashboard chat
                     bufferChatMessage(logEvent);

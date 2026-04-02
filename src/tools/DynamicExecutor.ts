@@ -91,9 +91,12 @@ export class DynamicExecutor {
      */
     async runCommand(command: string): Promise<{ stdout: string; stderr: string; error?: string }> {
         // Detect shell metacharacters that allow command chaining/injection
-        const dangerousMetaCharsPattern = /[;|&`$()<>]/;
-        if (dangerousMetaCharsPattern.test(command)) {
-            return { stdout: '', stderr: '', error: `Security Guard: Command blocked. Dangerous shell metacharacter detected in: ${command}. Only simple commands without pipes, redirects, or chaining are allowed.` };
+        // When using True Container Sandboxing, piping and redirection is perfectly safe
+        if (process.env.DOCKER_SANDBOX !== 'true') {
+            const dangerousMetaCharsPattern = /[;|&`$()<>]/;
+            if (dangerousMetaCharsPattern.test(command)) {
+                return { stdout: '', stderr: '', error: `Security Guard: Command blocked. Dangerous shell metacharacter detected in: ${command}. Only simple commands without pipes, redirects, or chaining are allowed.` };
+            }
         }
 
         // Hardened blocklist — catches bypass variants like 'rm  -rf', 'chmod 755', etc.
@@ -125,8 +128,29 @@ export class DynamicExecutor {
             return { stdout: '', stderr: '', error: `Security Guard: Command blocked. You are strictly forbidden from scanning the root or home filesystem using find/grep/ls on '/' or '~'. ONLY work within the current directory using './'` };
         }
         try {
-            const { stdout, stderr } = await execAsync(command, { cwd: this.skillsDir, timeout: 30000 }); // strict 30s timeout
-            return { stdout, stderr };
+            if (process.env.DOCKER_SANDBOX === 'true') {
+                // Docker Sandboxing Logic
+                
+                // If the LLM specifies 'skills/script.py' locally, translate it to './script.py' inside the container
+                // since we map the skills directory directly to the container's /workspace root
+                const containerCommand = command.replace(/(^|\s)skills\//g, '$1./');
+                const b64Cmd = Buffer.from(containerCommand).toString('base64');
+                
+                // Detect python usage to prevent "python3: not found" in node container
+                let baseImage = 'node:22-alpine';
+                if (containerCommand.trim().startsWith('python') || containerCommand.trim().startsWith('pip')) {
+                    baseImage = 'python:3.11-alpine';
+                }
+
+                // We use baseImage as the base shell to ensure npm/pip is available for install commands
+                const dockerCmd = `docker run --rm --network bridge -v "${this.skillsDir}:/workspace" -w /workspace ${baseImage} /bin/sh -c "echo ${b64Cmd} | base64 -d | sh"`;
+                const { stdout, stderr } = await execAsync(dockerCmd, { cwd: this.skillsDir, timeout: 60000 });
+                return { stdout, stderr };
+            } else {
+                // Legacy Host Execution
+                const { stdout, stderr } = await execAsync(command, { cwd: this.skillsDir, timeout: 30000 }); // strict 30s timeout
+                return { stdout, stderr };
+            }
         } catch (e: any) {
             return { stdout: e.stdout || '', stderr: e.stderr || '', error: e.message };
         }
@@ -136,7 +160,11 @@ export class DynamicExecutor {
      * Installs an NPM package dynamically if an agent decides it needs it
      */
     async installPackage(packageName: string): Promise<string> {
-        const { stdout, error } = await this.runCommand(`npm install ${packageName}`);
+        let cmd = `npm install ${packageName}`;
+        if (process.env.DOCKER_SANDBOX === 'true') {
+            console.log(`[Docker] Spinning up sandbox for npm install of ${packageName}...`);
+        }
+        const { stdout, error } = await this.runCommand(cmd);
         if (error) throw new Error(`Failed to install ${packageName}: ${error}`);
         return `Successfully installed ${packageName}.\n${stdout}`;
     }
@@ -178,15 +206,41 @@ export class DynamicExecutor {
         else throw new Error("Unsupported file extension for direct execution.");
 
         // SECURITY (V5): Use spawnSync with array args to prevent injection via args parameter.
-        // Shell metacharacters in args are harmless when passed as array elements.
         const argParts = args ? args.split(/\s+/).filter(Boolean) : [];
         try {
-            const result = spawnSync(interpreter, [safeFilename, ...argParts], {
-                cwd: this.skillsDir,
-                timeout: 30000,
-                encoding: 'utf-8',
-                env: { ...process.env, PATH: process.env.PATH }
-            });
+            let result;
+            if (process.env.DOCKER_SANDBOX === 'true') {
+                let dockerImage = 'node:22-alpine';
+                let dockerCmd = interpreter;
+                
+                if (ext === '.py') {
+                    dockerImage = 'python:3.11-alpine';
+                    dockerCmd = 'python'; // alpine python binary is just 'python'
+                }
+                
+                const containerArgs = [
+                    'run', '--rm', 
+                    '--network', 'bridge', 
+                    '-v', `${this.skillsDir}:/workspace`, 
+                    '-w', '/workspace',
+                    dockerImage,
+                    dockerCmd, safeFilename, ...argParts
+                ];
+                
+                result = spawnSync('docker', containerArgs, {
+                    cwd: this.skillsDir,
+                    timeout: 60000,
+                    encoding: 'utf-8'
+                });
+            } else {
+                result = spawnSync(interpreter, [safeFilename, ...argParts], {
+                    cwd: this.skillsDir,
+                    timeout: 30000,
+                    encoding: 'utf-8',
+                    env: { ...process.env, PATH: process.env.PATH }
+                });
+            }
+            
             let out = result.stdout || '';
             
             // TOKEN OPTIMIZATION: Minify JSON arrays of objects into Tabular JSON 

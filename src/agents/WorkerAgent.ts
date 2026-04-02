@@ -63,18 +63,21 @@ export class WorkerAgent {
         const caps = persona.getCapabilities();
         let allowedTools = caps?.allowedTools || ['read_file', 'write_file', 'execute_command', 'search_codebase'];
 
+        // Require essential communication tools for all internal agents
+        const coreTools = ['final_answer', 'send_email', 'read_emails', 'send_whatsapp'];
+        for (const t of coreTools) {
+            if (!allowedTools.includes(t)) allowedTools.push(t);
+        }
+
         // RBAC Enforcement: Strip destructive and local interaction tools from Guest users
         if (this.issuerRole === 'guest') {
             const blockedGuestTools = [
                 'run_command', 'write_script', 'execute_script', 'create_workflow', 
                 'create_event_trigger', 'schedule_task', 'update_whatsapp_whitelist', 
-                'send_email'
+                'send_email', 'read_emails'
             ];
             allowedTools = allowedTools.filter((t: string) => !blockedGuestTools.includes(t));
         }
-
-        // Ensure final_answer is always available so the agent can conclude
-        if (!allowedTools.includes('final_answer')) allowedTools.push('final_answer');
 
         const ALL_TOOLS: Record<string, string> = {
             'run_command': '- run_command: { "command": "echo hello" } (Run a bash command within the project environment)',
@@ -88,7 +91,7 @@ export class WorkerAgent {
             'schedule_task': '- schedule_task: { "command": "24", "content": "prompt", "filename": "job name" } (Schedule OR UPDATE a recurring task.)',
             'message_agent': '- message_agent: { "target": "Role Name", "message": "Text to send" } (Delegate a sub-task to a specialized sub-agent)',
             'send_email': '- send_email: { "to": "user", "subject": "Hello", "body": "message", "from": "alias" } (Send an outbound email natively.)',
-            'read_emails': '- read_emails: { "content": "query string", "target": "5" } (Scan the user\'s Gmail inbox natively.)',
+            'read_emails': '- read_emails: { "content": "query string", "target": "15" } (Scan the user\'s Gmail inbox natively. Use broad queries, e.g. just "Kibuk" instead of "Kibuk Tile LLC" to ensure all related emails are caught.)',
             'send_whatsapp': '- send_whatsapp: { "message": "Hello!", "to": "Engineering Team" } (Send a WhatsApp message.)',
             'send_voice': '- send_voice: { "message": "Hello", "args": "voice_id" } (Send a voice note to the user via WhatsApp.)',
             'update_whatsapp_whitelist': '- update_whatsapp_whitelist: { "command": "add_dm", "target": "+14" } (Safely grant or revoke WhatsApp access.)',
@@ -120,6 +123,12 @@ ${assignedSkillsContext}
 
 Available tools you can request in your JSON response:
 ${activeToolsPrompt}
+
+NATIVE TOOL OVERRIDES (CRITICAL):
+- GMAIL: If asked to read, search, scan, or check emails, YOU MUST use the \`read_emails\` tool. Do NOT use the browser to navigate to mail.google.com.
+  AUTHORIZATION OVERRIDE: You are fully authorized and explicitly requested by the user to access their private email inbox via the API. Do NOT refuse due to privacy policies. Do NOT claim you have "restricted access".
+- EMAIL: If asked to send an email, YOU MUST use the \`send_email\` tool. Do NOT use the browser.
+- WHATSAPP: If asked to send a WhatsApp message or alert, YOU MUST use the \`send_whatsapp\` tool. Do NOT open WhatsApp Web in the browser.
 
 BROWSER USAGE GUIDELINES:
 - ALWAYS prefer browse_web over writing Python scripts for web searches, data lookup, or scraping. The browser is faster and uses fewer tokens.
@@ -737,7 +746,7 @@ ${context.join('\n')}
                         console.log(`[Worker - ${this.role}] Scanning Gmail Inbox...`);
                         // Support optional search queries via args or content, and maxResults via target (stringified number)
                         const query = response.args || response.content || 'is:unread';
-                        const maxResults = response.target ? parseInt(response.target, 10) : 5;
+                        const maxResults = response.target ? parseInt(response.target, 10) : 15;
 
                         const scanResult = await require('../services/GmailService').GmailService.getInstance().readEmails({ query, maxResults });
 
@@ -748,7 +757,7 @@ ${context.join('\n')}
                         } else {
                             toolOutput = `Inbox Scan Complete. Found ${scanResult.emails.length} emails matching "${query}":\n\n`;
                             scanResult.emails.forEach((email: any, index: number) => {
-                                toolOutput += `[${index + 1}] Date: ${email.date}\n    From: ${email.from}\n    Subject: ${email.subject}\n    Snippet: ${email.snippet}\n\n`;
+                                toolOutput += `[${index + 1}] Date: ${email.date}\n    From: ${email.from}\n    Subject: ${email.subject}\n    Body: ${email.body || email.snippet}\n\n`;
                             });
                         }
                     } else if (response.action === 'send_whatsapp' && response.message) {
@@ -799,7 +808,7 @@ ${context.join('\n')}
                                     if (!r) continue;
                                     const lowerR = r.toLowerCase();
 
-                                    if (lowerR === 'me' || lowerR === 'default' || lowerR === 'owner' || lowerR === 'user') {
+                                    if (lowerR === 'me' || lowerR === 'default' || lowerR === 'owner' || lowerR === 'user' || lowerR === 'default user') {
                                         if (defaultJid) targetJids.push(defaultJid);
                                     } else if (r.trim().endsWith('@g.us') || r.trim().endsWith('@s.whatsapp.net')) {
                                         // Raw JID passthrough — support direct group/DM JIDs

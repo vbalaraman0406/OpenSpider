@@ -41,6 +41,30 @@ else
     echo -e "${GREEN}✔ Node.js $(node -v) detected.${NC}\n"
 fi
 
+# 1b. Check for Docker (Required for True Execution Sandboxing)
+echo -e "${GREEN}Verifying Docker installation (Required for Sandboxing)...${NC}"
+if ! command -v docker >/dev/null 2>&1; then
+    echo -e "${YELLOW}Docker is not installed. Attempting to install Docker...${NC}"
+    if [ "$(uname)" = "Darwin" ]; then
+        if command -v brew >/dev/null 2>&1; then
+            echo -e "${GREEN}Installing Docker via Homebrew...${NC}"
+            brew install --cask docker || echo -e "${RED}Failed to install Docker. Please install Docker Desktop manually.${NC}"
+            echo -e "${YELLOW}⚠️ IMPORTANT: You must launch Docker from your strictly applications folder manually to complete setup!${NC}\n"
+        else
+            echo -e "${RED}Homebrew not found. Please install Docker Desktop manually from https://www.docker.com/products/docker-desktop/${NC}\n"
+        fi
+    elif [ "$(uname)" = "Linux" ]; then
+        echo -e "${GREEN}Installing Docker via official script...${NC}"
+        curl -fsSL https://get.docker.com -o get-docker.sh
+        sudo sh get-docker.sh || echo -e "${RED}Failed to install Docker. Please install manually.${NC}"
+        sudo usermod -aG docker $USER || true
+        rm -f get-docker.sh
+        echo -e "${YELLOW}⚠️ IMPORTANT: Please log out and back in for Docker group permissions to take effect.${NC}\n"
+    fi
+else
+    echo -e "${GREEN}✔ Docker is installed: $(docker --version)${NC}\n"
+fi
+
 # 2. Clone the repository
 if [ -d "$INSTALL_DIR" ]; then
     echo -e "${YELLOW}OpenSpider directory already exists at $INSTALL_DIR. Updating repository...${NC}"

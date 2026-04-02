@@ -128,16 +128,17 @@ async function autoDismissOverlays(): Promise<void> {
         if (data.found && data.w > 0 && data.h > 0) {
             console.log(`[RelayBridge] 🍪 Auto-dismissing overlay using Ghost Cursor: "${data.name}"`);
 
-            // Calculate center of target element
-            const targetX = data.x + data.w / 2;
-            const targetY = data.y + data.h / 2;
+            // Calculate center of target element with slight jitter (±2px)
+            const jitterX = data.x + data.w / 2 + (Math.random() * 4 - 2);
+            const jitterY = data.y + data.h / 2 + (Math.random() * 4 - 2);
 
             // Generate Bézier path
             const startX = lastMouseX ?? (Math.random() * 400 + 100);
             const startY = lastMouseY ?? (Math.random() * 300 + 100);
-            const points = generateBezierPath(startX, startY, targetX, targetY);
+            const points = generateBezierPath(startX, startY, jitterX, jitterY);
 
             // Animate visual ghost cursor
+            if (!ghostCursorInjected) await injectGhostCursor();
             animateGhostCursor(points);
 
             // Dispatch CDP mouse events to move along curve
@@ -155,10 +156,6 @@ async function autoDismissOverlays(): Promise<void> {
             // Hover pause
             await new Promise(r => setTimeout(r, 150 + Math.floor(Math.random() * 150)));
 
-            // Jitter click
-            const jitterX = targetX + (Math.random() * 4 - 2);
-            const jitterY = targetY + (Math.random() * 4 - 2);
-
             await sendCommand('Input.dispatchMouseEvent', {
                 type: 'mousePressed', x: Math.round(jitterX), y: Math.round(jitterY), button: 'left', clickCount: 1
             });
@@ -168,8 +165,8 @@ async function autoDismissOverlays(): Promise<void> {
             });
 
             await showClickEffect(jitterX, jitterY);
-            lastMouseX = targetX;
-            lastMouseY = targetY;
+            lastMouseX = jitterX;
+            lastMouseY = jitterY;
 
             // Wait for dialog to animate fully closed
             await new Promise(r => setTimeout(r, 800 + Math.floor(Math.random() * 400)));
@@ -648,8 +645,8 @@ async function solveCloudflareCheckbox(): Promise<boolean> {
         }
 
         // Turnstile checkbox is ~30px from left, vertically centered in iframe
-        const checkboxX = data.x + Math.min(35, data.w * 0.12);
-        const checkboxY = data.y + data.h / 2;
+        const checkboxX = data.x + Math.min(35, data.w * 0.12) + (Math.random() * 4 - 2);
+        const checkboxY = data.y + data.h / 2 + (Math.random() * 4 - 2);
 
         console.log(`  [RelayBridge] Turnstile at (${Math.round(data.x)}, ${Math.round(data.y)}) ${Math.round(data.w)}x${Math.round(data.h)}, clicking (${Math.round(checkboxX)}, ${Math.round(checkboxY)})`);
 
@@ -659,6 +656,7 @@ async function solveCloudflareCheckbox(): Promise<boolean> {
         const points = generateBezierPath(startX, startY, checkboxX, checkboxY);
 
         // Fire visual animation client-side
+        if (!ghostCursorInjected) await injectGhostCursor();
         animateGhostCursor(points);
 
         for (let i = 0; i < points.length; i++) {
@@ -674,19 +672,15 @@ async function solveCloudflareCheckbox(): Promise<boolean> {
         // Extra hover pause for Turnstile (they monitor hover duration)
         await new Promise(r => setTimeout(r, 200 + Math.floor(Math.random() * 400)));
 
-        // Click with jitter
-        const jX = checkboxX + (Math.random() * 4 - 2);
-        const jY = checkboxY + (Math.random() * 4 - 2);
-
         await sendCommand('Input.dispatchMouseEvent', {
-            type: 'mousePressed', x: Math.round(jX), y: Math.round(jY), button: 'left', clickCount: 1
+            type: 'mousePressed', x: Math.round(checkboxX), y: Math.round(checkboxY), button: 'left', clickCount: 1
         });
         await new Promise(r => setTimeout(r, 60 + Math.floor(Math.random() * 100)));
         await sendCommand('Input.dispatchMouseEvent', {
-            type: 'mouseReleased', x: Math.round(jX), y: Math.round(jY), button: 'left', clickCount: 1
+            type: 'mouseReleased', x: Math.round(checkboxX), y: Math.round(checkboxY), button: 'left', clickCount: 1
         });
 
-        await showClickEffect(jX, jY);
+        await showClickEffect(checkboxX, checkboxY);
 
         lastMouseX = checkboxX;
         lastMouseY = checkboxY;
@@ -1007,8 +1001,10 @@ export async function clickElement(selector: string): Promise<string> {
             // Ensure ghost cursor is injected on the current page
             if (!ghostCursorInjected) await injectGhostCursor();
             try {
-                const targetX = data.cx;
-                const targetY = data.cy;
+                // Incorporate precise ±2px human jitter BEFORE generating the path
+                // This prevents instantaneous 2px teleports when clicking
+                const targetX = data.cx + (Math.random() * 4 - 2);
+                const targetY = data.cy + (Math.random() * 4 - 2);
 
                 // Generate a Bézier curve path from a random start point to the target
                 // Start from a random edge position (simulates cursor coming from elsewhere)
@@ -1040,14 +1036,11 @@ export async function clickElement(selector: string): Promise<string> {
                 // Brief hover pause before clicking (120-350ms, like a human aiming)
                 await new Promise(r => setTimeout(r, 120 + Math.floor(Math.random() * 230)));
 
-                // Click with slight jitter (±2px, humans can't click the exact center)
-                const jitterX = targetX + (Math.random() * 4 - 2);
-                const jitterY = targetY + (Math.random() * 4 - 2);
-
+                // Click with slight jitter (already applied to targetX/Y)
                 await sendCommand('Input.dispatchMouseEvent', {
                     type: 'mousePressed',
-                    x: Math.round(jitterX),
-                    y: Math.round(jitterY),
+                    x: Math.round(targetX),
+                    y: Math.round(targetY),
                     button: 'left',
                     clickCount: 1
                 });
@@ -1055,14 +1048,14 @@ export async function clickElement(selector: string): Promise<string> {
                 await new Promise(r => setTimeout(r, 40 + Math.floor(Math.random() * 80)));
                 await sendCommand('Input.dispatchMouseEvent', {
                     type: 'mouseReleased',
-                    x: Math.round(jitterX),
-                    y: Math.round(jitterY),
+                    x: Math.round(targetX),
+                    y: Math.round(targetY),
                     button: 'left',
                     clickCount: 1
                 });
 
                 // Show visual click ripple effect
-                await showClickEffect(jitterX, jitterY);
+                await showClickEffect(targetX, targetY);
 
                 // Track last mouse position for the next movement
                 lastMouseX = targetX;
@@ -1254,11 +1247,43 @@ export async function typeAndEnter(selector: string, text: string): Promise<stri
  * Scroll the page in the relay browser.
  */
 export async function scrollPage(direction: string): Promise<string> {
-    const amount = direction === 'up' ? -500 : 500;
+    // ─── Proactive Modal Clearance (Before Scroll) ───
+    await autoDismissOverlays();
+
+    const distance = direction === 'up' ? -500 : 500;
+    
+    // Simulate smooth, human-like scroll wheel steps rather than instant jumping
+    const scrollScript = `(async () => {
+        return new Promise(resolve => {
+            const distance = ${distance};
+            const steps = 15;
+            const stepAmount = distance / steps;
+            let current = 0;
+            const interval = setInterval(() => {
+                window.scrollBy(0, stepAmount);
+                current++;
+                if (current >= steps) {
+                    clearInterval(interval);
+                    resolve(true);
+                }
+            }, 16); // ~60fps
+        });
+    })()`;
+
     await sendCommand('Runtime.evaluate', {
-        expression: `window.scrollBy(0, ${amount})`,
+        expression: scrollScript,
+        awaitPromise: true,
         returnByValue: true
     });
-    await new Promise(r => setTimeout(r, 500));
-    return `Scrolled ${direction}`;
+    
+    // Micro-delay representing human reading inertia
+    await new Promise(r => setTimeout(r, Math.floor(Math.random() * 300) + 200));
+
+    // ─── Reactive Modal Clearance (After Scroll Triggered Events) ───
+    // Modals (like Truth Social sign-in wall) often trigger *after* the user scrolls
+    // and wait for a short CSS animation. We wait 800ms, then check again.
+    await new Promise(r => setTimeout(r, 800));
+    await autoDismissOverlays();
+
+    return `Smooth-scrolled ${direction} ${Math.abs(distance)}px like a human.`;
 }

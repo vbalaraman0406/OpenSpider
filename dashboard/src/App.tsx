@@ -1238,6 +1238,9 @@ function LogsView({ logs }: { logs: LogMessage[] }) {
     // Classify log level based on content
     const getLogLevel = (data: string): string => {
         const lower = data.toLowerCase();
+        // Prevent false positives like "No errors encountered"
+        if (lower.includes('no error') || lower.includes('0 error')) return 'info';
+        
         if (lower.includes('error') || lower.includes('failed') || lower.includes('crash') || lower.includes('❌') || lower.includes('exception')) return 'error';
         if (lower.includes('warn') || lower.includes('⚠') || lower.includes('caution') || lower.includes('deprecated')) return 'warn';
         if (lower.includes('[worker') || lower.includes('[manager') || lower.includes('[scheduler') || lower.includes('usage') || lower.includes('completed') || lower.includes('delegating') || lower.includes('plan')) return 'info';
