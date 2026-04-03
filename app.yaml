@@ -1,0 +1,20 @@
+runtime: nodejs20
+env: standard
+instance_class: F1
+
+# We restrict this to 1 instance because OpenSpider acts as a stateful daemon orchestrating agents.
+# Running multiple stateless clones could lead to cron job duplication.
+automatic_scaling:
+  max_instances: 1
+  min_instances: 1
+
+env_variables:
+  # Do NOT commit raw API keys here. You must set them in GCP App Engine env or Secret Manager.
+  # This merely exposes the process PORT dynamically to match GCP routing.
+  PORT: "8080"
+  DOCKER_SANDBOX: "false"
+
+handlers:
+  - url: /.*
+    script: auto
+    secure: always

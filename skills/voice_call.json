@@ -1,0 +1,6 @@
+{
+    "name": "voice_call",
+    "description": "Call a business or person natively using Twilio WebRTC bi-directional audio to interact with them via voice.",
+    "instructions": "Execute this script passing exactly one stringified JSON argument containing the 'phoneNumber' (E.164 format) and the 'task' (the context/goal for the conversation). Example: execute_script { \"filename\": \"voice_call.js\", \"args\": \"{\\\"phoneNumber\\\": \\\"+11234567890\\\", \\\"task\\\": \\\"Call them and reserve a table for two at 8 PM for John.\\\"}\" }",
+    "language": "js"
+}

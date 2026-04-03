@@ -87,6 +87,26 @@ export function startServer() {
     app.use('/api/whatsapp/send', agentLimiter);
     app.use('/api/voice', agentLimiter);
 
+    // OPENCLAW TWIML WEBHOOK
+    // Unauthenticated explicitly so Twilio can ping it from the public internet without an API key
+    app.post('/openclaw/twiml', (req, res) => {
+        const task = req.query.task || '';
+        const host = req.headers.host;
+        const wsUrl = `wss://${host}/openclaw/stream`;
+
+        const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Connect>
+        <Stream url="${wsUrl}">
+            <Parameter name="task" value="${task}" />
+        </Stream>
+    </Connect>
+</Response>`;
+
+        res.type('text/xml');
+        res.send(twiml);
+    });
+
     // SECURITY: Require API key on all /api/* routes.
     // /api/health is public (health checks don't need auth).
     // /hooks/* uses its own token — handled inside the gmail router.
@@ -278,7 +298,13 @@ export function startServer() {
     const manager = new ManagerAgent();
 
     wss.on('connection', (ws, req) => {
-        // SECURITY: Validate API key on WebSocket connect
+        // OPENCLAW: Native Twilio WebRTC Intercept
+        if (req.url && req.url.startsWith('/openclaw/stream')) {
+            require('./services/VoiceStreamManager').handleTwilioWebSocket(ws, req);
+            return;
+        }
+
+        // SECURITY: Validate API key on WebSocket connect for Dashboard
         if (!validateWsConnection(req)) {
             console.warn('[Server] Rejected unauthenticated WebSocket connection');
             ws.close(1008, 'Unauthorized: missing or invalid apiKey');

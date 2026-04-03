@@ -31,13 +31,15 @@ OpenSpider is an open-source, self-hosted AI agent system that connects to Whats
 ## Features
 
 - 🤖 **Multi-Agent System** — Manager + Coder + Researcher + Browser Specialist agents with automatic task delegation
+- **Continuous Learning Mode** — The agent can write its own code plugins to solve novel problems and permanently `save_skill` them into its global memory bank to never repeat the same work twice.
+- **Bi-directional WebRTC Voice Engine** — OpenSpider hosts a millisecond-latency Twilio->OpenAI pipeline, allowing the AI to autonomously dial phone numbers (e.g. reserving restaurant tables) seamlessly via a dynamic skill!
 - 📱 **WhatsApp Integration** — Full WhatsApp bot with DM/group support, mention detection, and media handling
 - 🌐 **Web Dashboard** — Real-time agent chat, system telemetry, usage analytics, agent management
 - ⏰ **Cron Scheduler** — Interval-based or time-of-day scheduling for autonomous tasks
 - 🔌 **6 LLM Providers** — Google Gemini, Anthropic, OpenAI, Ollama (local), and custom endpoints
 - 📧 **Email (Send & Read)** — Gmail OAuth integration for full inbox polling and sending formatted emails
 - 🕵️ **Browser Stealth** — Headless Playwright with human-like `ghost-cursor` injection for navigating complex SPAs and bypassing bot protection
-- 🛠️ **Dynamic Skills** — Create and assign custom Python tools to agents
+- 🛠️ **Dynamic Skills** — Create and assign custom Python and Node.js tools to agents
 - 🔒 **Security** — Allowlist-based access control for WhatsApp DMs and groups
 
 ## Quick Start
@@ -73,7 +75,19 @@ The gateway starts on `http://localhost:4001` with the web dashboard included.
 > 2. Laptop: Download the Tailscale app and log in globally.
 > 3. Go to `http://<SERVER_TAILSCALE_IP>:4001` in your browser!
 
-### 4. (Optional) Development Mode
+### 4. (Optional) GCP App Engine Deployment
+
+If you prefer true cloud-scale hosting over local tunneling with Cloudflare/Ngrok, OpenSpider comes production-ready for **Google Cloud Platform App Engine**.
+
+1. Ensure the `gcloud` CLI is installed and authenticated to your project.
+2. Edit `app.yaml` to include any strict ENV requirements.
+3. Deploy the application:
+```bash
+gcloud app deploy
+```
+4. Copy your new App Engine URL (e.g., `https://your-project.wl.r.appspot.com`) and paste it into your Twilio `.env` configuration as your `PUBLIC_URL`!
+
+### 5. (Optional) Development Mode
 
 ```bash
 npm run dev

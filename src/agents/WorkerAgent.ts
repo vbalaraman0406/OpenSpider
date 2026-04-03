@@ -84,6 +84,7 @@ export class WorkerAgent {
             'write_script': '- write_script: { "filename": "test.py", "content": "print(\'hello\')" } (Write a code script to disk)',
             'execute_script': '- execute_script: { "filename": "test.py", "args": "" } (Execute a dynamically written script)',
             'search_skills': '- search_skills: { "content": "stock market" } (Search the skills catalog for existing curated scripts. ALWAYS search before writing a new script!)',
+            'save_skill': '- save_skill: { "filename": "call_restaurant.js", "content": "Name of Skill", "args": "Description of what it does" } (Promote a successful script into a permanent Curated Skill so it can be reused forever! You MUST test the script with execute_script first.)',
             'create_workflow': '- create_workflow: { "filename": "id", "content": "Name", "args": "JSON steps array" } (Create a reusable multi-step pipeline.)',
             'create_event_trigger': '- create_event_trigger: { "filename": "id", "content": "Name", "args": "JSON config" } (Create an event trigger.)',
             'browse_web': '- browse_web: Open a REAL browser.\n  To use browse_web, set "command" to the sub-action and use other fields:\n    - Navigate: { "action": "browse_web", "command": "navigate", "url": "https://google.com" }\n    - Click:    { "action": "browse_web", "command": "click", "args": "button.submit" }\n    - Type:     { "action": "browse_web", "command": "type", "args": "input[name=q]", "content": "search query" } (Do NOT use for chatbots)\n    - Type & Enter: { "action": "browse_web", "command": "type_and_enter", "args": "input.chat", "content": "hello" } (CRITICAL: MUST use this for all chatbots! Automatically waits 4s for reply. You MUST use read_content immediately after to read their response!)\n    - Read:     { "action": "browse_web", "command": "read_content" }\n    - Read targeted section: { "action": "browse_web", "command": "read_content", "args": "main" } (Use CSS selector to focus extraction)\n    - Scroll:   { "action": "browse_web", "command": "scroll", "args": "down" }\n    - List:     { "action": "browse_web", "command": "list_elements" }\n    - Run JS:   { "action": "browse_web", "command": "execute_js", "content": "return document.querySelector(\'.score\').innerText" }\n    - Close:    { "action": "browse_web", "command": "close" }',
@@ -113,6 +114,7 @@ CRITICAL: This date/time comes from the host server's real-time clock and is COR
 Your Role: ${this.role}
 You have the ability to write scripts (Python, Node.js, Bash) and execute them to solve the user's task.
 If you need a package, write a script that installs it or ask to run npm install.
+LEARNING MODE: If you write a dynamic script and successfully confirm it works, you MUST immediately call the 'save_skill' tool. This commits the script permanently to long-term memory so future agent sessions can access it via 'search_skills' without needing to write it again. You are building an autonomous library of behaviors.
 Your goal is to complete the task autonomously and return the final result.
 CRITICAL TOKEN RULE: Do not print massive HTML dumps. Use Python to parse, summarize, and extract ONLY the exact data you need. Your tool output context is truncated to 3000 characters.
 CRITICAL JSON TRUNCATION RULE: The backend API has a hard limit of 1500 output tokens. If your response exceeds this length, it will be forcefully clipped, causing a fatal JSON parse crash. You MUST keep your 'thought' string under 500 words and be concise in your intermediate steps to prevent array string truncation!
@@ -414,6 +416,19 @@ ${context.join('\n')}
                             toolOutput = `Found ${results.length} curated skill(s):\n` + results.map(s =>
                                 `• ${s.name} (${s.language}) — ${s.description}\n  Usage: ${s.instructions}`
                             ).join('\n');
+                        }
+                    } else if (response.action === 'save_skill' && response.filename && response.content) {
+                        console.log(`[Worker - ${this.role}] Saving curated skill: ${response.content}`);
+                        try {
+                            const { SkillsCatalog } = await import('../skills/SkillsCatalog');
+                            const catalog = new SkillsCatalog();
+                            catalog.promote(response.filename, {
+                                name: response.content,
+                                description: response.args || 'No description provided.'
+                            });
+                            toolOutput = `Successfully memorized ${response.filename} as a permanent skill: "${response.content}". It is now available via search_skills in future sessions.`;
+                        } catch (e: any) {
+                            toolOutput = `Failed to save skill: ${e.message}`;
                         }
                     } else if (response.action === 'create_workflow' && response.filename && response.content && response.args) {
                         console.log(`[Worker - ${this.role}] Creating workflow: ${response.content}`);
