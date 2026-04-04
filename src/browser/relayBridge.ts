@@ -773,35 +773,44 @@ export async function readContent(selector?: string): Promise<{ title: string; u
                 }
                 if (!root) root = document.body;
                 
-                const clone = root.cloneNode(true);
-                // Remove non-content elements
-                clone.querySelectorAll('script, style, noscript, iframe, svg, [class*="ad-container"], [class*="advertisement"], [class*="sponsored"], [id*="google_ads"]').forEach(el => el.remove());
+                const clone = document.createElement('div');
+                clone.innerHTML = root.innerHTML;
+                
+                // DEEP CLEANUP: Remove EVERYTHING the agent doesn't need to read.
+                const unwanted = 'script, style, noscript, iframe, svg, canvas, video, audio, nav, footer, header, aside, .cookie-banner, [role="navigation"], [role="banner"], [role="contentinfo"], [class*="ad-container"], [class*="advertisement"], [class*="sponsored"], [id*="google_ads"]';
+                clone.querySelectorAll(unwanted).forEach(el => el.remove());
+                
+                // Mount clone hidden to compute actual text layout
+                const mount = document.createElement('div');
+                Object.assign(mount.style, { position: 'absolute', left: '-9999px', top: '-9999px', width: '800px' });
+                mount.appendChild(clone);
+                document.body.appendChild(mount);
                 
                 // SMART CONTENT PRIORITIZATION:
                 // Extract data-rich content first (tables, lists), then general text.
                 // This ensures truncation cuts navigation chrome, not user data.
-                const parts = [];
+                const parts: string[] = [];
                 
                 // Priority 1: Tables (most data-dense content)
-                clone.querySelectorAll('table').forEach(table => {
+                mount.querySelectorAll('table').forEach(table => {
                     const rows = [];
                     table.querySelectorAll('tr').forEach(tr => {
                         const cells = [];
                         tr.querySelectorAll('th, td').forEach(cell => {
-                            cells.push((cell.textContent || '').trim().replace(/\\s+/g, ' '));
+                            cells.push((cell.textContent || '').trim().replace(/\s+/g, ' '));
                         });
                         if (cells.length > 0) rows.push(cells.join(' | '));
                     });
                     if (rows.length > 0) {
-                        parts.push('[TABLE]\\n' + rows.join('\\n'));
+                        parts.push('[TABLE]\n' + rows.join('\n'));
                         table.remove(); // Don't double-count
                     }
                 });
                 
                 // Priority 2: Main content area
-                const mainEls = clone.querySelectorAll('main, [role="main"], article, .content, #content');
+                const mainEls = mount.querySelectorAll('main, [role="main"], article, .content, #content');
                 mainEls.forEach(el => {
-                    const text = (el.innerText || el.textContent || '').trim();
+                    const text = (el.innerText || '').trim();
                     if (text.length > 50) {
                         parts.push(text);
                         el.remove(); // Don't double-count
@@ -829,6 +838,81 @@ export async function readContent(selector?: string): Promise<{ title: string; u
         };
     } catch {
         return { title: 'Unknown', url: '', content: 'Failed to read page content from relay browser' };
+    }
+}
+
+/**
+ * Native full-page DOM text extraction to feed the Edge-LLM.
+ * Returns the complete un-truncated innerText of the page.
+ */
+export async function readRawDOM(): Promise<{ title: string; url: string; content: string }> {
+    // FORCE REACT VIRTUALIZED LISTS TO MOUNT EVERYTHING 
+    // Zoom out aggressively so the browser viewport intersects with all posts
+    await sendCommand('Runtime.evaluate', {
+        expression: `document.body.style.zoom = '0.1';`
+    }).catch(() => {});
+    
+    // Allow React IntersectionObservers 1.5 seconds to mount the new posts into the DOM
+    await new Promise(resolve => setTimeout(resolve, 1500));
+
+    const evalResult = await sendCommand('Runtime.evaluate', {
+        expression: `JSON.stringify((() => {
+            try {
+                const tempDiv = document.createElement('div');
+                Object.assign(tempDiv.style, { position: 'absolute', left: '-9999px', top: '-9999px', width: '800px' });
+                
+                // Use innerHTML instead of cloneNode to avoid HierarchyRequestError when appending body into div
+                const clone = document.createElement('div');
+                clone.innerHTML = document.body.innerHTML;
+                
+                // Deep DOM Purge: remove items completely irrelevant to the thinking model
+                const unwanted = 'script, style, noscript, iframe, svg, canvas, video, audio, map, area, ' +
+                                 'nav, footer, header, aside, .cookie-banner, .popup, .modal, ' +
+                                 '[class*="ad-container"], [class*="advertisement"], [class*="sponsored"], [id*="google_ads"], ' + 
+                                 '[role="navigation"], [role="banner"], [role="contentinfo"], [role="complementary"]';
+                
+                clone.querySelectorAll(unwanted).forEach(el => el.remove());
+                
+                // Force visibility for off-screen innerText layout calculation
+                clone.querySelectorAll('*').forEach(el => {
+                    if (el instanceof HTMLElement) {
+                        el.style.contentVisibility = 'visible';
+                    }
+                });
+                
+                tempDiv.appendChild(clone);
+                document.body.appendChild(tempDiv);
+                
+                // Now that it's in the DOM, innerText accurately calculates visible text + line breaks!
+                const cleanedText = tempDiv.innerText;
+                
+                document.body.removeChild(tempDiv);
+                
+                return {
+                    title: document.title,
+                    url: window.location.href,
+                    content: cleanedText || document.body.innerText || ''
+                };
+            } catch(e) {
+                return {
+                    title: document.title,
+                    url: window.location.href,
+                    content: document.body.innerText || ''
+                };
+            }
+        })())`,
+        returnByValue: true
+    });
+
+    try {
+        const data = JSON.parse(evalResult.result?.value || '{}');
+        return {
+            title: data.title || 'Unknown',
+            url: data.url || '',
+            content: data.content || ''
+        };
+    } catch {
+        return { title: 'Unknown', url: '', content: '' };
     }
 }
 

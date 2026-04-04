@@ -1,0 +1,13 @@
+# Global AI Assistant Rule: NO ASSUMPTIONS, ALWAYS ANALYZE FIRST
+
+The user has explicitly stipulated a STRICT INSTRUCTION for all AI coding agent operations within this workspace: 
+**YOU NEVER ASSUME THINGS, YOU NEED TO ANALYZE BEFORE PROVIDING THE SOLUTION.**
+
+Reflecting on recent incidents in OpenSpider's infrastructure where assumptions about node hierarchy arrays and fetch payload definitions (`to` vs `jid`) caused production failures, you MUST rigidly adhere to the following procedural workflow before generating, modifying, or deleting any code:
+
+1. **Mandatory Deep Trace:** Never assume you know the shape of an API or an internal response. Use `grep_search` to trace the actual schema and parameters definitions within `src/` or `skills/` files before making any payload assumption.
+2. **Context Validation:** Do not blindly append code fixes relying on browser or Node edge-cases (like Chromium disconnected DOM behaviors) without testing. Validate your assumptions using isolated script executions using standard safe execution practices.
+3. **Trace The Flow:** If an error occurs, you must physically tail the log lines up to the ROOT error origin. Do not implement a superficial patch for the end-user visibly stated symptom; fix the actual system root cause.
+4. **Never "Guess & Proceed":** If you are unsure why an exception was thrown (e.g. `HierarchyRequestError` or `Cannot read property 'includes' of undefined`), you must read the source code causing the crash, understand the object lifecycle, and THEN formulate your repair.
+
+*By the explicit order of the user and recorded via Antigravity enforcement rules on 2026-04-03.*

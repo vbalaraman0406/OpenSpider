@@ -138,6 +138,7 @@ async function executeQueuedContext(ctx: QueuedContext) {
             console.log(`[Scheduler] Digest "${job.description}" compiled successfully.`);
             console.log(JSON.stringify({
                 type: 'cron_result',
+                jobId: job.id,
                 jobName: job.description,
                 result: digest,
                 timestamp: new Date().toISOString()
@@ -154,12 +155,13 @@ async function executeQueuedContext(ctx: QueuedContext) {
     activeCronJobs++;
 
     try {
-        const result = await manager.processUserRequest(ctx.cronPrompt);
+        const result = await manager.processUserRequest(ctx.cronPrompt, [], 'admin', job.id);
         activeCronJobs--;
         console.log(`[Scheduler] ${prefix} "${job.description}" completed. Result:\n${result}`);
 
         console.log(JSON.stringify({
             type: 'cron_result',
+            jobId: job.id,
             jobName: job.description,
             result: result,
             timestamp: new Date().toISOString()

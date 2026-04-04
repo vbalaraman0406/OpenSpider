@@ -143,7 +143,10 @@ export class DynamicExecutor {
                 }
 
                 // We use baseImage as the base shell to ensure npm/pip is available for install commands
-                const dockerCmd = `docker run --rm --network bridge -v "${this.skillsDir}:/workspace" -w /workspace ${baseImage} /bin/sh -c "echo ${b64Cmd} | base64 -d | sh"`;
+                const apiPort = process.env.PORT || 4001;
+                const apiUrl = process.env.OPENSPIDER_API_URL || `http://host.docker.internal:${apiPort}`;
+                const apiKey = process.env.DASHBOARD_API_KEY || '';
+                const dockerCmd = `docker run --rm --network bridge -e "OPENSPIDER_API_URL=${apiUrl}" -e "OPENSPIDER_API_KEY=${apiKey}" -v "${this.skillsDir}:/workspace" -w /workspace ${baseImage} /bin/sh -c "echo ${b64Cmd} | base64 -d | sh"`;
                 const { stdout, stderr } = await execAsync(dockerCmd, { cwd: this.skillsDir, timeout: 60000 });
                 return { stdout, stderr };
             } else {
@@ -218,11 +221,16 @@ export class DynamicExecutor {
                     dockerCmd = 'python'; // alpine python binary is just 'python'
                 }
                 
+                const apiPort = process.env.PORT || 4001;
+                const apiUrl = process.env.OPENSPIDER_API_URL || `http://host.docker.internal:${apiPort}`;
+                const apiKey = process.env.DASHBOARD_API_KEY || '';
                 const containerArgs = [
                     'run', '--rm', 
                     '--network', 'bridge', 
                     '-v', `${this.skillsDir}:/workspace`, 
                     '-w', '/workspace',
+                    '-e', `OPENSPIDER_API_URL=${apiUrl}`,
+                    '-e', `OPENSPIDER_API_KEY=${apiKey}`,
                     dockerImage,
                     dockerCmd, safeFilename, ...argParts
                 ];

@@ -78,7 +78,7 @@ export class AntigravityProvider implements LLMProvider {
         return { contents, systemInstruction };
     }
 
-    async generateResponse(messages: ChatMessage[], agentId?: string): Promise<{ text: string, usage?: TokenUsage }> {
+    async generateResponse(messages: ChatMessage[], agentId?: string, sessionKey?: string): Promise<{ text: string, usage?: TokenUsage }> {
         console.log(`[Agent] [Antigravity] Generating response using ${this.model}...`);
 
         const { contents, systemInstruction } = this.formatMessages(messages);
@@ -99,7 +99,7 @@ export class AntigravityProvider implements LLMProvider {
                 completionTokens: response.usageMetadata.candidatesTokenCount || 0,
                 totalTokens: response.usageMetadata.totalTokenCount || 0,
             };
-            console.log(JSON.stringify({ type: 'usage', model: this.model, usage, agentId: agentId || 'gateway' }));
+            console.log(JSON.stringify({ type: 'usage', model: this.model, usage, agentId: agentId || 'gateway', sessionKey: sessionKey || 'main' }));
             return { text, usage };
         }
 
@@ -109,7 +109,8 @@ export class AntigravityProvider implements LLMProvider {
     async generateStructuredOutputs<T>(
         messages: ChatMessage[],
         schema: Record<string, any>,
-        agentId?: string
+        agentId?: string,
+        sessionKey?: string
     ): Promise<T> {
 
         const { contents, systemInstruction } = this.formatMessages(messages);
@@ -131,7 +132,7 @@ export class AntigravityProvider implements LLMProvider {
                 completionTokens: response.usageMetadata.candidatesTokenCount || 0,
                 totalTokens: response.usageMetadata.totalTokenCount || 0,
             };
-            console.log(JSON.stringify({ type: 'usage', model: this.model, usage, agentId: agentId || 'gateway' }));
+            console.log(JSON.stringify({ type: 'usage', model: this.model, usage, agentId: agentId || 'gateway', sessionKey: sessionKey || 'main' }));
         }
 
         try {

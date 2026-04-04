@@ -193,7 +193,9 @@ export class PersonaShell {
                 role,
                 allowedTools: tools,
                 maxLoops: 15,
-                status: 'running'
+                status: 'running',
+                primary_model: ['gemini-2.5-flash', 'deepseek', 'nvidia-1'],
+                analysis_model: 'claude-opus-4-6-thinking'
             }, null, 4),
             'utf-8'
         );
@@ -235,7 +237,11 @@ export class PersonaShell {
 
     public getPrimaryModel(): string | undefined {
         const caps = this.getCapabilities();
-        return caps?.primary_model || undefined;
+        const primary = caps?.primary_model;
+        if (Array.isArray(primary) && primary.length > 0) {
+            return primary[Math.floor(Math.random() * primary.length)];
+        }
+        return primary || undefined;
     }
 
     public getAnalysisModel(): string | undefined {

@@ -20,7 +20,7 @@ export interface LLMProvider {
     /**
      * Generates a standard conversational response
      */
-    generateResponse(messages: ChatMessage[], agentId?: string): Promise<{ text: string, usage?: TokenUsage }>;
+    generateResponse(messages: ChatMessage[], agentId?: string, sessionKey?: string): Promise<{ text: string, usage?: TokenUsage }>;
 
     /**
      * Generates a structured JSON response based on the provided schema
@@ -28,6 +28,7 @@ export interface LLMProvider {
     generateStructuredOutputs<T>(
         messages: ChatMessage[],
         schema: Record<string, any>,
-        agentId?: string
+        agentId?: string,
+        sessionKey?: string
     ): Promise<T>;
 }

@@ -58,7 +58,7 @@ export class ManagerAgent {
         return `${head}\n...[COMPACTED ${result.length - maxLen} chars]...\n${tail}${urlBlock}${headerLine}`;
     }
 
-    async processUserRequest(prompt: string, imagesBase64: string[] = [], issuerRole: 'admin' | 'guest' = 'admin'): Promise<string> {
+    async processUserRequest(prompt: string, imagesBase64: string[] = [], issuerRole: 'admin' | 'guest' = 'admin', sessionKey?: string): Promise<string> {
         this.resetCancel(); // Clear any previous cancel flag
         console.log(`\n[Manager] Analyzing request: "${prompt}"${imagesBase64.length > 0 ? ` [with ${imagesBase64.length} image(s)]` : ''} - [Role: ${issuerRole}]`);
         const agentPersona = process.env.AGENT_PERSONA || "You are a helpful multi-agent assistant designed to write excellent code and utilize terminals.";
@@ -281,7 +281,7 @@ Example output:
                                 }
                             }
                         }
-                    }, 'manager');
+                    }, 'manager', sessionKey);
                     break; // Success!
                 } catch (e: any) {
                     // Don't retry API/infrastructure errors (rate limits, auth, network) as "JSON parse errors"
@@ -435,7 +435,7 @@ Example output:
                     const resolvedAnalysisId = analysisModelId === "primary" ? undefined : analysisModelId;
                     const analysisLlm = (!this.providerOverride && analysisModelId) ? getProvider(resolvedAnalysisId) : undefined;
                     
-                    const worker = new WorkerAgent(workerLlm, resolvedRole, () => this.cancelRequested, isCron, analysisLlm);
+                    const worker = new WorkerAgent(workerLlm, resolvedRole, () => this.cancelRequested, isCron, analysisLlm, 'admin', sessionKey);
                     const result = await worker.executeTask(step.instruction, globalContext, imagesBase64);
 
                     console.log(`[Manager] Task ${taskId} completed. Result:\n${result}\n`);
@@ -486,7 +486,7 @@ Example output:
                         const resolvedAnalysisId = analysisModelId === "primary" ? undefined : analysisModelId;
                         const analysisLlm = (!this.providerOverride && analysisModelId) ? getProvider(resolvedAnalysisId) : undefined;
                         
-                        const worker = new WorkerAgent(workerLlm, resolvedRole, () => this.cancelRequested, isCron, analysisLlm, issuerRole);
+                        const worker = new WorkerAgent(workerLlm, resolvedRole, () => this.cancelRequested, isCron, analysisLlm, issuerRole, sessionKey);
                         const result = await worker.executeTask(subtask.instruction, workerContext, imagesBase64);
 
                         console.log(`[Manager] Parallel Task ${taskId} completed.`);

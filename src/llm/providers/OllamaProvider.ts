@@ -10,7 +10,7 @@ export class OllamaProvider implements LLMProvider {
         this.model = process.env.OLLAMA_MODEL || 'llama3';
     }
 
-    async generateResponse(messages: ChatMessage[], agentId?: string): Promise<{ text: string, usage?: TokenUsage }> {
+    async generateResponse(messages: ChatMessage[], agentId?: string, sessionKey?: string): Promise<{ text: string, usage?: TokenUsage }> {
         console.log(`[Agent] [Ollama] Generating response using ${this.model}...`);
         const response = await this.client.chat({
             model: this.model,
@@ -36,7 +36,7 @@ export class OllamaProvider implements LLMProvider {
                 completionTokens: response.eval_count,
                 totalTokens: response.prompt_eval_count + response.eval_count
             };
-            console.log(JSON.stringify({ type: 'usage', model: this.model, usage, agentId: agentId || 'gateway' }));
+            console.log(JSON.stringify({ type: 'usage', model: this.model, usage, agentId: agentId || 'gateway', sessionKey: sessionKey || 'main' }));
             return { text, usage };
         }
 
@@ -46,7 +46,8 @@ export class OllamaProvider implements LLMProvider {
     async generateStructuredOutputs<T>(
         messages: ChatMessage[],
         schema: Record<string, any>,
-        agentId?: string
+        agentId?: string,
+        sessionKey?: string
     ): Promise<T> {
         console.log(`[Agent] [Ollama] Sending structured generation to ${this.model}...`);
         // Ollama supports structured outputs natively via the `format` parameter.
@@ -72,7 +73,7 @@ export class OllamaProvider implements LLMProvider {
                 completionTokens: response.eval_count,
                 totalTokens: response.prompt_eval_count + response.eval_count
             };
-            console.log(JSON.stringify({ type: 'usage', model: this.model, usage, agentId: agentId || 'gateway' }));
+            console.log(JSON.stringify({ type: 'usage', model: this.model, usage, agentId: agentId || 'gateway', sessionKey: sessionKey || 'main' }));
         }
 
         try {

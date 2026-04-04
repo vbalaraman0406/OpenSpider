@@ -26,23 +26,28 @@ export interface UsageSummary {
     previousPeriodCost: number;
     models: Record<string, number>;
     agents: Record<string, number>;
+    modelCosts: Record<string, number>;
     dailyTokens: { date: string, totalTokens: number, promptTokens: number, completionTokens: number }[];
     recentSessions: UsageEntry[];
 }
 
 // Pricing per 1,000,000 tokens (USD)
 const PRICING_MATRIX: Record<string, { prompt: number, completion: number }> = {
-    'claude-3-opus-20240229': { prompt: 15.00, completion: 75.00 },
-    'claude-3-sonnet-20240229': { prompt: 3.00, completion: 15.00 },
-    'claude-3-haiku-20240307': { prompt: 0.25, completion: 1.25 },
-    'claude-opus-4-6-thinking': { prompt: 15.00, completion: 75.00 }, // Proxied through Antigravity to Claude Opus 4
+    'claude-3-opus': { prompt: 15.00, completion: 75.00 },
+    'claude-opus-4-6-thinking': { prompt: 15.00, completion: 75.00 },
+    'claude-3-sonnet': { prompt: 3.00, completion: 15.00 },
+    'claude-sonnet-4-6': { prompt: 3.00, completion: 15.00 },
+    'claude-sonnet-4-5': { prompt: 3.00, completion: 15.00 },
+    'claude-3-haiku': { prompt: 0.25, completion: 1.25 },
     'gpt-4o': { prompt: 5.00, completion: 15.00 },
     'gpt-4-turbo': { prompt: 10.00, completion: 30.00 },
     'gpt-3.5-turbo': { prompt: 0.50, completion: 1.50 },
-    // NVIDIA NIM models (free-tier / credit-based — set to $0, update if pricing changes)
-    'nvidia/llama-3.1-nemotron-ultra-253b-v1': { prompt: 0, completion: 0 },
-    // DeepSeek (very low cost)
-    'deepseek-chat': { prompt: 0.27, completion: 1.10 },
+    'gemini-2.5-flash': { prompt: 0.075, completion: 0.30 },
+    'gemini-3.0-flash': { prompt: 0.075, completion: 0.30 },
+    'gemini-2.5-pro': { prompt: 3.50, completion: 10.50 },
+    'gemini-3.1-pro': { prompt: 3.50, completion: 10.50 },
+    'nvidia': { prompt: 0.00, completion: 0.00 }, // Antigravity internal proxy sets at /bin/zsh
+    'deepseek': { prompt: 0.27, completion: 1.10 },
 };
 
 function calculateExactCost(model: string, usage: TokenUsage): number {
@@ -103,6 +108,7 @@ export function getUsageSummary(daysScope: number = 30): UsageSummary {
         previousPeriodCost: 0,
         models: {},
         agents: {},
+        modelCosts: {},
         dailyTokens: [],
         recentSessions: []
     };
@@ -147,11 +153,13 @@ export function getUsageSummary(daysScope: number = 30): UsageSummary {
                     summary.totalRequests += 1;
 
                     // Exact cost calculate logic
-                    summary.totalCostEst += calculateExactCost(entry.model, entry.usage);
+                    const exactCost = calculateExactCost(entry.model, entry.usage);
+                    summary.totalCostEst += exactCost;
 
                     // Aggregate models
                     const md = entry.model || 'unknown';
                     summary.models[md] = (summary.models[md] || 0) + entry.usage.totalTokens;
+                    summary.modelCosts[md] = (summary.modelCosts[md] || 0) + exactCost;
 
                     // Aggregate agents
                     const ag = entry.agentId || 'gateway';
@@ -186,6 +194,33 @@ export function getUsageSummary(daysScope: number = 30): UsageSummary {
 
     } catch (e: any) {
         console.error('[Usage System] Failed to read usage log:', e.message);
+    }
+
+    // Try to map cron session keys to readable descriptions
+    try {
+        const cronFile = path.join(WORKSPACE_DIR, 'cron_jobs.json');
+        if (fs.existsSync(cronFile)) {
+            const cronData = JSON.parse(fs.readFileSync(cronFile, 'utf-8'));
+            const cronMap: Record<string, string> = {};
+            if (Array.isArray(cronData)) {
+                for (const job of cronData) {
+                    if (job.id && job.description) {
+                        cronMap[`cron-${job.id}`] = job.description;
+                    }
+                }
+            }
+            // Apply mapped descriptions to sessionKeys in recentSessions
+            for (const session of summary.recentSessions) {
+                if (session.sessionKey && session.sessionKey.startsWith('cron-')) {
+                    const mappedDesc = cronMap[session.sessionKey];
+                    if (mappedDesc !== undefined) {
+                        session.sessionKey = mappedDesc;
+                    }
+                }
+            }
+        }
+    } catch (e) {
+        // Ignore failures in mapping
     }
 
     return summary;

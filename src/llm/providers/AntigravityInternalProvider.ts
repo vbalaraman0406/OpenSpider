@@ -64,7 +64,7 @@ export class AntigravityInternalProvider implements LLMProvider {
         return result;
     }
 
-    async generateResponse(messages: ChatMessage[], agentId?: string): Promise<{ text: string, usage?: TokenUsage }> {
+    async generateResponse(messages: ChatMessage[], agentId?: string, sessionKey?: string): Promise<{ text: string, usage?: TokenUsage }> {
         console.log(`[Agent] [AntigravityInternal] Generating response using ${this.model}...`);
         let auth = await this.ensureAuth();
         const formatted = this.formatMessages(messages);
@@ -221,7 +221,7 @@ export class AntigravityInternalProvider implements LLMProvider {
         }
 
         if (usage) {
-            console.log(JSON.stringify({ type: 'usage', model: this.model, usage, agentId: agentId || 'gateway' }));
+            console.log(JSON.stringify({ type: 'usage', model: this.model, usage, agentId: agentId || 'gateway', sessionKey: sessionKey || 'main' }));
             return { text: finalText, usage };
         }
 
@@ -231,7 +231,8 @@ export class AntigravityInternalProvider implements LLMProvider {
     async generateStructuredOutputs<T>(
         messages: ChatMessage[],
         schema: Record<string, any>,
-        agentId?: string
+        agentId?: string,
+        sessionKey?: string
     ): Promise<T> {
 
         console.log(`[Agent] [AntigravityInternal] Sending structured request to ${this.model}...`);
@@ -389,7 +390,7 @@ export class AntigravityInternalProvider implements LLMProvider {
         }
 
         if (usage) {
-            console.log(JSON.stringify({ type: 'usage', model: this.model, usage, agentId: agentId || 'gateway' }));
+            console.log(JSON.stringify({ type: 'usage', model: this.model, usage, agentId: agentId || 'gateway', sessionKey: sessionKey || 'main' }));
         }
 
         try {

@@ -222,43 +222,37 @@ Pause agent execution and wait for user input:
 
 ---
 
-## Dynamic Skills
+## Dynamic Skills & Continuous Learning
 
-Skills are metadata files in the `skills/` directory that describe agent capabilities to the dashboard.
+OpenSpider agents operate in a **Continuous Learning Mode**. They are not restricted to hard-coded TypeScript tools! 
 
-### Skill Metadata Format
+If you ask an agent to perform a novel task (like formatting a specialized PDF or interacting with an API), the agent will:
+1. Natively write a Python or Node.js script using `write_script`.
+2. Test the script using `execute_script`.
+3. Call **`save_skill`** to permanently commit the script to its global memory bank!
 
-Each skill has a `.md` file with YAML frontmatter:
+### Skill Catalog Structure
 
-```markdown
----
-name: Browse Web
-description: Navigate to URLs and extract page content using a headless browser
-tool: browse_web
----
+When an agent calls `save_skill`, OpenSpider creates a `.json` metadata file in the `skills/` directory alongside the generated script. For example:
 
-## Usage
-
-The agent can browse web pages to gather information...
+**`skills/voice_call.json`**
+```json
+{
+    "name": "voice_call",
+    "description": "Call a business or person natively using Twilio WebRTC",
+    "instructions": "Execute script passing phoneNumber and task...",
+    "language": "js"
+}
 ```
 
-### Available Skills
+Whenever OpenSpider boots up or starts a new session, it pulls this catalog into its prompt. The agent NEVER has to rewrite the same script twice. You can view all saved skills in the Dashboard's Skills tab.
 
-| Skill | File | Description |
-|---|---|---|
-| Browse Web | `skills/browse_web.md` | Headless web browsing via Playwright |
-| Schedule Task | `skills/schedule_task.md` | Create recurring cron jobs |
-| Wait for User | `skills/wait_for_user.md` | Pause for user confirmation |
-| Send Email | `skills/send_email.py` | Gmail-based email sending |
+### Available Pre-loaded Skills
 
-### Adding Custom Skills
-
-To create a new skill:
-
-1. Create a `.md` metadata file in the `skills/` directory
-2. Define the YAML frontmatter with `name`, `description`, and `tool`
-3. Implement the tool logic in the WorkerAgent's action handler
-4. The skill will appear automatically in the Dashboard's Skills tab
+| Skill | Description |
+|---|---|
+| `voice_call` | Autonomous Phone Dialing via Twilio WebRTC |
+| `send_email` | Gmail-based email sending via OAuth |
 
 ## Gmail Webhooks
 

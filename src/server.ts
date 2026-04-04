@@ -85,6 +85,7 @@ export function startServer() {
     app.use('/api', generalLimiter);
     app.use('/api/chat', agentLimiter);
     app.use('/api/whatsapp/send', agentLimiter);
+    app.use('/api/email/send', agentLimiter);
     app.use('/api/voice', agentLimiter);
 
     // OPENCLAW TWIML WEBHOOK
@@ -733,6 +734,17 @@ export function startServer() {
             const jid = to.includes('@') ? to : `${to}@s.whatsapp.net`;
             await sendWhatsAppMessage(jid, text);
             res.json({ success: true, message: `Dispatched to ${jid}` });
+        } catch (e: any) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    app.post('/api/email/send', async (req, res) => {
+        try {
+            const { sendEmail } = require('./email');
+            const { to, subject, body, isHtml, from } = req.body;
+            await sendEmail(to, subject, body, isHtml, from);
+            res.json({ success: true, message: `Dispatched email to ${to}` });
         } catch (e: any) {
             res.status(500).json({ error: e.message });
         }

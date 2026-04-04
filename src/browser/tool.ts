@@ -4,6 +4,7 @@ import { createCursor, Cursor } from 'ghost-cursor-playwright';
 import * as relayBridge from './relayBridge';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { getProvider } from '../llm/index';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // BROWSER ACCESS LOGGER
@@ -172,7 +173,7 @@ function sanitizePageContent(content: string): string {
 
 export interface BrowseAction {
     /** The sub-action to perform */
-    action: 'navigate' | 'click' | 'type' | 'type_and_enter' | 'read_content' | 'screenshot' | 'wait_for_user' | 'scroll' | 'close' | 'execute_js' | 'list_elements';
+    action: 'navigate' | 'click' | 'type' | 'type_and_enter' | 'read_content' | 'screenshot' | 'wait_for_user' | 'scroll' | 'close' | 'execute_js' | 'list_elements' | 'extract_data';
     /** URL to navigate to (for 'navigate') */
     url?: string | undefined;
     /** CSS selector for click/type targets */
@@ -185,6 +186,8 @@ export interface BrowseAction {
     direction?: 'up' | 'down' | undefined;
     /** JavaScript code to execute inside the browser context */
     script?: string | undefined;
+    /** Intelligent data extraction instruction */
+    instruction?: string | undefined;
 }
 
 /**
@@ -311,6 +314,8 @@ export class BrowserTool {
                     return await this.doExecuteJs(action.script || '');
                 case 'list_elements':
                     return await this.doListElements();
+                case 'extract_data':
+                    return await this.doExtractData(action.instruction || '');
                 default:
                     return `Unknown browser action: ${action.action}`;
             }
@@ -803,14 +808,112 @@ export class BrowserTool {
             const lastPath = new URL(this.lastNavigatedUrl).pathname;
 
             if (relayHost !== lastHost || relayPath !== lastPath) {
-                console.log(`[BrowserTool] [Relay] Auto-syncing: relay is on ${relayState.url} but last navigation was to ${this.lastNavigatedUrl}`);
-                await relayBridge.navigateAndRead(this.lastNavigatedUrl);
+            await relayBridge.navigateAndRead(this.lastNavigatedUrl);
             }
         } catch (e: any) {
             console.warn(`[BrowserTool] Relay sync check failed: ${e.message}`);
         }
     }
 
+    private async doExtractData(instruction: string): Promise<string> {
+        if (!instruction) return 'Error: No instruction provided for extract_data action.';
+        const startMs = Date.now();
+
+        try {
+            console.log(`[BrowserTool] 🧠 Extracting data using Edge-LLM (instruction: "${instruction}")...`);
+            
+            let rawContent = '';
+            let pathLogged: 'relay' | 'headless' = 'headless';
+
+            // Smart wait for any dynamic content before extracting (bumped for large SPAs like Truth Social)
+            await new Promise(r => setTimeout(r, 5000));
+            
+            // Truth Social virtualized lists are throttled by Chrome OS occlusion if the user's window is minimized.
+            // By bypassing Relay, we force Headless mode (which uses a 10000px high viewport) to inherently mount all posts instantly.
+            // UPDATE: Removed bypass; Truth Social explicitly blocks Headless mode now. We will use Relay and handle occlusion elsewhere.
+
+            if (relayBridge.isRelayConnected()) {
+                pathLogged = 'relay';
+                const result = await relayBridge.readRawDOM();
+                rawContent = result.content;
+            } else {
+                pathLogged = 'headless';
+                const page = await this.ensurePage();
+                rawContent = await page.evaluate(async () => {
+                    try {
+                        const originalZoom = document.body.style.zoom;
+                        document.body.style.zoom = '0.1';
+                        await new Promise(r => setTimeout(r, 1500));
+                        
+                        const tempDiv = document.createElement('div');
+                        Object.assign(tempDiv.style, { position: 'absolute', left: '-9999px', top: '-9999px', width: '800px', zoom: '1' });
+                        
+                        const clone = document.createElement('div');
+                        clone.innerHTML = document.body.innerHTML;
+                        
+                        const unwanted = 'script, style, noscript, iframe, svg, canvas, video, audio, map, area, ' +
+                                         'nav, footer, header, aside, .cookie-banner, .popup, .modal, ' +
+                                         '[class*="ad-container"], [class*="advertisement"], [class*="sponsored"], [id*="google_ads"], ' + 
+                                         '[role="navigation"], [role="banner"], [role="contentinfo"], [role="complementary"]';
+                        clone.querySelectorAll(unwanted).forEach((el: any) => el.remove());
+                        
+                        clone.querySelectorAll('*').forEach((el: any) => { 
+                            el.style.contentVisibility = 'visible'; 
+                        });
+                        
+                        tempDiv.appendChild(clone);
+                        document.body.appendChild(tempDiv);
+                        const cleanedText = tempDiv.innerText;
+                        document.body.removeChild(tempDiv);
+                        
+                        document.body.style.zoom = originalZoom;
+                        
+                        return cleanedText || document.body.innerText || '';
+                    } catch(e) {
+                        // Ensure we return something
+                        return document.body.innerText || '';
+                    }
+                }) || '';
+            }
+
+            if (!rawContent || rawContent.trim().length === 0) {
+                return 'Error: Page content is empty. Cannot extract data.';
+            }
+
+            // Clean the content of null bytes or extreme unprintable characters
+            const cleanContent = sanitizePageContent(rawContent);
+            console.log(`[BrowserTool] Sending ${cleanContent.length} chars of DOM to Edge-LLM (gemini-2.5-flash)...`);
+
+            // Use the designated massive-context Edge LLM
+            const edgeLlm = getProvider('gemini-2.5-flash');
+            const messages = [
+                {
+                    role: 'user',
+                    content: `You are an automated, silent data extraction module.
+Your ONLY job is to extract data exactly as specified and return the RAW RESULT.
+You MUST NOT generate any conversational text, pleasantries, "Initiating analysis", or markdown formatting like \`\`\`json unless strictly necessary. Return the pure, raw data string.
+
+USER INSTRUCTION:
+${instruction}
+
+--- WEBPAGE TEXT ---
+${cleanContent}`
+                }
+            ];
+
+            const response = await edgeLlm.generateResponse(messages as any, 'BrowserTool', 'extract_data');
+            
+            const ms = Date.now() - startMs;
+            logBrowserAccess({ action: 'extract_data', target: instruction.substring(0, 50), path: pathLogged, result: 'ok', ms });
+
+            console.log(`[BrowserTool] ✅ Edge extraction complete in ${ms}ms.`);
+            return response.text || 'No data extracted.';
+
+        } catch (e: any) {
+             console.error('[BrowserTool] Error during edge extraction:', e);
+             return `Error during edge extraction: ${e.message}`;
+        }
+    }
 
     private async doClose(): Promise<string> {
         if (this.page && !this.page.isClosed()) {

@@ -93,3 +93,38 @@ The agent's text reply is automatically suppressed when a voice note is sent alo
 ### Duplicate voice replies
 
 If you hear two voice notes for one message, check that the Manager's `IDENTITY.md` contains the single-task voice rule.
+
+---
+
+## 📞 Native Phone Calling (Bi-Directional Voice Engine)
+
+In addition to WhatsApp voice notes, OpenSpider can autonomously dial any real-world phone number and hold a low-latency, bi-directional voice conversation with a human (e.g., to make a restaurant reservation).
+
+This is achieved using a **Twilio + OpenAI Realtime API** pipeline.
+
+### Architecture
+
+1. The agent invokes the `voice_call` dynamic skill via `execute_script`.
+2. The skill dispatches a Twilio API request instructing Twilio to dial the destination phone number.
+3. Twilio answers the phone and immediately pings OpenSpider's local webhook (`/openclaw/twiml`).
+4. The OpenSpider Gateway bridges the Twilio `<Stream>` directly to `wss://api.openai.com/v1/realtime`.
+5. The LLM handles Voice-Activity-Detection (VAD) and conversational pacing natively in less than 300ms.
+
+### Configuration
+
+To enable Autonomous Phone Calling, ensure the following keys are set in your `.env` file:
+
+```env
+# Must be your Cloudflare / Ngrok URL ending in .com/.app
+PUBLIC_URL=https://your-tunnel-url.com
+
+# Requires an OpenAI API key with Realtime API access
+OPENAI_API_KEY=sk-...
+
+# Twilio Credentials
+TWILIO_ACCOUNT_SID=AC...
+TWILIO_AUTH_TOKEN=...
+TWILIO_PHONE_NUMBER=+1234567890
+```
+
+Once configured, simply instruct the agent: *"Call [Number] and book a table for 8pm."*

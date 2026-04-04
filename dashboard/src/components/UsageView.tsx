@@ -14,6 +14,7 @@ export interface UsageSummary {
     previousPeriodCost: number;
     models: Record<string, number>;
     agents: Record<string, number>;
+    modelCosts?: Record<string, number>;
     dailyTokens: { date: string, totalTokens: number, promptTokens: number, completionTokens: number }[];
     recentSessions: any[];
 }
@@ -154,14 +155,21 @@ export function UsageView() {
         Output: d.completionTokens,
     }));
 
-    // Donut data — cost by model
+    // Donut data — exact cost by model
     const modelCostData = Object.entries(summary.models).map(([model, tokens]) => {
-        // Rough proportional cost allocation
-        const proportion = summary.totalTokens > 0 ? tokens / summary.totalTokens : 0;
+        // Use EXACT pricing calculated backend if available, fallback to proportional UI hack
+        let actualValue = 0;
+        if (summary.modelCosts && summary.modelCosts[model] !== undefined) {
+            actualValue = summary.modelCosts[model];
+        } else {
+            const proportion = summary.totalTokens > 0 ? tokens / summary.totalTokens : 0;
+            actualValue = proportion * summary.totalCostEst;
+        }
+
         return {
             name: model.length > 20 ? model.slice(0, 18) + '…' : model,
             fullName: model,
-            value: Number((proportion * summary.totalCostEst).toFixed(4)),
+            value: Number(actualValue.toFixed(4)),
             tokens,
         };
     }).filter(d => d.value > 0 || d.tokens > 0);
@@ -171,6 +179,16 @@ export function UsageView() {
     if (allCostZero) {
         modelCostData.forEach(d => { d.value = d.tokens; });
     }
+
+    // Model bar chart data
+    const modelTokenData = Object.entries(summary.models || {})
+        .sort(([, a]: any, [, b]: any) => b - a)
+        .map(([model, tokens], i) => ({
+            model: model.length > 20 ? model.slice(0, 18) + '…' : model,
+            fullName: model,
+            tokens: tokens as number,
+            fill: CHART_COLORS[i % CHART_COLORS.length],
+        }));
 
     // Agent bar chart data
     const agentData = Object.entries(summary.agents || {})
@@ -357,6 +375,8 @@ export function UsageView() {
                                             </Pie>
                                             <Tooltip
                                                 contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '0.5rem', fontSize: '12px', color: '#f8fafc' }}
+                                                itemStyle={{ color: '#f8fafc' }}
+                                                labelStyle={{ color: '#94a3b8', fontWeight: 'bold' }}
                                                 formatter={(value: any, name: any) => [
                                                     allCostZero ? `${Number(value).toLocaleString()} tokens` : `$${Number(value).toFixed(4)}`,
                                                     name
@@ -390,8 +410,9 @@ export function UsageView() {
 
                 {/* ──────────── Bottom Row ──────────── */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {/* Agent Activity */}
-                    <div className="bg-slate-900/40 backdrop-blur-xl rounded-2xl border border-white/5 p-6 shadow-xl relative overflow-hidden">
+                    <div className="flex flex-col gap-6">
+                        {/* Agent Activity */}
+                        <div className="bg-slate-900/40 backdrop-blur-xl rounded-2xl border border-white/5 p-6 shadow-xl relative overflow-hidden">
                         <div className="absolute top-0 inset-x-0 h-px w-full bg-gradient-to-r from-transparent via-indigo-500/30 to-transparent" />
                         <h3 className="text-lg font-semibold text-white mb-6 tracking-tight">Agent Activity</h3>
                         {agentData.length > 0 ? (
@@ -403,6 +424,9 @@ export function UsageView() {
                                         <YAxis type="category" dataKey="agent" stroke="#475569" fontSize={12} width={90} axisLine={false} tickLine={false} />
                                         <Tooltip
                                             contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '0.5rem', fontSize: '12px', color: '#f8fafc' }}
+                                            itemStyle={{ color: '#f8fafc' }}
+                                            labelStyle={{ color: '#94a3b8', fontWeight: 'bold' }}
+                                            cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }}
                                             formatter={(value: any) => [`${Number(value).toLocaleString()} tokens`, 'Usage']}
                                         />
                                         <Bar dataKey="tokens" radius={[0, 6, 6, 0]} barSize={20}>
@@ -418,6 +442,40 @@ export function UsageView() {
                                 No agent activity recorded
                             </div>
                         )}
+                    </div>
+
+                        {/* Model Activity */}
+                        <div className="bg-slate-900/40 backdrop-blur-xl rounded-2xl border border-white/5 p-6 shadow-xl relative overflow-hidden">
+                            <div className="absolute top-0 inset-x-0 h-px w-full bg-gradient-to-r from-transparent via-cyan-500/30 to-transparent" />
+                            <h3 className="text-lg font-semibold text-white mb-6 tracking-tight">Model Activity</h3>
+                            {modelTokenData.length > 0 ? (
+                                <div className="h-56">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <BarChart data={modelTokenData} layout="vertical" margin={{ left: 0, right: 20, top: 5, bottom: 5 }}>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" horizontal={false} />
+                                            <XAxis type="number" stroke="#475569" fontSize={11} axisLine={false} tickLine={false} tickFormatter={(val: number) => val >= 1000 ? `${(val / 1000).toFixed(0)}k` : String(val)} />
+                                            <YAxis type="category" dataKey="model" stroke="#475569" fontSize={12} width={100} axisLine={false} tickLine={false} />
+                                            <Tooltip
+                                                contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '0.5rem', fontSize: '12px', color: '#f8fafc' }}
+                                                itemStyle={{ color: '#f8fafc' }}
+                                                labelStyle={{ color: '#94a3b8', fontWeight: 'bold' }}
+                                                cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }}
+                                                formatter={(value: any) => [`${Number(value).toLocaleString()} tokens`, 'Usage']}
+                                            />
+                                            <Bar dataKey="tokens" radius={[0, 6, 6, 0]} barSize={20}>
+                                                {modelTokenData.map((entry, i) => (
+                                                    <Cell key={i} fill={entry.fill} />
+                                                ))}
+                                            </Bar>
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            ) : (
+                                <div className="h-56 flex items-center justify-center text-slate-500 text-sm font-medium">
+                                    No model activity recorded
+                                </div>
+                            )}
+                        </div>
                     </div>
 
                     {/* Recent Activity Feed */}
@@ -461,6 +519,11 @@ export function UsageView() {
                                             <div className="flex items-center gap-2">
                                                 <span className="text-sm font-semibold text-slate-200">{agentId}</span>
                                                 <span className="bg-slate-800 text-slate-400 px-2 py-0.5 rounded text-[10px] font-mono truncate max-w-[140px]">{session.model}</span>
+                                                {session.sessionKey && session.sessionKey !== 'main' && (
+                                                    <span className="bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 rounded text-[10px] font-mono truncate max-w-[140px]" title="Session Key">
+                                                        {session.sessionKey}
+                                                    </span>
+                                                )}
                                             </div>
                                             <div className="text-[11px] text-slate-500 mt-0.5">
                                                 {session.usage?.promptTokens || 0} in · {session.usage?.completionTokens || 0} out

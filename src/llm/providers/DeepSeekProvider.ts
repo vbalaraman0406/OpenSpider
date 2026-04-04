@@ -15,7 +15,8 @@ export class DeepSeekProvider extends OpenAIProvider {
     async generateStructuredOutputs<T>(
         messages: ChatMessage[],
         schema: Record<string, any>,
-        agentId?: string
+        agentId?: string,
+        sessionKey?: string
     ): Promise<T> {
         // DeepSeek doesn't support json_schema — inject schema into system prompt
         // and use response_format: { type: "json_object" }
@@ -63,7 +64,7 @@ export class DeepSeekProvider extends OpenAIProvider {
                 completionTokens: data.usage.completion_tokens || 0,
                 totalTokens: data.usage.total_tokens || 0
             };
-            console.log(JSON.stringify({ type: 'usage', model: (this as any).model, usage, agentId: agentId || 'gateway' }));
+            console.log(JSON.stringify({ type: 'usage', model: (this as any).model, usage, agentId: agentId || 'gateway', sessionKey: sessionKey || 'main' }));
         }
 
         const rawContent = data.choices?.[0]?.message?.content || '';

@@ -1237,12 +1237,19 @@ function LogsView({ logs }: { logs: LogMessage[] }) {
 
     // Classify log level based on content
     const getLogLevel = (data: string): string => {
+        // Explicitly exempt cron log outputs from being errantly styled as errors
+        // since LLMs frequently use words like "crash" or "failed" in their synthesized reports.
+        if (data.startsWith('[Cron:')) return 'info';
+
         const lower = data.toLowerCase();
         // Prevent false positives like "No errors encountered"
         if (lower.includes('no error') || lower.includes('0 error')) return 'info';
         
-        if (lower.includes('error') || lower.includes('failed') || lower.includes('crash') || lower.includes('❌') || lower.includes('exception')) return 'error';
-        if (lower.includes('warn') || lower.includes('⚠') || lower.includes('caution') || lower.includes('deprecated')) return 'warn';
+        // Use word boundaries to prevent substring matches (e.g. #MarketCrash -> prevents 'error' level status)
+        if (/\\b(?:error|failed|crash|exception)\\b/.test(lower) || lower.includes('❌')) return 'error';
+        if (/- error:/i.test(lower)) return 'error'; // Catch traditional 'error:' prefixes just in case
+
+        if (/\\b(?:warn|caution|deprecated)\\b/.test(lower) || lower.includes('⚠')) return 'warn';
         if (lower.includes('[worker') || lower.includes('[manager') || lower.includes('[scheduler') || lower.includes('usage') || lower.includes('completed') || lower.includes('delegating') || lower.includes('plan')) return 'info';
         if (lower.includes('[debug') || lower.includes('raw response') || lower.includes('token optimization') || lower.includes('context window')) return 'debug';
         return 'trace';
@@ -1406,6 +1413,7 @@ function CronView({ agents, logs }: { agents: any[]; logs: LogMessage[] }) {
     const [maxJobs, setMaxJobs] = useState(50);
     const [showSettings, setShowSettings] = useState(false);
     const [editMaxJobs, setEditMaxJobs] = useState('50');
+    const [runningJobs, setRunningJobs] = useState<Set<string>>(new Set());
 
     useEffect(() => {
         fetchJobs();
@@ -1415,6 +1423,21 @@ function CronView({ agents, logs }: { agents: any[]; logs: LogMessage[] }) {
             setEditMaxJobs(String(data.maxJobs || 50));
         }).catch(() => {});
     }, []);
+
+    // Listen to WebSocket logs to clear running state when background job finishes
+    useEffect(() => {
+        if (logs.length > 0) {
+            const lastLog = logs[logs.length - 1];
+            if (lastLog.type === 'cron_result' && (lastLog as any).jobId) {
+                setRunningJobs(prev => {
+                    const next = new Set(prev);
+                    next.delete((lastLog as any).jobId);
+                    return next;
+                });
+                fetchJobs(); // Refresh last run timestamps
+            }
+        }
+    }, [logs]);
 
     const fetchJobs = async () => {
         try {
@@ -1446,11 +1469,18 @@ function CronView({ agents, logs }: { agents: any[]; logs: LogMessage[] }) {
     };
 
     const handleRunForcefully = async (id: string) => {
+        setRunningJobs(prev => new Set(prev).add(id));
         try {
             await apiFetch(`/api/cron/${id}/run`, { method: 'POST' });
             // We just optimistically refetch to update the last run time
             setTimeout(fetchJobs, 1000);
-        } catch (e) { }
+        } catch (e) {
+            setRunningJobs(prev => {
+                const next = new Set(prev);
+                next.delete(id);
+                return next;
+            });
+        }
     };
 
     const handleCreate = async (e: React.FormEvent) => {
@@ -1715,7 +1745,7 @@ function CronView({ agents, logs }: { agents: any[]; logs: LogMessage[] }) {
                                         <button className="px-4 py-1.5 text-xs font-semibold text-slate-300 hover:text-white bg-slate-800/50 hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors">Clone</button>
                                         <button onClick={() => openEdit(job)} className="px-4 py-1.5 text-xs font-semibold text-sky-400 hover:text-white hover:bg-sky-600/80 bg-sky-500/10 rounded-lg border border-sky-500/20 transition-colors">Edit</button>
                                         <button onClick={() => toggleStatus(job)} className="px-4 py-1.5 text-xs font-semibold text-slate-300 hover:text-white bg-slate-800/50 hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors">{isEnabled ? 'Disable' : 'Enable'}</button>
-                                        <button onClick={() => handleRunForcefully(job.id)} className="px-4 py-1.5 text-xs font-semibold text-slate-300 hover:text-white bg-slate-800/50 hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors">Run</button>
+                                        <button onClick={() => handleRunForcefully(job.id)} disabled={runningJobs.has(job.id)} className={`px-4 py-1.5 text-xs font-semibold rounded-lg border transition-colors ${runningJobs.has(job.id) ? 'bg-slate-800 text-slate-500 border-slate-700 cursor-not-allowed opacity-50' : 'text-slate-300 hover:text-white bg-slate-800/50 hover:bg-slate-700 border-slate-700'}`}>{runningJobs.has(job.id) ? 'Running...' : 'Run'}</button>
                                         <button onClick={() => handleDelete(job.id)} className="px-4 py-1.5 text-xs font-semibold text-red-400 hover:text-white hover:bg-red-500/80 bg-red-500/10 rounded-lg border border-red-500/20 transition-colors">Remove</button>
                                     </div>
                                 </div>
@@ -2925,6 +2955,8 @@ export default function App() {
                     const cronLog = {
                         type: 'cron_result' as any,
                         data: `[Cron: ${msg.data.jobName}] ${msg.data.result}`,
+                        jobId: msg.data.jobId,
+                        jobName: msg.data.jobName,
                         timestamp: msg.data.timestamp || new Date().toISOString()
                     };
                     setLogs(prev => [...prev.slice(-49999), cronLog]);

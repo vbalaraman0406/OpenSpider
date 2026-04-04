@@ -32,5 +32,11 @@
     "email"
   ],
   "maxDelegationDepth": 0,
-  "budgetTokens": 150000
+  "budgetTokens": 150000,
+  "primary_model": [
+    "gemini-2.5-flash",
+    "deepseek",
+    "nvidia-1"
+  ],
+  "analysis_model": "claude-opus-4-6-thinking"
 }

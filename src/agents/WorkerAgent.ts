@@ -11,6 +11,7 @@ import { readJobsSync, writeJobsSync, withJobs, CronJob } from '../CronStore';
 export class WorkerAgent {
     private llm: LLMProvider;
     private analysisLlm: LLMProvider | undefined;
+    private sessionKey: string | undefined;
     private executor: DynamicExecutor;
     private browserTool: BrowserTool;
     private role: string;
@@ -18,7 +19,8 @@ export class WorkerAgent {
     private isCron: boolean;
     private issuerRole: 'admin' | 'guest';
 
-    constructor(llm: LLMProvider, role: string, cancelChecker?: () => boolean, isCron: boolean = false, analysisLlm?: LLMProvider, issuerRole: 'admin' | 'guest' = 'admin') {
+    constructor(llm: LLMProvider, role: string, cancelChecker?: () => boolean, isCron: boolean = false, analysisLlm?: LLMProvider, issuerRole: 'admin' | 'guest' = 'admin', sessionKey?: string) {
+        this.sessionKey = sessionKey;
         this.llm = llm;
         this.analysisLlm = analysisLlm;
         this.executor = new DynamicExecutor();
@@ -80,14 +82,14 @@ export class WorkerAgent {
         }
 
         const ALL_TOOLS: Record<string, string> = {
-            'run_command': '- run_command: { "command": "echo hello" } (Run a bash command within the project environment)',
-            'write_script': '- write_script: { "filename": "test.py", "content": "print(\'hello\')" } (Write a code script to disk)',
+            'run_command': '- run_command: { "command": "node ./script.js" } (Run a bash command. CRITICAL: Executes inside a Docker sandbox mounted at /workspace. You MUST use relative paths (e.g. ./file.txt) and NEVER absolute host paths like /Users/... )',
+            'write_script': '- write_script: { "filename": "test.py", "content": "print(\'hello\')" } (Write a script. CRITICAL: Provide only the filename, not full paths. Files save directly inside the sandbox /workspace.)',
             'execute_script': '- execute_script: { "filename": "test.py", "args": "" } (Execute a dynamically written script)',
             'search_skills': '- search_skills: { "content": "stock market" } (Search the skills catalog for existing curated scripts. ALWAYS search before writing a new script!)',
             'save_skill': '- save_skill: { "filename": "call_restaurant.js", "content": "Name of Skill", "args": "Description of what it does" } (Promote a successful script into a permanent Curated Skill so it can be reused forever! You MUST test the script with execute_script first.)',
             'create_workflow': '- create_workflow: { "filename": "id", "content": "Name", "args": "JSON steps array" } (Create a reusable multi-step pipeline.)',
             'create_event_trigger': '- create_event_trigger: { "filename": "id", "content": "Name", "args": "JSON config" } (Create an event trigger.)',
-            'browse_web': '- browse_web: Open a REAL browser.\n  To use browse_web, set "command" to the sub-action and use other fields:\n    - Navigate: { "action": "browse_web", "command": "navigate", "url": "https://google.com" }\n    - Click:    { "action": "browse_web", "command": "click", "args": "button.submit" }\n    - Type:     { "action": "browse_web", "command": "type", "args": "input[name=q]", "content": "search query" } (Do NOT use for chatbots)\n    - Type & Enter: { "action": "browse_web", "command": "type_and_enter", "args": "input.chat", "content": "hello" } (CRITICAL: MUST use this for all chatbots! Automatically waits 4s for reply. You MUST use read_content immediately after to read their response!)\n    - Read:     { "action": "browse_web", "command": "read_content" }\n    - Read targeted section: { "action": "browse_web", "command": "read_content", "args": "main" } (Use CSS selector to focus extraction)\n    - Scroll:   { "action": "browse_web", "command": "scroll", "args": "down" }\n    - List:     { "action": "browse_web", "command": "list_elements" }\n    - Run JS:   { "action": "browse_web", "command": "execute_js", "content": "return document.querySelector(\'.score\').innerText" }\n    - Close:    { "action": "browse_web", "command": "close" }',
+            'browse_web': '- browse_web: Open a REAL browser.\n  To use browse_web, set "command" to the sub-action and use other fields:\n    - Navigate: { "action": "browse_web", "command": "navigate", "url": "https://google.com" }\n    - Click:    { "action": "browse_web", "command": "click", "args": "button.submit" }\n    - Type:     { "action": "browse_web", "command": "type", "args": "input[name=q]", "content": "search query" } (Do NOT use for chatbots)\n    - Type & Enter: { "action": "browse_web", "command": "type_and_enter", "args": "input.chat", "content": "hello" } (CRITICAL: MUST use this for all chatbots! Automatically waits 4s for reply. You MUST use read_content immediately after to read their response!)\n    - Read:     { "action": "browse_web", "command": "read_content" }\n    - Read targeted section: { "action": "browse_web", "command": "read_content", "args": "main" } (Use CSS selector to focus extraction)\n    - Extract Target Data: { "action": "browse_web", "command": "extract_data", "content": "What you want to extract" } (Uses intelligent Edge-LLM to pull explicit JSON data bypassing truncation limits)\n    - Scroll:   { "action": "browse_web", "command": "scroll", "args": "down" }\n    - List:     { "action": "browse_web", "command": "list_elements" }\n    - Run JS:   { "action": "browse_web", "command": "execute_js", "content": "return document.querySelector(\'.score\').innerText" }\n    - Close:    { "action": "browse_web", "command": "close" }',
             'wait_for_user': '- wait_for_user: { "message": "Please log in to your account" } (Pause and ask the user to do something in the browser.)',
             'schedule_task': '- schedule_task: { "command": "24", "content": "prompt", "filename": "job name" } (Schedule OR UPDATE a recurring task.)',
             'message_agent': '- message_agent: { "target": "Role Name", "message": "Text to send" } (Delegate a sub-task to a specialized sub-agent)',
@@ -302,7 +304,7 @@ ${context.join('\n')}
                         result: { type: "string", description: "The final answer or result string when action is final_answer" },
                     },
                     required: ["action", "thought", "summary_of_findings"]
-                }, this.role);
+                }, this.role, this.sessionKey);
             } catch (e: any) {
                 console.warn(`\n⚠️ [Worker - ${this.role}] JSON Parse Error. Requesting LLM Self-Healing...`);
                 messages.push({ role: 'user', content: `SYSTEM EXCEPTION: You generated an invalid JSON payload that crashed the parser (${e.message}). Please strictly evaluate your JSON syntax, ensure all internal quotes are escaped, and try again.` });
@@ -362,7 +364,7 @@ ${context.join('\n')}
                             content: `SYSTEM INSTRUCTION: You are the specialized Analysis & Synthesis model for this task. The primary task execution agent has concluded its data gathering phase and outputted the following raw findings:\n\n---\n${draftResult}\n---\n\nYour job is to read through the entire action history above (which has been optimized to only show the agent's intent and conclusions), verify the findings, and rewrite the final response to be extremely comprehensive, accurate, and formatted beautifully in Markdown tables or lists as requested by the initial prompt. Do NOT wrap your output in JSON, just output direct markdown.`
                         });
 
-                        const analysisResponse = await this.analysisLlm.generateResponse(analysisMessages, this.role);
+                        const analysisResponse = await this.analysisLlm.generateResponse(analysisMessages, this.role, this.sessionKey);
                         return analysisResponse.text || draftResult;
                     } catch (e: any) {
                         console.error(`[Worker - ${this.role}] ⚠️ Analysis model failed, falling back to primary result.`, e);
@@ -494,6 +496,7 @@ ${context.join('\n')}
                             script: response.content || response.message || response.args,
                             message: response.message || response.content,
                             direction: (response.direction || response.args || response.content) as 'up' | 'down',
+                            instruction: response.content || response.message || response.args || response.target,
                         };
 
                         // Explicit LLM Schema Self-Correction for completely missing fields
@@ -715,6 +718,30 @@ ${context.join('\n')}
                     } else if (response.action === 'send_email' && response.to && response.subject && response.body) {
                         console.log(`[Worker - ${this.role}] Dispatching email to ${response.to}...`);
 
+                        if (this.analysisLlm && response.body) {
+                            console.log(`[Worker - ${this.role}] 🧠 Intercepting Email body with Analysis Model for high-quality synthesis...`);
+                            try {
+                                const rewriteMessages: ChatMessage[] = [
+                                    ...messages.map(m => {
+                                        if (m.role === 'user' && typeof m.content === 'string' && m.content.startsWith('Tool Result:') && m.content.length > 4000) {
+                                            return { role: 'user', content: m.content.substring(0, 4000) + '\n\n... [RAW TOOL DATA COMPACTED TO SAVE TOKENS]' };
+                                        }
+                                        return m;
+                                    }) as any,
+                                    {
+                                        role: 'user',
+                                        content: `SYSTEM INSTRUCTION: You are the specialized Analysis & Synthesis model. The data execution agent is about to send the following email body:\n\n---\n${response.body}\n---\n\nRead through the action history above and REWRITE this message to be extremely comprehensive and accurate based on all gathered data. CRITICAL INSTRUCTION: You MUST strictly preserve the existing HTML template format, styling, inline CSS, and colors used in the draft message. Only enhance and expand the core informational content while keeping the exact same visual design and structure. Do NOT wrap your output in JSON, markdown blocks, or \`\`\`html tags, just output the final direct HTML body string.`
+                                    }
+                                ];
+                                const analysisResponse = await this.analysisLlm.generateResponse(rewriteMessages, this.role, this.sessionKey);
+                                if (analysisResponse.text) {
+                                    response.body = analysisResponse.text;
+                                }
+                            } catch (e: any) {
+                                console.error(`[Worker - ${this.role}] ⚠️ Analysis email body rewrite failed:`, e);
+                            }
+                        }
+
                         // LLM Context Guardrail: The LLM frequently mistakes WhatsApp JIDs for email addresses due to the @ symbol.
                         if (response.to.includes('@s.whatsapp.net') || response.to.includes('@g.us')) {
                             console.warn(`[Worker - ${this.role}] Blocked attempt to send email to WhatsApp JID: ${response.to}`);
@@ -777,6 +804,31 @@ ${context.join('\n')}
                         }
                     } else if (response.action === 'send_whatsapp' && response.message) {
                         console.log(`[Worker - ${this.role}] Sending WhatsApp message...`);
+
+                        if (this.analysisLlm && response.message) {
+                            console.log(`[Worker - ${this.role}] 🧠 Intercepting WhatsApp message with Analysis Model for high-quality synthesis...`);
+                            try {
+                                const rewriteMessages: ChatMessage[] = [
+                                    ...messages.map(m => {
+                                        if (m.role === 'user' && typeof m.content === 'string' && m.content.startsWith('Tool Result:') && m.content.length > 4000) {
+                                            return { role: 'user', content: m.content.substring(0, 4000) + '\n\n... [RAW TOOL DATA COMPACTED TO SAVE TOKENS]' };
+                                        }
+                                        return m;
+                                    }) as any,
+                                    {
+                                        role: 'user',
+                                        content: `SYSTEM INSTRUCTION: You are the specialized Analysis & Synthesis model. The data execution agent is about to send the following WhatsApp message:\n\n---\n${response.message}\n---\n\nRead through the action history above and REWRITE this message to be extremely comprehensive, accurate, and wonderfully formatted in Markdown tables or lists based on all gathered data. Do NOT wrap your output in JSON, just output the final direct Markdown message. Do NOT include greetings unless requested.`
+                                    }
+                                ];
+                                const analysisResponse = await this.analysisLlm.generateResponse(rewriteMessages, this.role, this.sessionKey);
+                                if (analysisResponse.text) {
+                                    response.message = analysisResponse.text;
+                                }
+                            } catch (e: any) {
+                                console.error(`[Worker - ${this.role}] ⚠️ Analysis message rewrite failed:`, e);
+                            }
+                        }
+
                         try {
                             let targetJids: string[] = [];
 
@@ -1053,13 +1105,13 @@ ${context.join('\n')}
                 }
             } // End of !cacheHit block
 
-            // [Token Optimization] Tool output cap: increased for relay browser content
-            // which now prioritizes tables/data over nav chrome. The relay extracts up to
-            // 10K chars, tool.ts passes up to 5K, so we keep 5K to preserve the data.
-            const MAX_LENGTH = 5000;
+            // [System-Wide Context Optimization] Tool output cap:
+            // Since we use Gemini Flash / DeepSeek with 32k-1M context limits, 
+            // we confidently bump the legacy 5K limit up to 120K chars (approx 30k tokens).
+            const MAX_LENGTH = 120000;
             if (toolOutput.length > MAX_LENGTH) {
-                const head = toolOutput.substring(0, 3500);
-                const tail = toolOutput.substring(toolOutput.length - 1500);
+                const head = toolOutput.substring(0, 80000);
+                const tail = toolOutput.substring(toolOutput.length - 40000);
                 toolOutput = `${head}\n\n... [TRUNCATED ${toolOutput.length - MAX_LENGTH} characters. Write a script to parse/summarize if you need the full data] ...\n\n${tail}`;
             }
 

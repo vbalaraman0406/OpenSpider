@@ -18,7 +18,7 @@ export class NvidiaProvider implements LLMProvider {
         this.baseUrl = 'https://integrate.api.nvidia.com/v1';
     }
 
-    async generateResponse(messages: ChatMessage[], agentId?: string): Promise<{ text: string, usage?: TokenUsage }> {
+    async generateResponse(messages: ChatMessage[], agentId?: string, sessionKey?: string): Promise<{ text: string, usage?: TokenUsage }> {
         console.log(`[Agent] [NVIDIA] Generating response using ${this.model}...`);
 
         // Inject quality enhancement into system prompt for better output
@@ -67,7 +67,7 @@ export class NvidiaProvider implements LLMProvider {
                 completionTokens: data.usage.completion_tokens || 0,
                 totalTokens: data.usage.total_tokens || 0
             };
-            console.log(JSON.stringify({ type: 'usage', model: this.model, usage, agentId: agentId || 'gateway' }));
+            console.log(JSON.stringify({ type: 'usage', model: this.model, usage, agentId: agentId || 'gateway', sessionKey: sessionKey || 'main' }));
             return { text, usage };
         }
 
@@ -77,7 +77,8 @@ export class NvidiaProvider implements LLMProvider {
     async generateStructuredOutputs<T>(
         messages: ChatMessage[],
         schema: Record<string, any>,
-        agentId?: string
+        agentId?: string,
+        sessionKey?: string
     ): Promise<T> {
         console.log(`[Agent] [NVIDIA] Sending structured generation to ${this.model}...`);
 
@@ -127,7 +128,7 @@ export class NvidiaProvider implements LLMProvider {
                 completionTokens: data.usage.completion_tokens || 0,
                 totalTokens: data.usage.total_tokens || 0
             };
-            console.log(JSON.stringify({ type: 'usage', model: this.model, usage, agentId: agentId || 'gateway' }));
+            console.log(JSON.stringify({ type: 'usage', model: this.model, usage, agentId: agentId || 'gateway', sessionKey: sessionKey || 'main' }));
         }
 
         // Nemotron models may return content in 'reasoning_content' instead of 'content'
